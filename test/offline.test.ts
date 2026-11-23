@@ -11,8 +11,8 @@
 
 import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { IndexerDB, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
-import type { OPDeployment } from "@primary-name-gateway/shared";
+import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
+import { coinTypeFromChainId, type OPDeployment, PLAIN_LAYOUT } from "@primary-name-gateway/shared";
 import { Foundry } from "@adraffy/blocksmith";
 import { serve } from "@namestone/ezccip/serve";
 import {
@@ -37,12 +37,12 @@ import {
 	SqlNodeStore,
 } from "../packages/registrar-gateway/src/index.js";
 import { bunSqliteAdapter } from "../packages/registrar-gateway/src/sqlite.js";
-import { FakeOPRollup } from "./fake-rollup.js";
+import { type FakeBlock, FakeOPRollup } from "./fake-rollup.js";
 
 const CHAIN_ID = 10;
-const COIN_TYPE = (0x80000000 | CHAIN_ID) >>> 0;
+const COIN_TYPE = coinTypeFromChainId(CHAIN_ID);
 const GAME_TYPE = 9;
-const WINDOW = 10; // seconds of L2 time a game may lag behind the anchor
+const MAX_SEQUENCE_LAG = 10; // seconds of L2 time a game may lag behind the anchor
 const REGISTRAR: Address = "0x0000000000D8e504002cC26E3Ec46D81971C1664";
 
 const RESOLVER_ABI = parseAbi([
@@ -97,6 +97,8 @@ describe("offline e2e", () => {
 			{ chainId: 8453, outputRoot: keccak256(stringToHex("base")) },
 		]);
 		const deployment: OPDeployment = {
+			kind: "op",
+			layout: PLAIN_LAYOUT,
 			l1: { id: 31337, name: "blocksmith", drpcSlug: "", alchemySlug: "" },
 			l2: { id: CHAIN_ID, name: "fake", drpcSlug: "", alchemySlug: "" },
 			AnchorStateRegistry: asr.target as Address,
@@ -107,12 +109,17 @@ describe("offline e2e", () => {
 		db = new IndexerDB(":memory:");
 		indexer = new RegistrarIndexer({
 			deployment,
-			l1,
 			l2: rollup,
 			db,
-			lookbackSec: 86400,
-			minFinalAgeSec: 0,
-			maxAttempts: 1,
+			source: new OPCommitSource({
+				deployment,
+				l1,
+				l2: rollup,
+				lookbackSec: 86400,
+				minFinalAgeSec: 0,
+				maxAttempts: 1,
+				l1BlockTag: "latest", // anvil
+			}),
 		});
 		indexerServer = serveIndexer(indexer, db, 0);
 
@@ -123,11 +130,11 @@ describe("offline e2e", () => {
 
 		const verifier = await foundry.deploy({
 			file: "OPFaultVerifier",
-			args: [asr.target, CHAIN_ID, WINDOW],
+			args: [asr.target, CHAIN_ID, MAX_SEQUENCE_LAG],
 		});
 		const r = await foundry.deploy({
 			file: "L2ReverseResolver",
-			args: [verifier.target, REGISTRAR, COIN_TYPE, [ccip.endpoint]],
+			args: [verifier.target, REGISTRAR, 0, COIN_TYPE, [ccip.endpoint]],
 		});
 		resolver = r.target as Address;
 	}, 120_000);
@@ -140,9 +147,8 @@ describe("offline e2e", () => {
 		await foundry?.shutdown();
 	});
 
-	// propose the rollup head on L1 (optionally lying about the output root)
-	async function propose({ outputRoot }: { outputRoot?: Hex } = {}) {
-		const block = rollup.head;
+	// propose a block (default: the rollup head) on L1, optionally lying about the output root
+	async function propose({ outputRoot, block = rollup.head }: { outputRoot?: Hex; block?: FakeBlock } = {}) {
 		const superRoot = rollup.superRoot(block, outputRoot);
 		const gameIndex = Number(await factory.gameCount());
 		await foundry.confirm(factory.create(GAME_TYPE, keccak256(superRoot), superRoot, block.timestamp));
@@ -200,7 +206,7 @@ describe("offline e2e", () => {
 		await finalize(game);
 		await sync();
 		expect(db.getCommit(game.gameIndex)?.status).toBe("valid");
-		expect(gateway.commits.map((c) => c.gameIndex)).toEqual([game.gameIndex]);
+		expect(gateway.commits.map((c) => c.id)).toEqual([game.gameIndex]);
 
 		for (const [addr, name] of Object.entries(round1)) {
 			expect(await resolveName(addr as Address)).toBe(name);
@@ -209,7 +215,7 @@ describe("offline e2e", () => {
 		expect(gateway.stats).toMatchObject({ snapshots: 1, patches: 0 });
 	}, 60_000);
 
-	test("round 2: updates are picked up incrementally; previous commit still verifies within window", async () => {
+	test("round 2: updates are picked up incrementally; previous commit still verifies within maxSequenceLag", async () => {
 		rollup.setName(A.short, "raffy2.eth");
 		rollup.setName(A.cleared, "");
 		rollup.setName(A.long, "now-short.eth");
@@ -218,7 +224,7 @@ describe("offline e2e", () => {
 		await finalize(game);
 		await sync();
 
-		expect(gateway.commits.map((c) => c.gameIndex)).toEqual(games.map((g) => g.gameIndex));
+		expect(gateway.commits.map((c) => c.id)).toEqual(games.map((g) => g.gameIndex));
 		expect(await resolveName(A.short)).toBe("raffy2.eth");
 		expect(await resolveName(A.cleared)).toBe("");
 		expect(await resolveName(A.long)).toBe("now-short.eth");
@@ -226,7 +232,7 @@ describe("offline e2e", () => {
 
 		expect(gateway.stats).toMatchObject({ snapshots: 1, patches: 1 }); // only the diff was downloaded
 
-		// the older held commit is 6s behind the anchor (< WINDOW): still accepted
+		// the older held commit is 6s behind the anchor (< MAX_SEQUENCE_LAG): still accepted
 		expect(await verifyName(A.short, games[0].gameIndex)).toBe("raffy.eth");
 	}, 60_000);
 
@@ -236,21 +242,21 @@ describe("offline e2e", () => {
 		const bad = await propose({ outputRoot: keccak256(stringToHex("lies")) });
 		await sync();
 		expect(db.getCommit(bad.gameIndex)?.status).toBe("invalid");
-		expect(gateway.commits.map((c) => c.gameIndex)).not.toContain(bad.gameIndex);
+		expect(gateway.commits.map((c) => c.id)).not.toContain(bad.gameIndex);
 		expect(await resolveName(A.short)).toBe("raffy2.eth");
 	}, 60_000);
 
-	test("round 3: stale commits are rejected once the anchor moves past the window", async () => {
+	test("round 3: stale commits are rejected once the anchor moves past maxSequenceLag", async () => {
 		rollup.mine(10); // 20s of L2 time
 		const game = await propose();
 		await finalize(game);
 		await sync();
 
 		const [second] = games.filter((g) => db.getCommit(g.gameIndex)?.status === "valid").slice(-2);
-		expect(gateway.commits.map((c) => c.gameIndex)).toEqual([second.gameIndex, game.gameIndex]);
+		expect(gateway.commits.map((c) => c.id)).toEqual([second.gameIndex, game.gameIndex]);
 		expect(await resolveName(A.short)).toBe("evil.eth"); // the honest proposal of the same change
 
-		// the round 2 commit is now > WINDOW behind the anchor
+		// the round 2 commit is now > MAX_SEQUENCE_LAG behind the anchor
 		await expect(verifyName(A.short, second.gameIndex)).rejects.toThrow(/StaleGame/);
 	}, 60_000);
 
@@ -263,7 +269,7 @@ describe("offline e2e", () => {
 		).rejects.toThrow(/InvalidGame/);
 		await sync();
 		expect(db.getCommit(latest.gameIndex)?.status).toBe("invalid");
-		expect(gateway.commits.map((c) => c.gameIndex)).not.toContain(latest.gameIndex);
+		expect(gateway.commits.map((c) => c.id)).not.toContain(latest.gameIndex);
 	}, 60_000);
 
 	test("proofs are bound to the address", async () => {
@@ -289,7 +295,7 @@ describe("offline e2e", () => {
 		await indexer.tick();
 		await restarted.sync();
 		expect(restarted.stats).toMatchObject({ snapshots: 0, patches: 1 });
-		expect(restarted.commits.at(-1)?.gameIndex).toBe(game.gameIndex);
+		expect(restarted.commits.at(-1)?.id).toBe(game.gameIndex);
 		const verify = (addr: Address) =>
 			l1.readContract({
 				address: resolver,
@@ -300,5 +306,24 @@ describe("offline e2e", () => {
 		expect(await verify(A.short)).toBe("after-restart.eth");
 		expect(await verify(A.never)).toBe(`${"n".repeat(70)}.eth`);
 		expect(await verify(A.emoji)).toBe(round1[A.emoji]);
+	}, 60_000);
+
+	test("a game for an L2 block that isn't finalized yet is deferred, without blocking later games", async () => {
+		rollup.setName(A.short, "unfinalized.eth");
+		rollup.mine();
+		const finalized = rollup.blocks[rollup.head.number - 1];
+		rollup.finalized = finalized.number;
+		const early = await propose(); // the (unfinalized) head
+		const late = await propose({ block: finalized }); // created later, for a finalized block
+		await indexer.tick();
+		expect(db.getCommit(early.gameIndex)).toBeUndefined();
+		expect(db.isSkipped(early.gameIndex)).toBeFalse();
+		expect(db.getCommit(late.gameIndex)?.l2Block).toBe(finalized.number);
+		expect(indexer.syncedBlock).toBeLessThanOrEqual(finalized.number); // nothing unfinal in the change log
+
+		rollup.finalized = undefined;
+		await indexer.tick();
+		expect(db.getCommit(early.gameIndex)?.status).toBe("pending");
+		expect(db.getState("deferredGames")).toBe("[]");
 	}, 60_000);
 });

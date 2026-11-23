@@ -1,4 +1,4 @@
-import { type CommitStatus, diffRows, type SnapshotPage, type TrieRow, trieRows } from "@primary-name-gateway/shared";
+import type { CommitStatus, SnapshotPage } from "@primary-name-gateway/shared";
 import type { IndexerDB } from "./db.js";
 import type { RegistrarIndexer } from "./indexer.js";
 
@@ -8,14 +8,13 @@ const STATUSES = new Set<string>(["pending", "valid", "invalid"]);
 
 // GET /status
 // GET /commits?status=valid&limit=2        newest first
-// GET /commits/:gameIndex
-// GET /changes?after=0&until=N&limit=M     name changes, ordered, (after, until]
-// GET /snapshot?game=G&after=PATH&limit=N  trie rows of a commit, in path order (paged)
-// GET /patch?from=A&to=B                   trie rows that turn commit A into commit B
+// GET /commits/:id
+// GET /changes?after=0&until=N&limit=M       registrar events, ordered, (after, until]
+// GET /snapshot?commit=ID&after=PATH&limit=N trie rows of a commit, in path order (paged)
+// GET /patch?from=A&to=B                     trie rows that turn commit A into commit B
 //
 // /snapshot and /patch only work for commits the indexer retains (404 otherwise)
 export function serveIndexer(indexer: RegistrarIndexer, db: IndexerDB, port: number) {
-	const patches = new Map<string, TrieRow[]>(); // small LRU: gateways ask for the same patch
 	return Bun.serve({
 		port,
 		routes: {
@@ -27,8 +26,8 @@ export function serveIndexer(indexer: RegistrarIndexer, db: IndexerDB, port: num
 				const limit = clampInt(q.get("limit"), 10, 1, 1000);
 				return Response.json(db.getCommits(status as CommitStatus | undefined, limit));
 			},
-			"/commits/:gameIndex": (req) => {
-				const commit = db.getCommit(Number(req.params.gameIndex));
+			"/commits/:id": (req) => {
+				const commit = db.getCommit(Number(req.params.id));
 				return commit ? Response.json(commit) : notFound();
 			},
 			"/changes": (req) => {
@@ -40,39 +39,19 @@ export function serveIndexer(indexer: RegistrarIndexer, db: IndexerDB, port: num
 			},
 			"/snapshot": (req) => {
 				const q = new URL(req.url).searchParams;
-				const gameIndex = Number(q.get("game"));
-				const root = indexer.rootOf(gameIndex);
-				if (!root) return notFound();
+				const id = Number(q.get("commit"));
 				const after = q.get("after") ?? undefined;
-				if (after !== undefined && !/^[0-9a-f]*$/.test(after)) return badRequest("after");
+				if (after !== undefined && !/^[0-9a-z]*$/.test(after)) return badRequest("after");
 				const limit = clampInt(q.get("limit"), MAX_ROWS, 1, MAX_ROWS);
-				const rows: TrieRow[] = [];
-				for (const row of trieRows(root.node, after)) {
-					rows.push(row);
-					if (rows.length === limit) break;
-				}
-				const page: SnapshotPage = {
-					gameIndex,
-					rows,
-					next: rows.length === limit ? rows[rows.length - 1].path : null,
-				};
+				const result = indexer.snapshot(id, after, limit);
+				if (!result) return notFound();
+				const page: SnapshotPage = { id, ...result };
 				return Response.json(page);
 			},
 			"/patch": (req) => {
 				const q = new URL(req.url).searchParams;
-				const from = Number(q.get("from"));
-				const to = Number(q.get("to"));
-				const key = `${from}:${to}`;
-				let rows = patches.get(key);
-				if (!rows) {
-					const a = indexer.rootOf(from);
-					const b = indexer.rootOf(to);
-					if (!a || !b) return notFound();
-					rows = diffRows(a.node, b.node);
-					patches.set(key, rows);
-					if (patches.size > 16) patches.delete(patches.keys().next().value!);
-				}
-				return Response.json(rows);
+				const rows = indexer.patch(Number(q.get("from")), Number(q.get("to")));
+				return rows ? Response.json(rows) : notFound();
 			},
 		},
 		fetch: () => notFound(),

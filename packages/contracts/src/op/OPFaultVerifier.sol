@@ -36,7 +36,7 @@ struct OPFaultCommitProof {
 ///         Supports both output root games and super root games (interop).
 /// @dev Deploy one per chain: (AnchorStateRegistry, L2 chain id).
 ///      1. `game` is a valid, finalized claim according to the AnchorStateRegistry
-///      2. `game` is not older than the current anchor by more than `window` (freshness)
+///      2. `game` is not older than the current anchor by more than `maxSequenceLag` (freshness)
 ///      3. rootClaim = keccak(superRoot) and superRoot has (l2ChainId => outputRoot), or rootClaim = outputRoot
 ///      4. outputRoot = keccak(outputRootProof)
 ///      5. account proof: stateRoot => storageRoot
@@ -46,38 +46,48 @@ contract OPFaultVerifier is IL2StorageVerifier {
     error InvalidSuperRoot();
     error ChainNotInSuperRoot(uint256 chainId);
     error InvalidOutputRoot();
+    error InvalidStorageProof();
 
     bytes1 constant SUPER_ROOT_VERSION = 0x01;
 
     IAnchorStateRegistry public immutable anchorStateRegistry;
     uint256 public immutable l2ChainId;
-    /// @notice Max lag of a game behind the current anchor, in L2 sequence units
-    ///         (timestamp for super root games, block number for output root games).
-    uint256 public immutable window;
+    /// @notice How far a game's `l2SequenceNumber` may lag behind the anchor's, i.e. how stale a proven
+    ///         value may be. Units: seconds for super root games (the sequence number is a timestamp),
+    ///         blocks for output root games. Must exceed the time between games plus the gateway's margin,
+    ///         or a gateway's fallback commit is rejected. The anchor only moves when it is updated, so it
+    ///         can trail the newest valid game.
+    uint256 public immutable maxSequenceLag;
 
-    constructor(IAnchorStateRegistry anchorStateRegistry_, uint256 l2ChainId_, uint256 window_) {
+    constructor(IAnchorStateRegistry anchorStateRegistry_, uint256 l2ChainId_, uint256 maxSequenceLag_) {
         anchorStateRegistry = anchorStateRegistry_;
         l2ChainId = l2ChainId_;
-        window = window_;
+        maxSequenceLag = maxSequenceLag_;
     }
 
-    /// @inheritdoc IL2StorageVerifier
-    function verifyStorageRoot(bytes calldata commitProof, address target, bytes[] calldata accountProof)
+    /// @dev `accountProof` = abi.encode(bytes[]) (eth_getProof accountProof)
+    function verifyStorageRoot(bytes calldata commitProof, address target, bytes calldata accountProof)
         external
         view
         returns (bytes32)
     {
         bytes32 stateRoot = verifyStateRoot(abi.decode(commitProof, (OPFaultCommitProof)));
-        return EthTrie.getStorageRoot(stateRoot, target, accountProof);
+        return EthTrie.getStorageRoot(stateRoot, target, abi.decode(accountProof, (bytes[])));
     }
 
     /// @inheritdoc IL2StorageVerifier
-    function verifyStorageValue(bytes32 storageRoot, uint256 slot, bytes[] calldata proof)
+    /// @dev `proof` = abi.encode(bytes[][]): the eth_getProof storageProof[].proof of each slot
+    function verifyStorageValues(bytes32 storageRoot, uint256[] calldata slots, bytes calldata proof)
         external
         pure
-        returns (bytes32)
+        returns (bytes32[] memory values)
     {
-        return EthTrie.getStorageValue(storageRoot, slot, proof);
+        bytes[][] memory proofs = abi.decode(proof, (bytes[][]));
+        if (proofs.length != slots.length) revert InvalidStorageProof();
+        values = new bytes32[](slots.length);
+        for (uint256 i; i < slots.length; ++i) {
+            values[i] = EthTrie.getStorageValue(storageRoot, slots[i], proofs[i]);
+        }
     }
 
     /// @notice Verify `p` against L1 and return the committed L2 state root.
@@ -86,7 +96,7 @@ contract OPFaultVerifier is IL2StorageVerifier {
         IDisputeGame game = IDisputeGame(p.game);
         uint256 seq = game.l2SequenceNumber();
         (, uint256 anchorSeq) = anchorStateRegistry.getAnchorRoot();
-        if (seq + window < anchorSeq) revert StaleGame(seq, anchorSeq);
+        if (seq + maxSequenceLag < anchorSeq) revert StaleGame(seq, anchorSeq);
         bytes32 rootClaim = game.rootClaim();
         bytes32 outputRoot = p.superRoot.length == 0 ? rootClaim : findOutputRoot(p.superRoot, rootClaim);
         if (keccak256(abi.encode(p.outputRootProof)) != outputRoot) revert InvalidOutputRoot();

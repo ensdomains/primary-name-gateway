@@ -1,14 +1,22 @@
 // End-to-end: anvil fork of L1 mainnet + live registrar-indexer + in-process registrar-gateway.
 //
-// 1. `bun run indexer` (needs at least one valid commit: ~7 days of lookback, archive proof RPC)
-// 2. `bun run forge`
-// 3. `bun test test/e2e.test.ts`
+// 1. `bun run indexer` (INDEXER_CHAIN=optimism|linea) with at least one valid commit
+//    (OP: ~7 days of lookback and an archive proof RPC, Linea: the next finalization)
+// 2. `bun run test:mainnet`
 //
-// Deploys OPFaultVerifier + L2ReverseResolver on the fork, then resolves every known OP primary name
+// Deploys the chain's verifier + L2ReverseResolver on the fork, then resolves every known primary name
 // through CCIP-Read and compares against the L2ReverseRegistrar at the same L2 block.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { type Change, createClient, OP_MAINNET, rpcURL } from "@primary-name-gateway/shared";
+import {
+	type Change,
+	createClient,
+	DEPLOYMENTS,
+	type Deployment,
+	coinTypeFromChainId,
+	type IndexerStatus,
+	rpcURL,
+} from "@primary-name-gateway/shared";
 import { serve } from "@namestone/ezccip/serve";
 import {
 	type Abi,
@@ -30,7 +38,6 @@ import { packetToBytes } from "viem/ens";
 import { createEZCCIP, MemoryNodeStore, RegistrarGateway } from "../packages/registrar-gateway/src/index.js";
 
 const INDEXER_URL = process.env.INDEXER_URL ?? "http://localhost:8100";
-const COIN_TYPE = (0x80000000 | OP_MAINNET.l2.id) >>> 0;
 const ANVIL_PORT = 8545 + Math.floor(Math.random() * 1000);
 // anvil's default account #0 (test key, local fork only)
 const DEPLOYER = privateKeyToAccount("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
@@ -47,19 +54,23 @@ function artifact(file: string, name: string): { abi: Abi; bytecode: Hex } {
 	return { abi: json.abi, bytecode: json.bytecode.object };
 }
 
-async function indexerHasValidCommit(): Promise<boolean> {
+// the indexer's deployment, if it has a valid commit
+async function indexedDeployment(): Promise<Deployment | undefined> {
 	try {
-		const res = await fetch(`${INDEXER_URL}/commits?status=valid&limit=1`);
-		return res.ok && ((await res.json()) as unknown[]).length > 0;
+		const status = (await fetch(`${INDEXER_URL}/status`).then((r) => r.json())) as IndexerStatus;
+		if (!status.latestValid) return;
+		return Object.values(DEPLOYMENTS).find((d) => d.l2.id === status.chainId);
 	} catch {
-		return false;
+		return;
 	}
 }
 
-const ready = await indexerHasValidCommit();
-if (!ready) console.warn(`skipping e2e: no valid commits at ${INDEXER_URL}`);
+const deployment = await indexedDeployment();
+if (!deployment) console.warn(`skipping e2e: no valid commits at ${INDEXER_URL}`);
+const COIN_TYPE = deployment ? coinTypeFromChainId(deployment.l2.id) : 0n;
 
-describe.skipIf(!ready)("e2e", () => {
+describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
+	const d = deployment!;
 	let anvil: Bun.Subprocess;
 	let ccip: Awaited<ReturnType<typeof serve>>;
 	let gateway: RegistrarGateway;
@@ -69,11 +80,16 @@ describe.skipIf(!ready)("e2e", () => {
 	let names: Map<Address, Hex>; // latest name per address at the served commit
 
 	beforeAll(async () => {
-		gateway = new RegistrarGateway(new MemoryNodeStore(), { indexerURL: INDEXER_URL, keep: 2, marginSec: 0 });
+		gateway = new RegistrarGateway(new MemoryNodeStore(), {
+			indexerURL: INDEXER_URL,
+			keep: 2,
+			marginSec: 0,
+			layout: d.layout,
+		});
 		await gateway.sync();
 		ccip = await serve(createEZCCIP(gateway), { protocol: "raw", log: false });
 
-		anvil = Bun.spawn(["anvil", "--fork-url", rpcURL(OP_MAINNET.l1), "--port", String(ANVIL_PORT), "--silent"], {
+		anvil = Bun.spawn(["anvil", "--fork-url", rpcURL(d.l1), "--port", String(ANVIL_PORT), "--silent"], {
 			stdout: "ignore",
 			stderr: "inherit",
 		});
@@ -95,14 +111,21 @@ describe.skipIf(!ready)("e2e", () => {
 			const receipt = await l1.waitForTransactionReceipt({ hash });
 			return receipt.contractAddress!;
 		};
-		const verifier = await deploy(artifact("OPFaultVerifier.sol", "OPFaultVerifier"), [
-			OP_MAINNET.AnchorStateRegistry,
-			OP_MAINNET.l2.id,
-			86400, // window: 1 day of L2 timestamps
-		]);
+		const verifier =
+			d.kind === "op"
+				? await deploy(artifact("OPFaultVerifier.sol", "OPFaultVerifier"), [
+						d.AnchorStateRegistry,
+						d.l2.id,
+						86400, // maxSequenceLag: 1 day (super root games: seconds)
+					])
+				: await deploy(artifact("LineaVerifier.sol", "LineaVerifier"), [
+						d.LineaRollup,
+						100000, // maxBlockLag: L2 blocks (a few days)
+					]);
 		resolver = await deploy(artifact("L2ReverseResolver.sol", "L2ReverseResolver"), [
 			verifier,
-			OP_MAINNET.L2ReverseRegistrar,
+			d.L2ReverseRegistrar,
+			d.layout.namesSlot,
 			COIN_TYPE,
 			[ccip.endpoint],
 		]);
@@ -110,8 +133,8 @@ describe.skipIf(!ready)("e2e", () => {
 		// replay the change log up to the commit the gateway serves
 		const { commit } = gateway.proveName("0x0000000000000000000000000000000000000000");
 		const changes = (await fetch(`${INDEXER_URL}/changes?until=${commit.changeSeq}`).then((r) => r.json())) as Change[];
-		names = new Map(changes.map((c) => [c.addr.toLowerCase() as Address, c.name]));
-		console.log(`commit: game ${commit.gameIndex}, L2 block ${commit.l2Block}, ${names.size} addresses`);
+		names = new Map(changes.filter((c) => c.kind === "name").map((c) => [c.addr.toLowerCase() as Address, c.name]));
+		console.log(`commit: ${commit.kind} ${commit.id}, L2 block ${commit.l2Block}, ${names.size} addresses`);
 	}, 60_000);
 
 	afterAll(async () => {
@@ -133,13 +156,13 @@ describe.skipIf(!ready)("e2e", () => {
 
 	test("resolve() via CCIP-Read matches L2ReverseRegistrar at the commit block", async () => {
 		const { commit } = gateway.proveName("0x0000000000000000000000000000000000000000");
-		const l2 = createClient(OP_MAINNET.l2, "proof");
+		const l2 = createClient(d.l2, "proof");
 		const sample = [...names.keys()].slice(0, 5);
 		for (const addr of sample) {
 			const [actual, expected] = await Promise.all([
 				resolveName(addr),
 				l2.readContract({
-					address: OP_MAINNET.L2ReverseRegistrar,
+					address: d.L2ReverseRegistrar,
 					abi: L2_REGISTRAR_ABI,
 					functionName: "nameForAddr",
 					args: [addr],
@@ -176,13 +199,13 @@ describe.skipIf(!ready)("e2e", () => {
 		const { proof } = gateway.proveName(addr);
 		const other = "0x000000000000000000000000000000000000beef";
 		// a valid proof for addr does not prove a name for another address
-		expect(
+		await expect(
 			l1.readContract({ address: resolver, abi: RESOLVER_ABI, functionName: "verifyName", args: [other, proof] }),
 		).rejects.toThrow();
 		// flip a byte inside the proof
 		const i = proof.length - 200;
 		const flipped = `${proof.slice(0, i)}${proof[i] === "0" ? "1" : "0"}${proof.slice(i + 1)}` as Hex;
-		expect(
+		await expect(
 			l1.readContract({ address: resolver, abi: RESOLVER_ABI, functionName: "verifyName", args: [addr, flipped] }),
 		).rejects.toThrow();
 	}, 30_000);

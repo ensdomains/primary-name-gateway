@@ -1,4 +1,4 @@
-// MemoryNodeStore and SqlNodeStore must agree on versioned reads through put/prune/truncate
+// MemoryNodeStore and SqlNodeStore must agree on versioned reads (get, floor) through put/prune/truncate
 
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
@@ -46,8 +46,17 @@ test("memory and sql stores match an unpruned reference", () => {
 			history = history.filter((h) => h.version <= version);
 		}
 		for (let v = minVersion; v <= version + 1; v++) {
-			expect(read(stores[0], v)).toEqual(expected(v));
-			expect(read(stores[1], v)).toEqual(expected(v));
+			const want = expected(v);
+			expect(read(stores[0], v)).toEqual(want);
+			expect(read(stores[1], v)).toEqual(want);
+			// floor: the greatest live path below `before`
+			const before = random() < 0.1 ? "z" : paths[Math.floor(random() * paths.length)];
+			const live = paths.filter((p, i) => p < before && want[i] !== undefined).sort();
+			const floor = live.length ? { path: live[live.length - 1], node: want[paths.indexOf(live[live.length - 1])] as Hex } : undefined;
+			for (const s of stores) {
+				const f = s.floor("", before, v);
+				expect(f && { path: f.path, node: bytesToHex(f.node) }).toEqual(floor);
+			}
 		}
 	}
 	db.close();

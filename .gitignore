@@ -7,3 +7,4 @@ packages/contracts/out/
 packages/contracts/cache/
 packages/contracts/broadcast/
 data/
+.DS_Store

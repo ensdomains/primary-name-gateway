@@ -1,4 +1,5 @@
 import { type Address, createPublicClient, http, type PublicClient } from "viem";
+import { PLAIN_LAYOUT, type RegistrarLayout } from "./registrar.js";
 
 export type ChainInfo = {
 	id: number;
@@ -26,26 +27,75 @@ export const OPTIMISM: ChainInfo = {
 	logStep: 500000, // shrinks automatically if the provider refuses
 };
 
-// an L2 whose L2ReverseRegistrar is committed to L1 via OP dispute games
-export type OPDeployment = {
+export const LINEA: ChainInfo = {
+	id: 59144,
+	name: "linea",
+	drpcSlug: "linea",
+	alchemySlug: "linea-mainnet",
+	publicRPC: "https://rpc.linea.build",
+	logStep: 500000,
+};
+
+type DeploymentBase = {
 	l1: ChainInfo;
 	l2: ChainInfo;
-	AnchorStateRegistry: Address;
 	L2ReverseRegistrar: Address;
+	layout: RegistrarLayout; // see docs/registrar.md
 	registrarCreatedAtBlock: number; // first L2 block to scan for events
+};
+
+// an L2 whose state is committed to L1 via OP dispute games (Merkle-Patricia tries)
+export type OPDeployment = DeploymentBase & {
+	kind: "op";
+	AnchorStateRegistry: Address;
 	l2BlockTime: number; // seconds
 };
+
+// Linea: finalized (ZK proven) state roots on L1 (sparse Merkle tries, linea_getProof)
+export type LineaDeployment = DeploymentBase & {
+	kind: "linea";
+	LineaRollup: Address;
+};
+
+export type Deployment = OPDeployment | LineaDeployment;
 
 // https://docs.optimism.io/chain/addresses
 // https://docs.ens.domains/ensip/19/#annex-supported-chains
 export const OP_MAINNET: OPDeployment = {
+	kind: "op",
 	l1: MAINNET,
 	l2: OPTIMISM,
 	AnchorStateRegistry: "0x23B2C62946350F4246f9f9D027e071f0264FD113",
 	L2ReverseRegistrar: "0x0000000000D8e504002cC26E3Ec46D81971C1664",
+	layout: PLAIN_LAYOUT,
 	registrarCreatedAtBlock: 137403854,
 	l2BlockTime: 2,
 };
+
+// https://docs.linea.build/get-started/build/contracts
+export const LINEA_MAINNET: LineaDeployment = {
+	kind: "linea",
+	l1: MAINNET,
+	l2: LINEA,
+	LineaRollup: "0xd19d4B5d358258f05D7B411E21A1460D11B0876F",
+	L2ReverseRegistrar: "0x0000000000D8e504002cC26E3Ec46D81971C1664",
+	layout: PLAIN_LAYOUT,
+	registrarCreatedAtBlock: 20173340,
+};
+
+export const DEPLOYMENTS: Record<string, Deployment> = {
+	optimism: OP_MAINNET,
+	linea: LINEA_MAINNET,
+};
+
+// ENSIP-19 coin type of an EVM chain: 0x80000000 | chainId (Ethereum mainnet keeps 60)
+export function coinTypeFromChainId(chainId: number): bigint {
+	if (chainId === 1) return 60n;
+	if (!Number.isSafeInteger(chainId) || chainId < 0 || chainId >= 0x80000000) {
+		throw new Error(`invalid chain id: ${chainId}`);
+	}
+	return 0x80000000n | BigInt(chainId);
+}
 
 // "default": general calls and eth_getLogs (drpc allows large log ranges)
 // "proof": eth_getProof at historical blocks (needs archive state: alchemy)
