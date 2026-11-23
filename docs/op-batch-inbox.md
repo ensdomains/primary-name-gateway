@@ -6,6 +6,12 @@ An alternative to dispute games for OP Stack chains: prove an L2 block from the 
 
 The verifier trusts the **batcher key** (`SystemConfig.batcherHash`). Derivation drops a batch whose parent hash doesn't match the safe chain, but a verifier can't run derivation, so a malicious batcher could post a batch naming a fake parent and the verifier would accept it. That is roughly the trust of a permissioned proposer, with no challenge window. Fast bridges are different: their relayers run derivation themselves, so they trust L1 finality and nothing else.
 
+**Accepted risk: orphaned parents.** An honest batcher can also name a parent that never becomes canonical. It posts batches ahead of the safe head, so a batch's parent may still be unsafe, its own channel not yet complete on L1. If the sequencer then loses those unsafe blocks (a crash, or a failover that hadn't seen them), or the parent's batch lands after the sequencing window (and deposit-only blocks replace it), the chain continues without the parent. The later batch is still on L1, signed by the batcher, and the verifier accepts it until it's `maxBlockLag` old. A gateway could then prove storage from a block that was never canonical, such as a name change that was reorged away.
+
+- **Contract:** the verifier doesn't check that the parent became safe. Proving that on-chain would need every frame of the parent's channel (more blobs and KZG proofs) or a later batch built on a descendant (which could be orphaned too), so it's left out.
+- **This indexer:** it only commits when the parent is at or below the L2's finalized head and its storage matches the replayed events, so its own commits can't name an orphan. The gap is for proofs built elsewhere.
+- **Likelihood:** it needs the sequencer to drop or replace blocks after the batcher has started building on them, which happens only during sequencer outages and failovers.
+
 ## What a batch gives
 
 Channel data is `rlp(batch) ...` compressed, after a 1-byte channel version (`0x01` = brotli). The first batch of a channel names its parent block:
@@ -98,5 +104,4 @@ Checked on mainnet (2026-11-23): with its database seeded from the Base indexer'
 
 ## Open
 
-- The batcher key is trusted. A batch whose channel never completes, or an unsafe-head reorg on the sequencer, would name a parent that never became safe. That's rare with an honest batcher, but `maxBlockLag` limits how long such a commit is accepted.
 - Batcher transactions that put several channels' frames in one blob, or start a blob with the end of a previous channel.
