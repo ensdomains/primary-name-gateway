@@ -1,6 +1,13 @@
 // The verifier each deployment's L2ReverseResolver uses, with the arguments test:mainnet and
 // `bun run prove` deploy it with on an L1 fork.
-import type { Deployment } from "@primary-name-gateway/shared";
+import { DEPLOYMENTS, type Deployment, type IndexerStatus } from "@primary-name-gateway/shared";
+
+// the deployment an indexer serves, by its /status: [name, deployment]
+export function deploymentOf(status: IndexerStatus): [string, Deployment] | undefined {
+	return Object.entries(DEPLOYMENTS).find(
+		([, d]) => d.l2.id === status.l2ChainId && d.l1.id === status.l1ChainId && d.kind === status.kind,
+	);
+}
 
 export function verifierContract(d: Deployment, minAgeSec = 0): { contract: string; args: unknown[] } {
 	switch (d.kind) {

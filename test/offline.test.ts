@@ -377,8 +377,14 @@ describe("offline e2e", () => {
 		expect(db.getState("deferredGames")).toBe("[]");
 	}, 60_000);
 
-	test("status names both chains, the commit kind and the block time", () => {
-		expect(indexer.status()).toMatchObject({ chainId: CHAIN_ID, l1ChainId: 31337, kind: "op", l2BlockMs: 2000 });
+	test("status names both chains, the commit kind, the block time and minAgeSec", () => {
+		expect(indexer.status()).toMatchObject({
+			l2ChainId: CHAIN_ID,
+			l1ChainId: 31337,
+			kind: "op",
+			l2BlockMs: 2000,
+			minAgeSec: 0,
+		});
 	});
 
 	test("a new indexer catches up on events before its first commit, then rebuilds older games", async () => {

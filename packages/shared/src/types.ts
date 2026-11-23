@@ -67,10 +67,11 @@ export type Change = {
 };
 
 export type IndexerStatus = {
-	chainId: number; // the L2
+	l2ChainId: number;
 	l1ChainId: number; // where its commits are
 	kind: CommitKind;
 	l2BlockMs?: number; // the L2's current block time (OP Stack: Base is 200 ms since Denim)
+	minAgeSec?: number; // OP: unchallenged games this old are accepted before finality; the verifier must match
 	registrar: Address;
 	syncedBlock: number; // changes are complete through this L2 block
 	changeSeq: number; // latest change

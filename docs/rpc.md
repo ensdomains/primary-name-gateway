@@ -97,7 +97,7 @@ Indexer (`bun run indexer`, `indexer:base`, `indexer:linea`, `indexer:base-inbox
 | `INDEXER_MAX_ATTEMPTS` | `5` | failures before a commit is skipped (sync failures don't count) |
 | `INDEXER_LOOKBACK_SEC` | game finality + 1 day | OP / Base: how far back the first start looks |
 | `INDEXER_MIN_FINAL_AGE_SEC` | game finality − 1 day | OP / Base: start checking validity at this age |
-| `INDEXER_MIN_AGE_SEC` | `0` | OP / Base: accept unchallenged games this old; must equal the verifier's `minAgeSec` ([optimism.md](optimism.md#early-acceptance-minagesec)) |
+| `INDEXER_MIN_AGE_SEC` | `0` | OP / Base: accept unchallenged games this old; must equal the verifier's `minAgeSec` ([optimism.md](optimism.md#early-acceptance-minagesec)). Changing it re-checks the valid games. |
 | `INDEXER_LOOKBACK_L1_BLOCKS` | `3600` | Linea: L1 blocks to scan on first start |
 | `INDEXER_INBOX_INTERVAL_SEC` | `600` | inbox: at most one commit per this much L1 time |
 | `INDEXER_INBOX_SCAN_BLOCKS` | `64` | inbox: L1 blocks to look back for a channel start |
@@ -120,10 +120,9 @@ Gateway (`bun run gateway`, `gateway:base`, `gateway:linea`, `gateway:base-inbox
 
 Fork test (`bun run test:fork`, [op-batch-inbox.md](op-batch-inbox.md)): needs an archive L1 RPC (`ALCHEMY_KEY`, or `PROOF_RPC_URL_1` / `RPC_URL_1`).
 
-Mainnet test (`bun run test:mainnet`):
+Mainnet test (`bun run test:mainnet`; the verifier's `minAgeSec` comes from the indexer's `/status`):
 
 | variable | default | |
 |---|---|---|
 | `INDEXER_URL` | `http://localhost:8100` | the running indexer to test against |
-| `INDEXER_MIN_AGE_SEC` | `0` | `minAgeSec` for the deployed OP / Base verifier |
 | `MAINNET_SAMPLE` | `500` | verify every name up to this many, otherwise a sample (all long names plus random ones) |

@@ -44,8 +44,31 @@ export class OPCommitSource implements CommitSource {
 	constructor(readonly config: OPSourceConfig) {}
 
 	async tick(indexer: RegistrarIndexer) {
+		this.applyMinAge(indexer);
 		await this.discoverGames(indexer);
 		await this.refreshStatuses(indexer);
+	}
+
+	status() {
+		return { minAgeSec: this.config.minAgeSec ?? 0 };
+	}
+
+	// Which games are valid depends on minAgeSec. When it changes, valid games go back to pending and
+	// are checked again under the new rule: re-checked as valid games, games accepted early would be
+	// marked invalid for good.
+	private applyMinAge(indexer: RegistrarIndexer) {
+		const { db } = indexer;
+		const minAgeSec = String(this.config.minAgeSec ?? 0);
+		const prev = db.getState("minAgeSec");
+		if (prev === minAgeSec) return;
+		if (prev !== undefined) {
+			const valid = db.getCommits("valid", Number.MAX_SAFE_INTEGER);
+			db.db.transaction(() => {
+				for (const c of valid) db.putCommit({ ...c, status: "pending", validAt: undefined });
+			})();
+			indexer.log(`minAgeSec ${prev} → ${minAgeSec}: checking ${valid.length} valid games again`);
+		}
+		db.setState("minAgeSec", minAgeSec);
 	}
 
 	private async getFactory(): Promise<Address> {
@@ -301,5 +324,7 @@ export class OPCommitSource implements CommitSource {
 				indexer.log(`game ${c.id}: invalid (${reason})`);
 			}
 		});
+		// a game valid again (minAgeSec changed) may have lost its trie
+		for (const c of db.getCommits("valid", retainValid)) indexer.keepTrie(c);
 	}
 }

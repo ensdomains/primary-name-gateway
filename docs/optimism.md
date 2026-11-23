@@ -34,7 +34,9 @@ A game takes about 7 days to become a valid claim. `OPFaultVerifier` can optiona
 
 **Trust:** this assumes honest challengers respond within `minAgeSec`. A fraudulent proposal that nobody challenges in time is accepted until it is challenged, loses, or is blacklisted; from then on the verifier rejects it, the indexer marks it `invalid`, and gateways rewind to their newest acceptable commit. For calibration, 2 of OP Mainnet's last 200 games (as of 2026-11-22) had been challenged.
 
-The indexer has to apply the same rule as the deployed verifier, or a gateway serves commits the verifier rejects: set `INDEXER_MIN_AGE_SEC` to the verifier's `minAgeSec`. It then polls pending games from that age on, and keeps re-checking the valid games a gateway may hold (the newest `retainValid`).
+The indexer has to apply the same rule as the deployed verifier, or a gateway serves commits the verifier rejects: set `INDEXER_MIN_AGE_SEC` to the verifier's `minAgeSec`. It then polls pending games from that age on, and keeps re-checking the valid games a gateway may hold (the newest `retainValid`). `/status` reports it as `minAgeSec`, and `test:mainnet` and `bun run prove` deploy their verifier with it.
+
+The indexer records its `minAgeSec`. Started with a different one on the same database, it sets every valid game back to pending and checks it again under the new rule. Otherwise, going back to finalized games only would mark the games accepted early invalid for good. Tries of the newest valid games that were dropped meanwhile are rebuilt from the newest trie: the newest finalized game is days older than the early ones that were kept. `offline-minage.test.ts` switches both ways on one database.
 
 Freshness doesn't get weaker: `maxSequenceLag` still bounds a game's lag behind the anchor (the newest finalized state), so the oldest acceptable state is the same as without `minAgeSec`. An honest gateway just serves much newer state.
 

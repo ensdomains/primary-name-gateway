@@ -182,4 +182,38 @@ describe.each([
 		await foundry.confirm(asr.finalize(game.address));
 		expect(await verify(finalOnly)).toBe("next.eth");
 	}, 60_000);
+
+	test("changing minAgeSec re-checks valid games instead of invalidating them", async () => {
+		const finalized = gateway.commits.at(-1)!; // next.eth, finalized
+		rollup.setName(ADDR, "unfinalized.eth");
+		rollup.mine();
+		const game = await propose();
+		await elapse(MIN_AGE + 1);
+		await sync();
+		expect(db.getCommit(game.gameIndex)?.status).toBe("valid"); // early
+		expect(indexer.status().minAgeSec).toBe(MIN_AGE);
+
+		// the same database, finalized games only; it keeps one valid trie, so the finalized game's goes
+		const source = indexer.config.source as OPCommitSource;
+		const strict = new RegistrarIndexer({
+			...indexer.config,
+			retainValid: 1,
+			source: new OPCommitSource({ ...source.config, minAgeSec: 0 }),
+		});
+		expect(strict.trie.has(finalized.id)).toBeFalse();
+		await strict.tick();
+		expect(strict.status().minAgeSec).toBe(0);
+		expect(db.getCommit(game.gameIndex)?.status).toBe("pending"); // not invalid
+		expect(db.getCommit(finalized.id)?.status).toBe("valid");
+		expect(strict.trie.has(finalized.id)).toBeTrue(); // rebuilt from the newest trie
+		expect(strict.snapshot(finalized.id, undefined, 1e6)?.rows).toEqual(
+			indexer.snapshot(finalized.id, undefined, 1e6)?.rows,
+		);
+
+		// and back: accepted early again
+		const relaxed = new RegistrarIndexer({ ...indexer.config, source });
+		await relaxed.tick();
+		expect(db.getCommit(game.gameIndex)?.status).toBe("valid");
+		expect(relaxed.trie.has(game.gameIndex)).toBeTrue();
+	}, 60_000);
 });

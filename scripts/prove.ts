@@ -12,7 +12,6 @@ import {
 	type Commit,
 	coinTypeFromChainId,
 	createClient,
-	DEPLOYMENTS,
 	type IndexerStatus,
 	rpcURL,
 } from "@primary-name-gateway/shared";
@@ -33,7 +32,7 @@ import {
 	toHex,
 } from "viem";
 import { packetToBytes } from "viem/ens";
-import { verifierContract } from "./verifiers.js";
+import { deploymentOf, verifierContract } from "./verifiers.js";
 
 // the ports of the package.json scripts
 const PORTS: Record<string, [indexer: number, gateway: number]> = {
@@ -112,15 +111,17 @@ function duration(sec: number): string {
 const { addr, indexer, gateway } = parseArgs();
 const status = await getJSON<IndexerStatus>(`${indexer}/status`);
 const [chain, d] =
-	Object.entries(DEPLOYMENTS).find(
-		([, d]) =>
-			d.l2.id === status.chainId &&
-			d.kind === status.kind &&
-			(status.l1ChainId === undefined || d.l1.id === status.l1ChainId), // older indexers don't say
-	) ?? usage(`${indexer}: no deployment for chain ${status.chainId} (${status.kind})`);
+	deploymentOf(status) ??
+	usage(
+		`${indexer}: no deployment for L1 ${status.l1ChainId} → L2 ${status.l2ChainId} (${status.kind}); an older indexer?`,
+	);
 if (!status.latestValid) usage(`${indexer}: no valid commit yet (synced to L2 block ${status.syncedBlock})`);
 const blockTime = status.l2BlockMs ? `, ${status.l2BlockMs} ms blocks` : "";
-console.log(`${chain} (${d.kind}, L1 ${d.l1.id} → L2 ${d.l2.id}${blockTime}): indexer ${indexer}, gateway ${gateway}`);
+const minAgeSec = status.minAgeSec ?? 0; // the verifier must accept what the indexer marks valid
+const early = minAgeSec ? `, games accepted unchallenged after ${minAgeSec}s` : "";
+console.log(
+	`${chain} (${d.kind}, L1 ${d.l1.id} → L2 ${d.l2.id}${blockTime}${early}): indexer ${indexer}, gateway ${gateway}`,
+);
 
 const started = Date.now();
 const foundry = await Foundry.launch({
@@ -146,7 +147,7 @@ try {
 		},
 	});
 	const forkBlock = await l1.getBlockNumber();
-	const { contract, args } = verifierContract(d, Number(process.env.INDEXER_MIN_AGE_SEC ?? 0));
+	const { contract, args } = verifierContract(d, minAgeSec);
 	const verifier = await foundry.deploy({ file: contract, args });
 	const coinType = coinTypeFromChainId(d.l2.id);
 	const resolver = await foundry.deploy({

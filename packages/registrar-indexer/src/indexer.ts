@@ -9,6 +9,7 @@ import { createIndexerTrie, type IndexerTrie, type RowPage } from "./tries.js";
 // OPCommitSource: dispute games, LineaCommitSource: finalizations.
 export interface CommitSource {
 	tick(indexer: RegistrarIndexer): Promise<void>;
+	status?(): Partial<IndexerStatus>; // settings a verifier must match (OP: minAgeSec)
 }
 
 // the commit's L2 block isn't final yet: try again later (not a failure)
@@ -89,10 +90,11 @@ export class RegistrarIndexer {
 		const { db, deployment } = this.config;
 		const [latest] = db.getCommits("valid", 1);
 		return {
-			chainId: deployment.l2.id,
+			l2ChainId: deployment.l2.id,
 			l1ChainId: deployment.l1.id,
 			kind: deployment.kind,
 			l2BlockMs: "l2Blocks" in deployment ? deployment.l2Blocks[deployment.l2Blocks.length - 1].ms : undefined,
+			...this.config.source.status?.(),
 			registrar: deployment.L2ReverseRegistrar,
 			syncedBlock: this.syncedBlock,
 			syncingTo: this.syncingTo,
@@ -105,6 +107,18 @@ export class RegistrarIndexer {
 				validAt: latest.validAt,
 			},
 		};
+	}
+
+	// Keep the trie of a stored commit whose trie was dropped (it stopped being retained, and is valid
+	// again): rebuilt from the newest trie and checked against the commit's storage hash.
+	keepTrie(c: Commit) {
+		if (this.trie.has(c.id)) return;
+		const storageHash = this.trie.storageHashAt(c);
+		if (storageHash !== c.storageHash) {
+			throw new Error(`commit ${c.id}: rebuilt storage hash ${storageHash}, expected ${c.storageHash}`);
+		}
+		this.trie.capture(c);
+		this.log(`commit ${c.id}: trie rebuilt (L2 block ${c.l2Block})`);
 	}
 
 	async tick() {
