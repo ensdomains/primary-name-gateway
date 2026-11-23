@@ -3,7 +3,7 @@ import { EZCCIP } from "@namestone/ezccip";
 import type { Hex } from "viem";
 import type { RegistrarGateway } from "./gateway.js";
 
-export { encodeOPFaultCommitProof, type GatewayConfig, type GatewayStats, RegistrarGateway } from "./gateway.js";
+export { type GatewayConfig, type GatewayStats, RegistrarGateway } from "./gateway.js";
 export { MemoryNodeStore, type NodeStore, type SqlAdapter, SqlNodeStore } from "./store.js";
 
 // CCIP-Read endpoint for L2ReverseResolver: proveName(address) returns (bytes)
@@ -12,7 +12,7 @@ export function createEZCCIP(gateway: RegistrarGateway): EZCCIP {
 	const ezccip = new EZCCIP();
 	ezccip.register("proveName(address) returns (bytes)", async ([addr], _context, history) => {
 		const { proof, commit } = gateway.proveName(addr as Hex);
-		history.show = [addr, `game=${commit.gameIndex}`, `l2=${commit.l2Block}`];
+		history.show = [addr, `${commit.kind}=${commit.id}`, `l2=${commit.l2Block}`];
 		return [proof];
 	});
 	return ezccip;

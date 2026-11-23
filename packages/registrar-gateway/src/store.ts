@@ -7,6 +7,8 @@ import { hexToBytes } from "viem";
 // Everything is synchronous so it maps onto bun:sqlite and Durable Object SQL alike.
 export interface NodeStore {
 	get(path: string, version: number): Uint8Array | undefined;
+	// the greatest path that starts with `prefix`, is < `before`, and has a node at `version`
+	floor(prefix: string, before: string, version: number): { path: string; node: Uint8Array } | undefined;
 	put(version: number, rows: TrieRow[]): void; // atomic
 	prune(minVersion: number): void; // forget what's only needed for versions < minVersion
 	truncate(maxVersion: number): void; // drop rows newer than maxVersion
@@ -19,6 +21,7 @@ export class MemoryNodeStore implements NodeStore {
 	// path => rows ascending by version
 	private readonly rows = new Map<string, { version: number; node: Uint8Array | null }[]>();
 	private readonly meta = new Map<string, string>();
+	private sorted: string[] | undefined; // path order cache
 
 	get(path: string, version: number): Uint8Array | undefined {
 		const v = this.rows.get(path);
@@ -28,12 +31,28 @@ export class MemoryNodeStore implements NodeStore {
 		}
 		return;
 	}
+	floor(prefix: string, before: string, version: number) {
+		this.sorted ??= [...this.rows.keys()].sort();
+		let lo = 0;
+		let hi = this.sorted.length;
+		while (lo < hi) {
+			const mid = (lo + hi) >> 1;
+			if (this.sorted[mid] < before) lo = mid + 1;
+			else hi = mid;
+		}
+		for (let i = lo - 1; i >= 0 && this.sorted[i].startsWith(prefix); i--) {
+			const node = this.get(this.sorted[i], version);
+			if (node) return { path: this.sorted[i], node };
+		}
+		return;
+	}
 	put(version: number, rows: TrieRow[]) {
 		for (const { path, node } of rows) {
 			const entry = { version, node: node === null ? null : hexToBytes(node) };
 			const v = this.rows.get(path);
 			if (!v) {
 				this.rows.set(path, [entry]);
+				this.sorted = undefined;
 			} else if (v[v.length - 1].version === version) {
 				v[v.length - 1] = entry;
 			} else {
@@ -50,17 +69,24 @@ export class MemoryNodeStore implements NodeStore {
 			if (i > 0) v.splice(0, i);
 			// a deletion marker that is now the oldest row reads the same as no row
 			if (v[0].node === null && v[0].version <= minVersion) v.shift();
-			if (!v.length) this.rows.delete(path);
+			if (!v.length) {
+				this.rows.delete(path);
+				this.sorted = undefined;
+			}
 		}
 	}
 	truncate(maxVersion: number) {
 		for (const [path, v] of this.rows) {
 			while (v.length && v[v.length - 1].version > maxVersion) v.pop();
-			if (!v.length) this.rows.delete(path);
+			if (!v.length) {
+				this.rows.delete(path);
+				this.sorted = undefined;
+			}
 		}
 	}
 	clear() {
 		this.rows.clear();
+		this.sorted = undefined;
 	}
 	getMeta(key: string) {
 		return this.meta.get(key);
@@ -95,9 +121,23 @@ export class SqlNodeStore implements NodeStore {
 			path,
 			version,
 		);
-		const node = row?.node;
-		if (node == null) return;
-		return node instanceof Uint8Array ? node : new Uint8Array(node as ArrayBuffer);
+		return toBytes(row?.node);
+	}
+	floor(prefix: string, before: string, version: number) {
+		// deleted keys are rare: step past them one at a time
+		for (;;) {
+			const [row] = this.sql.exec(
+				"SELECT path FROM trie_nodes WHERE path >= ? AND path < ? AND version <= ? ORDER BY path DESC LIMIT 1",
+				prefix,
+				before,
+				version,
+			);
+			if (!row) return;
+			const path = row.path as string;
+			const node = this.get(path, version);
+			if (node) return { path, node };
+			before = path;
+		}
 	}
 	put(version: number, rows: TrieRow[]) {
 		this.sql.transaction(() => {
@@ -138,4 +178,9 @@ export class SqlNodeStore implements NodeStore {
 		if (value === undefined) this.sql.exec("DELETE FROM gateway_meta WHERE key = ?", key);
 		else this.sql.exec("INSERT OR REPLACE INTO gateway_meta (key, value) VALUES (?, ?)", key, value);
 	}
+}
+
+function toBytes(node: unknown): Uint8Array | undefined {
+	if (node == null) return;
+	return node instanceof Uint8Array ? node : new Uint8Array(node as ArrayBuffer);
 }

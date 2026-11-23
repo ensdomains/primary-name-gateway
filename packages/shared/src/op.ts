@@ -1,4 +1,4 @@
-import { type Hex, hexToBigInt, keccak256, parseAbi, size, slice, encodeAbiParameters } from "viem";
+import { type Address, encodeAbiParameters, type Hex, hexToBigInt, keccak256, parseAbi, size, slice } from "viem";
 
 export const ASR_ABI = parseAbi([
 	"function disputeGameFactory() view returns (address)",
@@ -64,4 +64,40 @@ export function decodeGameClaim(rootClaim: Hex, extraData: Hex, chainId: number)
 	}
 	if (size(extraData) < 32) return;
 	return { kind: "output", l2BlockNumber: hexToBigInt(slice(extraData, 0, 32)), outputRoot: rootClaim };
+}
+
+// OPFaultCommitProof (see OPFaultVerifier.sol)
+export function encodeOPFaultCommitProof(p: { game: Address; superRoot: Hex; outputRootProof: OutputRootProof }): Hex {
+	return encodeAbiParameters(
+		[
+			{
+				type: "tuple",
+				components: [
+					{ name: "game", type: "address" },
+					{ name: "superRoot", type: "bytes" },
+					{
+						name: "outputRootProof",
+						type: "tuple",
+						components: [
+							{ name: "version", type: "bytes32" },
+							{ name: "stateRoot", type: "bytes32" },
+							{ name: "messagePasserStorageRoot", type: "bytes32" },
+							{ name: "latestBlockhash", type: "bytes32" },
+						],
+					},
+				],
+			},
+		],
+		[p],
+	);
+}
+
+// OPFaultVerifier accountProof: abi.encode(bytes[]) of eth_getProof's accountProof
+export function encodeMPTProof(nodes: Hex[]): Hex {
+	return encodeAbiParameters([{ type: "bytes[]" }], [nodes]);
+}
+
+// OPFaultVerifier storage proof: abi.encode(bytes[][]), one eth_getProof path per slot
+export function encodeMPTStorageProofs(proofs: Hex[][]): Hex {
+	return encodeAbiParameters([{ type: "bytes[][]" }], [proofs]);
 }

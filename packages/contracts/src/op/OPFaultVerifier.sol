@@ -46,6 +46,7 @@ contract OPFaultVerifier is IL2StorageVerifier {
     error InvalidSuperRoot();
     error ChainNotInSuperRoot(uint256 chainId);
     error InvalidOutputRoot();
+    error InvalidStorageProof();
 
     bytes1 constant SUPER_ROOT_VERSION = 0x01;
 
@@ -61,23 +62,29 @@ contract OPFaultVerifier is IL2StorageVerifier {
         window = window_;
     }
 
-    /// @inheritdoc IL2StorageVerifier
-    function verifyStorageRoot(bytes calldata commitProof, address target, bytes[] calldata accountProof)
+    /// @dev `accountProof` = abi.encode(bytes[]) (eth_getProof accountProof)
+    function verifyStorageRoot(bytes calldata commitProof, address target, bytes calldata accountProof)
         external
         view
         returns (bytes32)
     {
         bytes32 stateRoot = verifyStateRoot(abi.decode(commitProof, (OPFaultCommitProof)));
-        return EthTrie.getStorageRoot(stateRoot, target, accountProof);
+        return EthTrie.getStorageRoot(stateRoot, target, abi.decode(accountProof, (bytes[])));
     }
 
     /// @inheritdoc IL2StorageVerifier
-    function verifyStorageValue(bytes32 storageRoot, uint256 slot, bytes[] calldata proof)
+    /// @dev `proof` = abi.encode(bytes[][]): the eth_getProof storageProof[].proof of each slot
+    function verifyStorageValues(bytes32 storageRoot, uint256[] calldata slots, bytes calldata proof)
         external
         pure
-        returns (bytes32)
+        returns (bytes32[] memory values)
     {
-        return EthTrie.getStorageValue(storageRoot, slot, proof);
+        bytes[][] memory proofs = abi.decode(proof, (bytes[][]));
+        if (proofs.length != slots.length) revert InvalidStorageProof();
+        values = new bytes32[](slots.length);
+        for (uint256 i; i < slots.length; ++i) {
+            values[i] = EthTrie.getStorageValue(storageRoot, slots[i], proofs[i]);
+        }
     }
 
     /// @notice Verify `p` against L1 and return the committed L2 state root.

@@ -5,10 +5,10 @@
 //   holding the registrar (nonce 0, balance 0, storageRoot, codeHash)
 // - output roots and super roots are computed exactly like OP
 //
-// It implements L2Reader so a real RegistrarIndexer can index it.
+// It implements OPL2Reader so a real RegistrarIndexer can index it.
 
 import { hashOutputRootProof, type OutputRootProof, setPrimaryName } from "@primary-name-gateway/shared";
-import type { BlockWitness, L2Reader, NameChange } from "@primary-name-gateway/registrar-indexer";
+import type { BlockWitness, OPL2Reader, RegistrarChange } from "@primary-name-gateway/registrar-indexer";
 import { EthStorage } from "@ensdomains/merkle-builder";
 import {
 	type Address,
@@ -27,7 +27,7 @@ import {
 export type FakeBlock = {
 	number: number;
 	timestamp: number;
-	changes: NameChange[];
+	changes: RegistrarChange[];
 	storage: EthStorage; // registrar storage after this block (copy-on-write snapshot)
 	witness: BlockWitness;
 	outputRootProof: OutputRootProof;
@@ -37,7 +37,7 @@ export type FakeBlock = {
 const CODE_HASH = keccak256(stringToHex("registrar code"));
 const MESSAGE_PASSER_ROOT = keccak256(stringToHex("message passer"));
 
-export class FakeOPRollup implements L2Reader {
+export class FakeOPRollup implements OPL2Reader {
 	readonly blocks: FakeBlock[] = [];
 	private readonly storage = new EthStorage();
 	private queued: { addr: Address; name: Hex }[] = [];
@@ -64,7 +64,7 @@ export class FakeOPRollup implements L2Reader {
 	mine(count = 1): FakeBlock {
 		for (let i = 0; i < count; i++) {
 			const number = this.blocks.length;
-			const changes = this.queued.map((c, logIndex) => ({ block: number, logIndex, ...c }));
+			const changes = this.queued.map((c, logIndex): RegistrarChange => ({ block: number, logIndex, kind: "name", ...c }));
 			this.queued = [];
 			for (const c of changes) setPrimaryName(this.storage, c.addr, Buffer.from(c.name.slice(2), "hex"));
 			const storageHash = this.storage.storageHash;
@@ -111,7 +111,7 @@ export class FakeOPRollup implements L2Reader {
 		]);
 	}
 
-	// -- L2Reader
+	// -- OPL2Reader
 
 	async blockAtTimestamp(timestamp: bigint): Promise<number> {
 		const offset = Number(timestamp) - this.genesisTimestamp;
@@ -120,7 +120,7 @@ export class FakeOPRollup implements L2Reader {
 		return n;
 	}
 
-	async getNameChanges(fromBlock: number, toBlock: number) {
+	async getChanges(fromBlock: number, toBlock: number) {
 		toBlock = Math.min(toBlock, this.head.number);
 		const changes = this.blocks.slice(fromBlock, toBlock + 1).flatMap((b) => b.changes);
 		return { changes, toBlock };

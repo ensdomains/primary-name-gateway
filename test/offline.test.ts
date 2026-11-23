@@ -11,8 +11,8 @@
 
 import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { IndexerDB, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
-import type { OPDeployment } from "@primary-name-gateway/shared";
+import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
+import { type OPDeployment, PLAIN_LAYOUT } from "@primary-name-gateway/shared";
 import { Foundry } from "@adraffy/blocksmith";
 import { serve } from "@namestone/ezccip/serve";
 import {
@@ -97,6 +97,8 @@ describe("offline e2e", () => {
 			{ chainId: 8453, outputRoot: keccak256(stringToHex("base")) },
 		]);
 		const deployment: OPDeployment = {
+			kind: "op",
+			layout: PLAIN_LAYOUT,
 			l1: { id: 31337, name: "blocksmith", drpcSlug: "", alchemySlug: "" },
 			l2: { id: CHAIN_ID, name: "fake", drpcSlug: "", alchemySlug: "" },
 			AnchorStateRegistry: asr.target as Address,
@@ -107,12 +109,9 @@ describe("offline e2e", () => {
 		db = new IndexerDB(":memory:");
 		indexer = new RegistrarIndexer({
 			deployment,
-			l1,
 			l2: rollup,
 			db,
-			lookbackSec: 86400,
-			minFinalAgeSec: 0,
-			maxAttempts: 1,
+			source: new OPCommitSource({ deployment, l1, l2: rollup, lookbackSec: 86400, minFinalAgeSec: 0, maxAttempts: 1 }),
 		});
 		indexerServer = serveIndexer(indexer, db, 0);
 
@@ -127,7 +126,7 @@ describe("offline e2e", () => {
 		});
 		const r = await foundry.deploy({
 			file: "L2ReverseResolver",
-			args: [verifier.target, REGISTRAR, COIN_TYPE, [ccip.endpoint]],
+			args: [verifier.target, REGISTRAR, 0, COIN_TYPE, [ccip.endpoint]],
 		});
 		resolver = r.target as Address;
 	}, 120_000);
@@ -200,7 +199,7 @@ describe("offline e2e", () => {
 		await finalize(game);
 		await sync();
 		expect(db.getCommit(game.gameIndex)?.status).toBe("valid");
-		expect(gateway.commits.map((c) => c.gameIndex)).toEqual([game.gameIndex]);
+		expect(gateway.commits.map((c) => c.id)).toEqual([game.gameIndex]);
 
 		for (const [addr, name] of Object.entries(round1)) {
 			expect(await resolveName(addr as Address)).toBe(name);
@@ -218,7 +217,7 @@ describe("offline e2e", () => {
 		await finalize(game);
 		await sync();
 
-		expect(gateway.commits.map((c) => c.gameIndex)).toEqual(games.map((g) => g.gameIndex));
+		expect(gateway.commits.map((c) => c.id)).toEqual(games.map((g) => g.gameIndex));
 		expect(await resolveName(A.short)).toBe("raffy2.eth");
 		expect(await resolveName(A.cleared)).toBe("");
 		expect(await resolveName(A.long)).toBe("now-short.eth");
@@ -236,7 +235,7 @@ describe("offline e2e", () => {
 		const bad = await propose({ outputRoot: keccak256(stringToHex("lies")) });
 		await sync();
 		expect(db.getCommit(bad.gameIndex)?.status).toBe("invalid");
-		expect(gateway.commits.map((c) => c.gameIndex)).not.toContain(bad.gameIndex);
+		expect(gateway.commits.map((c) => c.id)).not.toContain(bad.gameIndex);
 		expect(await resolveName(A.short)).toBe("raffy2.eth");
 	}, 60_000);
 
@@ -247,7 +246,7 @@ describe("offline e2e", () => {
 		await sync();
 
 		const [second] = games.filter((g) => db.getCommit(g.gameIndex)?.status === "valid").slice(-2);
-		expect(gateway.commits.map((c) => c.gameIndex)).toEqual([second.gameIndex, game.gameIndex]);
+		expect(gateway.commits.map((c) => c.id)).toEqual([second.gameIndex, game.gameIndex]);
 		expect(await resolveName(A.short)).toBe("evil.eth"); // the honest proposal of the same change
 
 		// the round 2 commit is now > WINDOW behind the anchor
@@ -263,7 +262,7 @@ describe("offline e2e", () => {
 		).rejects.toThrow(/InvalidGame/);
 		await sync();
 		expect(db.getCommit(latest.gameIndex)?.status).toBe("invalid");
-		expect(gateway.commits.map((c) => c.gameIndex)).not.toContain(latest.gameIndex);
+		expect(gateway.commits.map((c) => c.id)).not.toContain(latest.gameIndex);
 	}, 60_000);
 
 	test("proofs are bound to the address", async () => {
@@ -289,7 +288,7 @@ describe("offline e2e", () => {
 		await indexer.tick();
 		await restarted.sync();
 		expect(restarted.stats).toMatchObject({ snapshots: 0, patches: 1 });
-		expect(restarted.commits.at(-1)?.gameIndex).toBe(game.gameIndex);
+		expect(restarted.commits.at(-1)?.id).toBe(game.gameIndex);
 		const verify = (addr: Address) =>
 			l1.readContract({
 				address: resolver,

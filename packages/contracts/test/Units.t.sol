@@ -12,7 +12,7 @@ contract UnitsTest is Test {
 
     function setUp() public {
         verifier = new OPFaultVerifier(IAnchorStateRegistry(address(0)), 10, 0);
-        resolver = new L2ReverseResolver(IL2StorageVerifier(address(verifier)), address(1), 0x8000000a, new string[](0));
+        resolver = new L2ReverseResolver(IL2StorageVerifier(address(verifier)), address(1), 0, 0x8000000a, new string[](0));
     }
 
     function _dns(string memory addrLabel, string memory parent) internal pure returns (bytes memory) {

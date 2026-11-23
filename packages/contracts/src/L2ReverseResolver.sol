@@ -12,15 +12,17 @@ interface IRegistrarGateway {
 
 /// @notice Everything needed to go from an L1 commitment to `names[addr]` on the L2.
 struct NameProof {
-    bytes commitProof; // verifier-specific (see IL2StorageVerifier)
-    bytes[] accountProof; // stateRoot => registrar account
-    bytes[][] storageProofs; // storageRoot => [header slot, ...data slots]
+    bytes commitProof; // L1 => L2 state root (verifier-specific)
+    bytes accountProof; // state root => registrar account (verifier-specific)
+    uint256 dataSlots; // number of data slots of the name (0 for names < 32 bytes)
+    bytes storageProof; // storage root => [header slot, ...data slots] (verifier-specific)
 }
 
 /// @title L2ReverseResolver
 /// @notice ENSIP-19 reverse resolver for one L2: resolves `name()` for `{addr}.{coinType}.reverse`
-///         by reading the L2ReverseRegistrar's `mapping(address => string)` (slot 0) via CCIP-Read,
+///         by reading the L2ReverseRegistrar's `mapping(address => string)` (at `namesSlot`) via CCIP-Read,
 ///         and verifying the storage proofs against L1 with an `IL2StorageVerifier`.
+/// @dev See docs/registrar.md for the registrar storage layouts.
 contract L2ReverseResolver is IExtendedResolver {
     /// @dev EIP-3668
     error OffchainLookup(address sender, string[] urls, bytes callData, bytes4 callbackFunction, bytes extraData);
@@ -28,19 +30,26 @@ contract L2ReverseResolver is IExtendedResolver {
     error UnreachableName(bytes name);
     error InvalidStorageProofs();
 
-    uint256 constant SLOT_NAMES = 0; // L2ReverseRegistrar: mapping(address => string) _names
-
     IL2StorageVerifier public immutable verifier;
     address public immutable registrar;
+    /// @notice Storage slot of the registrar's `mapping(address => string) _names`.
+    uint256 public immutable namesSlot;
     uint256 public immutable coinType;
     /// @dev keccak256 of DNS-encoded "{coinType:x}.reverse"
     bytes32 immutable _parentHash;
 
     string[] internal _urls;
 
-    constructor(IL2StorageVerifier verifier_, address registrar_, uint256 coinType_, string[] memory urls_) {
+    constructor(
+        IL2StorageVerifier verifier_,
+        address registrar_,
+        uint256 namesSlot_,
+        uint256 coinType_,
+        string[] memory urls_
+    ) {
         verifier = verifier_;
         registrar = registrar_;
+        namesSlot = namesSlot_;
         coinType = coinType_;
         _urls = urls_;
         bytes memory label = bytes(_toHex(coinType_));
@@ -79,7 +88,18 @@ contract L2ReverseResolver is IExtendedResolver {
     function verifyName(address addr, bytes memory proof) public view returns (string memory) {
         NameProof memory p = abi.decode(proof, (NameProof));
         bytes32 storageRoot = verifier.verifyStorageRoot(p.commitProof, registrar, p.accountProof);
-        return string(_readBytes(storageRoot, uint256(keccak256(abi.encode(addr, SLOT_NAMES))), p.storageProofs));
+        // Solidity `string` layout: header at `slot`, long data at keccak(slot) + i
+        uint256 slot = uint256(keccak256(abi.encode(addr, namesSlot)));
+        uint256 n = p.dataSlots;
+        uint256[] memory slots = new uint256[](n + 1);
+        slots[0] = slot;
+        uint256 base = uint256(keccak256(abi.encode(slot)));
+        for (uint256 i; i < n; ++i) {
+            slots[i + 1] = base + i;
+        }
+        bytes32[] memory values = verifier.verifyStorageValues(storageRoot, slots, p.storageProof);
+        if (values.length != n + 1) revert InvalidStorageProofs();
+        return string(_decodeBytes(values));
     }
 
     /// @notice Parse `{addr}.{coinType}.reverse` (DNS-encoded, lowercase hex address).
@@ -99,31 +119,26 @@ contract L2ReverseResolver is IExtendedResolver {
         addr = address(x);
     }
 
-    /// @dev Solidity `bytes`/`string` storage layout.
-    function _readBytes(bytes32 storageRoot, uint256 slot, bytes[][] memory proofs)
-        internal
-        view
-        returns (bytes memory v)
-    {
-        if (proofs.length == 0) revert InvalidStorageProofs();
-        uint256 header = uint256(verifier.verifyStorageValue(storageRoot, slot, proofs[0]));
+    /// @dev Solidity `bytes`/`string` storage layout: [header, ...data words].
+    ///      Rejects a proof whose number of data slots doesn't match the header.
+    function _decodeBytes(bytes32[] memory values) internal pure returns (bytes memory v) {
+        uint256 header = uint256(values[0]);
+        uint256 n = values.length - 1;
         if (header & 1 == 0) {
             // short: data in the high bytes, length * 2 in the low byte
             uint256 size = (header & 0xff) >> 1;
-            if (size > 31 || proofs.length != 1) revert InvalidStorageProofs();
+            if (size > 31 || n != 0) revert InvalidStorageProofs();
             v = new bytes(size);
             for (uint256 i; i < size; ++i) {
                 v[i] = bytes32(header)[i];
             }
         } else {
-            // long: length * 2 + 1 in the header, data at keccak(slot) + i
+            // long: length * 2 + 1 in the header
             uint256 size = header >> 1;
-            uint256 count = (size + 31) >> 5;
-            if (size < 32 || proofs.length != count + 1) revert InvalidStorageProofs();
-            v = new bytes(count << 5);
-            uint256 base = uint256(keccak256(abi.encode(slot)));
-            for (uint256 i; i < count; ++i) {
-                bytes32 word = verifier.verifyStorageValue(storageRoot, base + i, proofs[i + 1]);
+            if (size < 32 || n != (size + 31) >> 5) revert InvalidStorageProofs();
+            v = new bytes(n << 5);
+            for (uint256 i; i < n; ++i) {
+                bytes32 word = values[i + 1];
                 assembly ("memory-safe") {
                     mstore(add(add(v, 32), shl(5, i)), word)
                 }
