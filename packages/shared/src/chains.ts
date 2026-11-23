@@ -1,5 +1,5 @@
 import { type Address, createPublicClient, http, type PublicClient } from "viem";
-import { PLAIN_LAYOUT, type RegistrarLayout } from "./registrar.js";
+import { OWNABLE_LAYOUT, PLAIN_LAYOUT, type RegistrarLayout } from "./registrar.js";
 
 export type ChainInfo = {
 	id: number;
@@ -27,6 +27,15 @@ export const OPTIMISM: ChainInfo = {
 	logStep: 500000, // shrinks automatically if the provider refuses
 };
 
+export const BASE: ChainInfo = {
+	id: 8453,
+	name: "base",
+	drpcSlug: "base",
+	alchemySlug: "base-mainnet",
+	// no publicRPC: mainnet.base.org rate limits eth_getLogs
+	logStep: 500000,
+};
+
 export const LINEA: ChainInfo = {
 	id: 59144,
 	name: "linea",
@@ -49,6 +58,7 @@ export type OPDeployment = DeploymentBase & {
 	kind: "op";
 	AnchorStateRegistry: Address;
 	l2BlockTime: number; // seconds
+	gameFinalitySec: number; // typical time from game creation to isGameClaimValid (sets indexer defaults)
 };
 
 // Linea: finalized (ZK proven) state roots on L1 (sparse Merkle tries, linea_getProof)
@@ -70,6 +80,21 @@ export const OP_MAINNET: OPDeployment = {
 	layout: PLAIN_LAYOUT,
 	registrarCreatedAtBlock: 137403854,
 	l2BlockTime: 2,
+	gameFinalitySec: 7 * 86400, // 3.5d clock + 3.5d airgap
+};
+
+// Base: output root games of type 621 (AggregateVerifier: TEE + ZK multiproofs), valid after ~5 days.
+// https://github.com/base/contracts/blob/main/src/L1/proofs/AggregateVerifier.sol
+export const BASE_MAINNET: OPDeployment = {
+	kind: "op",
+	l1: MAINNET,
+	l2: BASE,
+	AnchorStateRegistry: "0x909f6cf47ed12f010A796527f562bFc26C7F4E72",
+	L2ReverseRegistrar: "0x0000000000D8e504002cC26E3Ec46D81971C1664",
+	layout: OWNABLE_LAYOUT, // L2ReverseRegistrarWithMigration
+	registrarCreatedAtBlock: 31808582,
+	l2BlockTime: 2,
+	gameFinalitySec: 5 * 86400,
 };
 
 // https://docs.linea.build/get-started/build/contracts
@@ -85,6 +110,7 @@ export const LINEA_MAINNET: LineaDeployment = {
 
 export const DEPLOYMENTS: Record<string, Deployment> = {
 	optimism: OP_MAINNET,
+	base: BASE_MAINNET,
 	linea: LINEA_MAINNET,
 };
 
@@ -97,9 +123,10 @@ export function coinTypeFromChainId(chainId: number): bigint {
 	return 0x80000000n | BigInt(chainId);
 }
 
-// "default": general calls and eth_getLogs (drpc allows large log ranges)
+// "default": general calls
+// "logs": eth_getLogs over large ranges (drpc allows them); retried once, the caller shrinks the range
 // "proof": eth_getProof at historical blocks (needs archive state: alchemy)
-export type RPCPurpose = "default" | "proof";
+export type RPCPurpose = "default" | "logs" | "proof";
 
 // PROOF_RPC_URL_<chainId> (proof only) > RPC_URL_<chainId> > DRPC_KEY / ALCHEMY_KEY > public
 export function rpcURL(chain: ChainInfo, purpose: RPCPurpose = "default"): string {
@@ -115,8 +142,10 @@ export function rpcURL(chain: ChainInfo, purpose: RPCPurpose = "default"): strin
 }
 
 export function createClient(chain: ChainInfo, purpose?: RPCPurpose): PublicClient {
+	// an oversized log range fails the same way every time: let the caller shrink it instead of retrying
+	const retry = purpose === "logs" ? { retryCount: 1, timeout: 30_000 } : { retryCount: 5, timeout: 60_000 };
 	return createPublicClient({
-		transport: http(rpcURL(chain, purpose), { batch: true, retryCount: 5, retryDelay: 500, timeout: 60_000 }),
+		transport: http(rpcURL(chain, purpose), { batch: true, retryDelay: 500, ...retry }),
 	});
 }
 

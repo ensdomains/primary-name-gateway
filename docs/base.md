@@ -1,0 +1,42 @@
+# Base
+
+Base is an OP Stack chain, so it uses the OP path ([optimism.md](optimism.md)) end to end: `OPCommitSource`, Merkle-Patricia rows, and the same `OPFaultVerifier` contract deployed for Base. This page covers what differs.
+
+| | |
+|---|---|
+| chain id / coin type | 8453 / `0x80002105` |
+| registrar | `0x0000000000D8e504002cC26E3Ec46D81971C1664`, **Ownable** layout: names at slot 0, owner at slot 1 (see [registrar.md](registrar.md)) |
+| L1 contracts | `AnchorStateRegistry` `0x909f6cf47ed12f010A796527f562bFc26C7F4E72` (v3.7.0), `DisputeGameFactory` `0x43edB88C4B80fDD2AdFF2412A7BebF9dF42cB40e`, `OptimismPortal` `0x49048044D57e1C92A77f79988d21Fa8fAF74E97e` |
+| commit | an **output root** game of type **621** |
+| commit id | game index |
+| valid when | `isGameClaimValid(game)`, about 5 days after creation |
+| verifier | [`OPFaultVerifier`](../packages/contracts/src/op/OPFaultVerifier.sol)`(AnchorStateRegistry, 8453, maxSequenceLag)` |
+
+## Game type 621: `AggregateVerifier`
+
+Base's respected game type is not one of OP's (0/1 output root, 9 super root). Type 621 is Base's [`AggregateVerifier`](https://github.com/base/contracts/blob/main/src/L1/proofs/AggregateVerifier.sol): a multiproof game that resolves with TEE and ZK proofs, with a 1-day fast and a 5-day slow finalization delay. In practice games become valid about 120 hours after creation.
+
+What this repo relies on is the standard `IDisputeGame` surface, which it keeps:
+
+- `rootClaim` is a standard (version 0) output root. Checked on mainnet: the latest game's root matched the output root recomputed from L2.
+- `extraData` is `l2BlockNumber (32) . parentGame (20) . intermediate roots (32 each)`. `decodeGameClaim` reads the first word as the L2 block, as for any output root game.
+- `l2SequenceNumber()` is the L2 block number, so `maxSequenceLag` is in **blocks** (2s each), not seconds as on OP Mainnet's super root games.
+- `status()` uses the standard `GameStatus` (`CHALLENGER_WINS` = 1), and validity, blacklisting and retirement come from the `AnchorStateRegistry`.
+
+Games are created about every 20 minutes.
+
+## Registrar
+
+Base's registrar is `L2ReverseRegistrarWithMigration` (Ownable), so its storage includes the owner at slot 1 and the indexer replays `OwnershipTransferred` as well as `NameForAddrChanged`. The migration's `batchSetName` writes names in bulk, and it also emits `NameForAddrChanged`, so the storage is still a fold over events.
+
+## Operating
+
+- The indexer's defaults follow `gameFinalitySec` (5 days): it looks back 6 days on first start and starts polling validity for games older than 4 days.
+- The 6-day lookback needs archive `eth_getProof` on Base (Alchemy serves it; drpc doesn't that far back).
+- Base's L2 finalized head trails its tip by about 3 hours. Games for blocks above it are deferred until it catches up ([optimism.md#reorgs](optimism.md#reorgs)).
+- `mainnet.base.org` rate limits `eth_getLogs`, so there is no public RPC fallback: set `DRPC_KEY` or `ALCHEMY_KEY`.
+
+```sh
+bun run indexer:base   # :8102
+bun run gateway:base   # :8202
+```

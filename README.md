@@ -6,7 +6,8 @@ Each L2 has a reverse registrar holding its [ENSIP-19](https://docs.ens.domains/
 
 | chain | coin type | commits | docs |
 |---|---|---|---|
-| OP Mainnet | `0x8000000a` | dispute games | [docs/optimism.md](docs/optimism.md) |
+| OP Mainnet | `0x8000000a` | dispute games (super root) | [docs/optimism.md](docs/optimism.md) |
+| Base | `0x80002105` | dispute games (output root, `AggregateVerifier`) | [docs/base.md](docs/base.md) |
 | Linea | `0x8000e708` | ZK finalizations | [docs/linea.md](docs/linea.md) |
 
 [docs/registrar.md](docs/registrar.md) covers the registrar contract, its storage layouts, and why its storage can be rebuilt from events.
@@ -63,6 +64,8 @@ bun run indexer          # INDEXER_CHAIN=optimism, :8100
 bun run gateway          # GATEWAY_CHAIN=optimism, :8200, from INDEXER_URL=http://localhost:8100
 bun run indexer:linea    # :8101
 bun run gateway:linea    # :8201
+bun run indexer:base     # :8102
+bun run gateway:base     # :8202
 ```
 
 Indexer API: `GET /status`, `/commits?status=valid&limit=2`, `/commits/:id`, `/snapshot?commit=ID&after=PATH`, `/patch?from=A&to=B`, `/changes?after=&until=`.
@@ -74,7 +77,7 @@ Env: `INDEXER_CHAIN`, `INDEXER_PORT`, `INDEXER_DB`, `INDEXER_POLL_MS`, `INDEXER_
 - `bun run test` runs the property tests, the offline e2es, and the forge tests.
   - [trie.test.ts](test/trie.test.ts) and [linea.test.ts](test/linea.test.ts): patched rows reproduce the tries exactly, and row-built proofs equal the L2's (`eth_getProof` / `linea_getProof`), checked against merkle-builder.
   - [store.test.ts](test/store.test.ts): both stores (`get` and `floor`) against an unpruned reference.
-  - [offline.test.ts](test/offline.test.ts) and [offline-linea.test.ts](test/offline-linea.test.ts): blocksmith with mock L1 contracts and an in-memory L2 ([OP](test/fake-rollup.ts), [Linea](test/fake-linea.ts)), then the real indexer, gateway, verifier and resolver: name updates, invalid or skipped commits, stale commits, and restarts that resume with patches only.
+  - [offline.test.ts](test/offline.test.ts), [offline-base.test.ts](test/offline-base.test.ts) and [offline-linea.test.ts](test/offline-linea.test.ts): blocksmith with mock L1 contracts and an in-memory L2 ([OP](test/fake-rollup.ts), [Linea](test/fake-linea.ts)), then the real indexer, gateway, verifier and resolver: name updates, invalid or skipped commits, stale commits, and restarts that resume with patches only.
   - forge: unit tests, and [LineaVerifier.t.sol](packages/contracts/test/LineaVerifier.t.sol) on real mainnet `linea_getProof` output.
 - `bun run test:mainnet` needs a running indexer (either chain) with a valid commit. It deploys onto an anvil fork of L1 against the real L1 contracts and checks every indexed name.
 

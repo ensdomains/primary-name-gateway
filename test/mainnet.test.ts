@@ -173,10 +173,23 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 		}
 	}, 60_000);
 
-	test("every indexed address verifies", async () => {
+	// every name, or for a large registrar (Base) a fixed sample that includes every long name
+	function sample(): [Address, Hex][] {
+		const all = [...names];
+		const limit = Number(process.env.MAINNET_SAMPLE ?? 500);
+		if (all.length <= limit) return all;
+		const long = all.filter(([, n]) => (n.length - 2) / 2 >= 32).slice(0, limit / 2);
+		let seed = 1;
+		const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff), seed / 0x80000000);
+		const rest = all.filter(() => rand() < (limit - long.length) / all.length);
+		return [...long, ...rest];
+	}
+
+	test("indexed addresses verify", async () => {
 		const decoder = new TextDecoder();
 		let long = 0;
-		for (const [addr, name] of names) {
+		const checked = sample();
+		for (const [addr, name] of checked) {
 			const { proof } = gateway.proveName(addr);
 			const actual = await l1.readContract({
 				address: resolver,
@@ -187,7 +200,7 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 			expect(actual).toBe(decoder.decode(Buffer.from(name.slice(2), "hex")));
 			if ((name.length - 2) / 2 >= 32) long++;
 		}
-		console.log(`verified ${names.size} names (${long} long)`);
+		console.log(`verified ${checked.length} of ${names.size} names (${long} long)`);
 	}, 300_000);
 
 	test("address without a name resolves to empty", async () => {

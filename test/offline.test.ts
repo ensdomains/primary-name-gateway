@@ -105,6 +105,7 @@ describe("offline e2e", () => {
 			L2ReverseRegistrar: REGISTRAR,
 			registrarCreatedAtBlock: 0,
 			l2BlockTime: rollup.blockTime,
+			gameFinalitySec: 0,
 		};
 		db = new IndexerDB(":memory:");
 		indexer = new RegistrarIndexer({

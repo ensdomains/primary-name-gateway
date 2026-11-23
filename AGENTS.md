@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Notes for coding agents working in this repo. Read [README.md](README.md) first for the architecture, [docs/registrar.md](docs/registrar.md) for the registrar contract, and [docs/optimism.md](docs/optimism.md) / [docs/linea.md](docs/linea.md) for the chain-specific parts.
+Notes for coding agents working in this repo. Read [README.md](README.md) first for the architecture, [docs/registrar.md](docs/registrar.md) for the registrar contract, and [docs/optimism.md](docs/optimism.md) / [docs/base.md](docs/base.md) / [docs/linea.md](docs/linea.md) for the chain-specific parts.
 
 ## Layout
 
@@ -18,7 +18,7 @@ bun i                      # bunfig.toml uses the hoisted linker; don't change i
 bun run check              # tsc
 bun run test               # forge build + property tests + both offline e2es + forge tests
 bun run test:mainnet       # needs a running indexer (either chain) with a valid commit, and .env keys
-bun run indexer:linea      # / gateway:linea: the Linea services on :8101 / :8201
+bun run indexer:linea      # / gateway:linea: Linea on :8101 / :8201 (indexer:base / gateway:base: Base on :8102 / :8202)
 ```
 
 Run `bun run check` and `bun run test` before finishing a change.

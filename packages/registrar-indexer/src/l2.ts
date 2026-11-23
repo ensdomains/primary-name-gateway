@@ -48,12 +48,13 @@ const OWNERSHIP_TRANSFERRED = getAbiItem({ abi: REGISTRAR_ABI, name: "OwnershipT
 
 export class RPCChangeReader implements ChangeReader {
 	private logStep: number;
+	private readonly maxLogStep: number;
 	constructor(
 		readonly deployment: Deployment,
 		readonly logsClient: PublicClient, // eth_getLogs (large ranges)
 		readonly log?: (...args: unknown[]) => void,
 	) {
-		this.logStep = deployment.l2.logStep ?? 10000;
+		this.logStep = this.maxLogStep = deployment.l2.logStep ?? 10000;
 	}
 
 	get registrar(): Address {
@@ -83,6 +84,8 @@ export class RPCChangeReader implements ChangeReader {
 					const [name] = decodeAbiParameters([{ type: "bytes" }], log.data);
 					return { ...at, kind: "name", addr: log.args.addr, name };
 				});
+				// sparse again after a dense stretch: grow back
+				if (logs.length < 1000 && this.logStep < this.maxLogStep) this.logStep = Math.min(this.maxLogStep, this.logStep * 2);
 				return { changes, toBlock: end };
 			} catch (err) {
 				if (this.logStep <= 1000) throw err;
