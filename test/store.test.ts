@@ -1,4 +1,5 @@
-// MemoryNodeStore and SqlNodeStore must agree on versioned reads (get, floor) through put/prune/truncate
+// MemoryNodeStore and SqlNodeStore must agree on versioned reads (get, floor) through put/prune/truncate,
+// and SqlNodeStore's incremental prune must leave nothing a full prune would drop
 
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
@@ -26,6 +27,7 @@ test("memory and sql stores match an unpruned reference", () => {
 		});
 	let version = 0;
 	let minVersion = 0;
+	let prunes = 0;
 	const read = (s: NodeStore, v: number) =>
 		paths.map((p) => {
 			const x = s.get(p, v);
@@ -34,7 +36,8 @@ test("memory and sql stores match an unpruned reference", () => {
 	for (let step = 0; step < 300; step++) {
 		const r = random();
 		if (r < 0.7) {
-			version += 1 + Math.floor(random() * 3);
+			// sometimes write again at the current version (after a truncate, that can be the pruned one)
+			if (random() < 0.8) version += 1 + Math.floor(random() * 3);
 			const rows: TrieRow[] = paths
 				.filter(() => random() < 0.2)
 				.map((path) => ({
@@ -46,6 +49,17 @@ test("memory and sql stores match an unpruned reference", () => {
 		} else if (r < 0.85) {
 			minVersion = Math.max(minVersion, version - Math.floor(random() * 6));
 			for (const s of stores) s.prune(minVersion);
+			// SqlNodeStore prunes incrementally: nothing a full prune would drop may be left. At or below
+			// minVersion only each path's newest row is kept, and only if it's a node.
+			const left = db
+				.query(
+					`SELECT COUNT(*) AS n FROM trie_nodes WHERE version <= ? AND (node IS NULL OR version < (
+						SELECT MAX(t.version) FROM trie_nodes t WHERE t.path = trie_nodes.path AND t.version <= ?
+					))`,
+				)
+				.get(minVersion, minVersion) as { n: number };
+			expect(left.n).toBe(0);
+			prunes++;
 		} else {
 			version = Math.max(minVersion, version - Math.floor(random() * 4));
 			for (const s of stores) s.truncate(version);
@@ -67,5 +81,6 @@ test("memory and sql stores match an unpruned reference", () => {
 			}
 		}
 	}
+	expect(prunes).toBeGreaterThan(20);
 	db.close();
 });
