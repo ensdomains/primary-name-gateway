@@ -42,7 +42,7 @@ import { FakeOPRollup } from "./fake-rollup.js";
 const CHAIN_ID = 10;
 const COIN_TYPE = (0x80000000 | CHAIN_ID) >>> 0;
 const GAME_TYPE = 9;
-const WINDOW = 10; // seconds of L2 time a game may lag behind the anchor
+const MAX_SEQUENCE_LAG = 10; // seconds of L2 time a game may lag behind the anchor
 const REGISTRAR: Address = "0x0000000000D8e504002cC26E3Ec46D81971C1664";
 
 const RESOLVER_ABI = parseAbi([
@@ -122,7 +122,7 @@ describe("offline e2e", () => {
 
 		const verifier = await foundry.deploy({
 			file: "OPFaultVerifier",
-			args: [asr.target, CHAIN_ID, WINDOW],
+			args: [asr.target, CHAIN_ID, MAX_SEQUENCE_LAG],
 		});
 		const r = await foundry.deploy({
 			file: "L2ReverseResolver",
@@ -208,7 +208,7 @@ describe("offline e2e", () => {
 		expect(gateway.stats).toMatchObject({ snapshots: 1, patches: 0 });
 	}, 60_000);
 
-	test("round 2: updates are picked up incrementally; previous commit still verifies within window", async () => {
+	test("round 2: updates are picked up incrementally; previous commit still verifies within maxSequenceLag", async () => {
 		rollup.setName(A.short, "raffy2.eth");
 		rollup.setName(A.cleared, "");
 		rollup.setName(A.long, "now-short.eth");
@@ -225,7 +225,7 @@ describe("offline e2e", () => {
 
 		expect(gateway.stats).toMatchObject({ snapshots: 1, patches: 1 }); // only the diff was downloaded
 
-		// the older held commit is 6s behind the anchor (< WINDOW): still accepted
+		// the older held commit is 6s behind the anchor (< MAX_SEQUENCE_LAG): still accepted
 		expect(await verifyName(A.short, games[0].gameIndex)).toBe("raffy.eth");
 	}, 60_000);
 
@@ -239,7 +239,7 @@ describe("offline e2e", () => {
 		expect(await resolveName(A.short)).toBe("raffy2.eth");
 	}, 60_000);
 
-	test("round 3: stale commits are rejected once the anchor moves past the window", async () => {
+	test("round 3: stale commits are rejected once the anchor moves past maxSequenceLag", async () => {
 		rollup.mine(10); // 20s of L2 time
 		const game = await propose();
 		await finalize(game);
@@ -249,7 +249,7 @@ describe("offline e2e", () => {
 		expect(gateway.commits.map((c) => c.id)).toEqual([second.gameIndex, game.gameIndex]);
 		expect(await resolveName(A.short)).toBe("evil.eth"); // the honest proposal of the same change
 
-		// the round 2 commit is now > WINDOW behind the anchor
+		// the round 2 commit is now > MAX_SEQUENCE_LAG behind the anchor
 		await expect(verifyName(A.short, second.gameIndex)).rejects.toThrow(/StaleGame/);
 	}, 60_000);
 

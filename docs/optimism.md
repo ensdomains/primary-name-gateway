@@ -27,7 +27,7 @@ The indexer's `OPCommitSource` ([op.ts](../packages/registrar-indexer/src/op.ts)
 `OPFaultVerifier.verifyStorageRoot(commitProof, registrar, accountProof)`:
 
 1. `AnchorStateRegistry.isGameClaimValid(game)`: registered, respected type, resolved for the proposer, past the airgap, not blacklisted or retired.
-2. Freshness: `game.l2SequenceNumber() + window >= anchor.l2SequenceNumber` (`window` is in timestamps for super root games and blocks for output root games).
+2. Freshness: `game.l2SequenceNumber() + maxSequenceLag >= anchor.l2SequenceNumber`. The unit is seconds for super root games (the sequence number is a timestamp) and blocks for output root games. The anchor only moves when it is updated, so it can trail the newest valid game. `maxSequenceLag` must exceed the time between games plus the gateway's margin; beyond that it bounds how stale a name can be.
 3. `rootClaim == keccak(superRoot)` and `superRoot` contains `(l2ChainId, outputRoot)`, or `rootClaim == outputRoot`.
 4. `outputRoot == keccak(abi.encode(outputRootProof))`.
 5. Account proof: `stateRoot` → registrar `storageRoot` (Merkle-Patricia).

@@ -116,11 +116,11 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 				? await deploy(artifact("OPFaultVerifier.sol", "OPFaultVerifier"), [
 						d.AnchorStateRegistry,
 						d.l2.id,
-						86400, // window: 1 day of L2 timestamps
+						86400, // maxSequenceLag: 1 day (super root games: seconds)
 					])
 				: await deploy(artifact("LineaVerifier.sol", "LineaVerifier"), [
 						d.LineaRollup,
-						100000, // window: L2 blocks (a few days)
+						100000, // maxBlockLag: L2 blocks (a few days)
 					]);
 		resolver = await deploy(artifact("L2ReverseResolver.sol", "L2ReverseResolver"), [
 			verifier,

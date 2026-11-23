@@ -23,12 +23,14 @@ contract LineaVerifier is IL2StorageVerifier {
     error AccountNotFound(address target);
 
     ILineaRollup public immutable rollup;
-    /// @notice Max lag of a commit behind the latest finalized L2 block, in L2 blocks.
-    uint256 public immutable window;
+    /// @notice How many L2 blocks a commit may lag behind the latest finalized block
+    ///         (`currentL2BlockNumber()`), i.e. how stale a proven value may be. Must exceed the blocks
+    ///         between finalizations plus the gateway's margin, or a gateway's fallback commit is rejected.
+    uint256 public immutable maxBlockLag;
 
-    constructor(ILineaRollup rollup_, uint256 window_) {
+    constructor(ILineaRollup rollup_, uint256 maxBlockLag_) {
         rollup = rollup_;
-        window = window_;
+        maxBlockLag = maxBlockLag_;
     }
 
     /// @inheritdoc IL2StorageVerifier
@@ -67,11 +69,11 @@ contract LineaVerifier is IL2StorageVerifier {
         }
     }
 
-    /// @notice The state root of a finalized L2 block that is within `window` of the latest.
+    /// @notice The state root of a finalized L2 block at most `maxBlockLag` blocks behind the latest.
     function verifyStateRoot(uint256 l2BlockNumber) public view returns (bytes32 stateRoot) {
         stateRoot = rollup.stateRootHashes(l2BlockNumber);
         if (stateRoot == 0) revert NotFinalized(l2BlockNumber);
         uint256 current = rollup.currentL2BlockNumber();
-        if (l2BlockNumber + window < current) revert StaleCommit(l2BlockNumber, current);
+        if (l2BlockNumber + maxBlockLag < current) revert StaleCommit(l2BlockNumber, current);
     }
 }
