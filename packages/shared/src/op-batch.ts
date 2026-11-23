@@ -7,10 +7,13 @@ import {
 	bytesToBigInt,
 	bytesToHex,
 	encodeAbiParameters,
+	formatTransaction,
 	type Hex,
 	hexToBytes,
 	keccak256,
 	numberToHex,
+	type RpcTransaction,
+	serializeTransaction,
 	toRlp,
 } from "viem";
 
@@ -186,6 +189,16 @@ export function fieldElementsFor(compressedBytes: number): number {
 }
 
 // A block's transactions trie (keys rlp(index), values the raw transactions) and the proof of one.
+// A transaction as signed (a transactions trie value), from the object eth_getBlockByNumber(n, true)
+// returns: one call per block instead of eth_getRawTransactionByHash per transaction (which Infura
+// doesn't have). Checked on mainnet blocks with legacy, 2930, 1559, blob and 7702 transactions; callers
+// compare the trie's root with the header's.
+export function rawTransaction(rpc: RpcTransaction): Hex {
+	const tx = formatTransaction(rpc);
+	const signature = tx.type === "legacy" ? { r: tx.r, s: tx.s, v: tx.v } : { r: tx.r, s: tx.s, yParity: tx.yParity };
+	return serializeTransaction({ ...tx, data: tx.input } as never, signature as never);
+}
+
 export function transactionsTrieProof(raw: Hex[], index: number): { root: Hex; proof: Hex[] } {
 	const items = raw.map((value, i) => ({ key: nibbles(hexToBytes(toRlp(i ? numberToHex(i) : "0x"))), value }));
 	const { enc, path } = buildTrie(items, 0, items[index].key);
