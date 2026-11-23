@@ -13,6 +13,9 @@ export interface CommitSource {
 // the commit's L2 block isn't final yet: try again later (not a failure)
 export class NotFinalizedError extends Error {}
 
+// fetching the L2's events failed: try again later (not the commit's fault, so not a failed attempt)
+export class SyncError extends Error {}
+
 export type IndexerConfig = {
 	deployment: Deployment;
 	l2: ChangeReader;
@@ -112,7 +115,11 @@ export class RegistrarIndexer {
 		let storageHash: Hex;
 		let changeSeq: number;
 		if (l2Block >= this.syncedBlock) {
-			await this.syncChanges(l2Block);
+			try {
+				await this.syncChanges(l2Block);
+			} catch (err) {
+				throw new SyncError(`syncing events to L2 block ${l2Block}: ${errorMessage(err)}`, { cause: err });
+			}
 			storageHash = this.trie.storageHash();
 			changeSeq = this.changeSeq;
 		} else {

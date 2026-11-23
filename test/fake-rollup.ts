@@ -46,6 +46,7 @@ const MESSAGE_PASSER_ROOT = keccak256(stringToHex("message passer"));
 export class FakeOPRollup implements OPL2Reader {
 	readonly blocks: FakeBlock[] = [];
 	finalized: number | undefined; // finalized head (default: the head)
+	failChanges = 0; // make the next getChanges() calls fail (a provider error)
 	private readonly storage = new EthStorage();
 	private queued: Omit<RegistrarChange, "block" | "logIndex">[] = [];
 
@@ -140,6 +141,10 @@ export class FakeOPRollup implements OPL2Reader {
 	}
 
 	async getChanges(fromBlock: number, toBlock: number) {
+		if (this.failChanges > 0) {
+			this.failChanges--;
+			throw new Error("query exceeds max results 20000");
+		}
 		toBlock = Math.min(toBlock, this.head.number);
 		const changes = this.blocks.slice(fromBlock, toBlock + 1).flatMap((b) => b.changes);
 		return { changes, toBlock };

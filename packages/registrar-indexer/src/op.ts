@@ -14,7 +14,7 @@ import {
 	type OutputRootProof,
 } from "@primary-name-gateway/shared";
 import { type Address, type BlockTag, type PublicClient, zeroHash } from "viem";
-import { type CommitSource, errorMessage, NotFinalizedError, type RegistrarIndexer } from "./indexer.js";
+import { type CommitSource, errorMessage, NotFinalizedError, type RegistrarIndexer, SyncError } from "./indexer.js";
 import type { OPL2Reader } from "./l2.js";
 
 export type OPSourceConfig = {
@@ -113,6 +113,10 @@ export class OPCommitSource implements CommitSource {
 			await this.indexGame(indexer, id, game, gameType, Number(timestamp));
 			return "done";
 		} catch (err) {
+			if (err instanceof SyncError) {
+				indexer.log(`game ${id}: waiting for event sync: ${err.message}`);
+				return "retry";
+			}
 			if (err instanceof NotFinalizedError) {
 				indexer.log(`game ${id}: deferred: ${err.message}`);
 				return "deferred";

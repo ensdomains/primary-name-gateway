@@ -89,8 +89,9 @@ export class RPCChangeReader implements ChangeReader {
 					this.logStep = Math.min(this.maxLogStep, this.logStep * 2);
 				return { changes, toBlock: end };
 			} catch (err) {
-				if (this.logStep <= 1000) throw err;
-				this.logStep >>= 1; // range too large (or too many results): shrink and retry
+				// range too large or too many results (providers cap results, eg. drpc at 20000): shrink and retry
+				if (this.logStep <= 1) throw err;
+				this.logStep >>= 1;
 				this.log?.(`getLogs failed, step = ${this.logStep}`);
 			}
 		}

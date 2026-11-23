@@ -327,4 +327,16 @@ describe("offline e2e", () => {
 		expect(db.getCommit(early.gameIndex)?.status).toBe("pending");
 		expect(db.getState("deferredGames")).toBe("[]");
 	}, 60_000);
+
+	test("an event sync failure is retried without counting against the game", async () => {
+		rollup.setName(A.short, "after-sync-error.eth");
+		rollup.mine();
+		const game = await propose();
+		rollup.failChanges = 1;
+		await indexer.tick(); // maxAttempts is 1: a counted failure would skip the game
+		expect(db.isSkipped(game.gameIndex)).toBeFalse();
+		expect(db.getCommit(game.gameIndex)).toBeUndefined();
+		await indexer.tick();
+		expect(db.getCommit(game.gameIndex)?.status).toBe("pending");
+	}, 60_000);
 });
