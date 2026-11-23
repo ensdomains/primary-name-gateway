@@ -56,7 +56,7 @@ The serving rules are the same on every chain: the gateway serves the newest val
 |---|---|
 | `MemoryNodeStore` | tests, ephemeral |
 | `SqlNodeStore` + `bunSqliteAdapter(db)` | the bun server (`GATEWAY_DB`, default `data/gateway-<chain>.sqlite`) |
-| `SqlNodeStore` + a Durable Object adapter | `{ exec: (q, ...p) => ctx.storage.sql.exec(q, ...p).toArray(), transaction: (fn) => ctx.storage.transactionSync(fn) }`, with `sync()` driven by an alarm and requests handled by `createFetchHandler(createEZCCIP(gateway))` from [`@adraffy/ezccip`](https://github.com/adraffy/ezccip.js). A snapshot load saves its cursor after each page, so it can continue across alarms. |
+| `SqlNodeStore` + a Durable Object adapter | a Cloudflare Durable Object per chain: `ctx.storage.sql` as the store, `sync()` on an alarm, requests through `createFetchHandler(createEZCCIP(gateway))`. See [docs/durable-objects.md](docs/durable-objects.md) for how it fits, a sketch, and the limits that matter. |
 
 ## Setup
 

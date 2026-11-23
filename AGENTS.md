@@ -1,12 +1,12 @@
 # AGENTS.md
 
-Notes for coding agents working in this repo. Read [README.md](README.md) first for the architecture, [docs/registrar.md](docs/registrar.md) for the registrar contract, [docs/optimism.md](docs/optimism.md) / [docs/base.md](docs/base.md) / [docs/linea.md](docs/linea.md) for the chain-specific parts, [docs/op-batch-inbox.md](docs/op-batch-inbox.md) for the batch inbox research, and [docs/rpc.md](docs/rpc.md) for RPC providers and environment variables.
+Notes for coding agents working in this repo. Read [README.md](README.md) first for the architecture, [docs/registrar.md](docs/registrar.md) for the registrar contract, [docs/optimism.md](docs/optimism.md) / [docs/base.md](docs/base.md) / [docs/linea.md](docs/linea.md) for the chain-specific parts, [docs/op-batch-inbox.md](docs/op-batch-inbox.md) for the batch inbox research, [docs/durable-objects.md](docs/durable-objects.md) for running the gateway in a Cloudflare Durable Object, and [docs/rpc.md](docs/rpc.md) for RPC providers and environment variables.
 
 ## Layout
 
 - `packages/shared`: chain config and deployments (`chains.ts`), registrar layouts and events (`registrar.ts`), OP game decoding and proof encoders (`op.ts`), Merkle-Patricia rows (`trie.ts`), Linea sparse Merkle rows and multiproofs (`linea.ts`), indexer ↔ gateway types, block headers (`header.ts`), and the batch inbox references: partial brotli (`brotli.ts`), blob data, frames, batch prefixes and commit proofs (`op-batch.ts`).
 - `packages/registrar-indexer`: `RegistrarIndexer` (event replay, commits, tries of retained commits) with a `CommitSource` per chain family (`op.ts`: dispute games, `linea.ts`: finalizations, `inbox.ts`: batcher blobs, with `kzg.ts`), trie backends (`tries.ts`: `MPTIndexerTrie` = merkle-builder `EthRowStorage` over `SqlRowLog` in `sql-row-log.ts`, `LineaIndexerTrie` + in-memory `RowLog`), SQLite (`bun:sqlite`), HTTP API.
-- `packages/registrar-gateway`: `NodeStore` (versioned trie rows with `get` and `floor`), `RegistrarGateway` (sync + `proveName`, per commit kind), ezccip endpoint. `src/index.ts` must stay runtime-agnostic (no bun/node imports) so it can run in a Cloudflare Durable Object; bun-only code lives in `src/main.ts` and `src/sqlite.ts`.
+- `packages/registrar-gateway`: `NodeStore` (versioned trie rows with `get` and `floor`), `RegistrarGateway` (sync + `proveName`, per commit kind), ezccip endpoint. `src/index.ts` must stay runtime-agnostic (no bun/node imports) so it can run in a Cloudflare Durable Object ([docs/durable-objects.md](docs/durable-objects.md)); bun-only code lives in `src/main.ts` and `src/sqlite.ts`.
 - `packages/contracts`: Foundry project. `L2ReverseResolver` (ENSIP-10 + CCIP-Read), `IL2StorageVerifier` implementations `op/OPFaultVerifier` and `linea/LineaVerifier` (+ `linea/LineaTrie` multiproofs). `op/OPBatchInboxVerifier` (+ `brotli/BrotliPrefix`, `op/OPBlob`, `op/OPBatchPrefix`, `op/OPBatchInbox`) is research for a verifier from batcher posts ([docs/op-batch-inbox.md](docs/op-batch-inbox.md)). `src/lib/` is vendored; see `src/lib/README.md` before changing it.
 - `test/`: bun tests, including the fake OP rollup and fake Linea used by the offline e2es. Mainnet fixtures live in `packages/contracts/test/fixtures/` (forge reads them too).
 - `scripts/`: `linea-fixture.ts` and `op-batch-fixture.ts` refresh the mainnet fixtures; `op-batch-cost.ts` sizes the brotli decoding.
@@ -38,6 +38,7 @@ Run `bun run check`, `bun run lint` and `bun run test` before finishing a change
 - `LineaTrie.find` requires canonical `hKey` limbs for exclusion: Poseidon2 reduces inputs mod p. Don't remove it (`test_exclusionAliasedKey`).
 - `BrotliPrefix.sol` is a port of `shared/src/brotli.ts`, and `op/OPBlob.sol`, `op/OPBatchPrefix.sol` and `op/OPBatchInbox.sol` port `shared/src/op-batch.ts`: change them together. `test/brotli-sol.test.ts` and `test/op-batch-sol.test.ts` compare them.
 - `NodeStore` methods are synchronous; `put` is atomic. Keep `MemoryNodeStore` and `SqlNodeStore` behaviour identical (`test/store.test.ts` compares them to a reference model).
+- `SqlNodeStore.prune` runs on every gateway sync, so it must stay incremental: after the first prune, `put` records written paths in `trie_dirty` and prune only looks at those. `test/store.test.ts` checks that nothing a full prune would drop is left behind.
 - `validAt` is wall-clock time; OP game age and lookback use L1 block time.
 
 ## Style
