@@ -13,7 +13,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
 import { coinTypeFromChainId, type OPDeployment, OWNABLE_LAYOUT } from "@primary-name-gateway/shared";
 import { Foundry } from "@adraffy/blocksmith";
-import { serve } from "@namestone/ezccip/serve";
+import { serveEZCCIP } from "@adraffy/ezccip/serve";
 import {
 	type Address,
 	concat,
@@ -68,7 +68,7 @@ describe("offline e2e (base: output root games, Ownable layout)", () => {
 	let indexerServer: ReturnType<typeof serveIndexer>;
 	let gateway: RegistrarGateway;
 	let gatewayDB: Database;
-	let ccip: Awaited<ReturnType<typeof serve>>;
+	let ccip: Awaited<ReturnType<typeof serveEZCCIP>>;
 	let resolver: Address;
 	const games: { address: Address; gameIndex: number }[] = [];
 
@@ -114,7 +114,7 @@ describe("offline e2e (base: output root games, Ownable layout)", () => {
 			marginSec: 0,
 			layout: OWNABLE_LAYOUT,
 		});
-		ccip = await serve(createEZCCIP(gateway), { protocol: "raw", log: false });
+		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });
 
 		const verifier = await foundry.deploy({ file: "OPFaultVerifier", args: [asr.target, CHAIN_ID, MAX_SEQUENCE_LAG, 0] });
 		const r = await foundry.deploy({

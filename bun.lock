@@ -14,8 +14,8 @@
       "name": "@primary-name-gateway/registrar-gateway",
       "version": "0.0.0",
       "dependencies": {
+        "@adraffy/ezccip": "^0.2.0",
         "@ensdomains/merkle-builder": "^0.2.0",
-        "@namestone/ezccip": "^0.1.2",
         "@primary-name-gateway/shared": "workspace:*",
         "viem": "^2.58.4",
       },
@@ -43,11 +43,11 @@
 
     "@adraffy/ens-normalize": ["@adraffy/ens-normalize@1.11.1", "", {}, "sha512-nhCBV3quEgesuf7c7KYfperqSS14T8bYuvJ8PcLJp6znkZpFc0AuW4qBtr8eKVyPPe/8RSr7sglCWPU5eaxwKQ=="],
 
+    "@adraffy/ezccip": ["@adraffy/ezccip@0.2.0", "", { "dependencies": { "abitype": "^1.2.3" }, "peerDependencies": { "viem": "^2.30.0" } }, "sha512-2TCBEZBeRhNfWuDsJ1WuWZzdEC6TeZyVUX0+5uc1vIa5VcJzLpZQtRUKWF0hgdPD5Zla05FSlodW7t0wvjlJrA=="],
+
     "@adraffy/keccak": ["@adraffy/keccak@1.3.4", "", {}, "sha512-9VS7zhxIpbTZESFfD6J5WDfXWmVX1AaVGt+GyUulaI8fBv2UrUY11DJ8ONkpD7N+uPI+ZOBUNmR/OydnfnTPsw=="],
 
     "@ensdomains/merkle-builder": ["@ensdomains/merkle-builder@0.2.0", "", { "dependencies": { "@adraffy/keccak": "^1.3.4" }, "peerDependencies": { "viem": "^2.30.0" } }, "sha512-x5BU0BlP/kAtNUDMjNwNuL/4Ig7CjqbL95B5VPz0UrtPzXYEv/EngNTWMK6Vk9ZuT5xyIvecdiV0Ux1jeet37g=="],
-
-    "@namestone/ezccip": ["@namestone/ezccip@0.1.2", "", { "dependencies": { "ethers": "^6.15.0" } }, "sha512-yVzNmGmrdk4YG1SBvz/rhmiG4ijsUmJox2ihP1wF2COw6c2rY7l29x40plxn8bC5OgvVKnE8o9KKF65Q/Qt4JA=="],
 
     "@noble/ciphers": ["@noble/ciphers@1.3.0", "", {}, "sha512-2I0gnIVPtfnMw9ee9h1dJG7tp81+8Ob3OJb3Mv37rx5L40/b0i7djjCVvGOVqc9AEIQyvyu1i6ypKdFw8R8gQw=="],
 

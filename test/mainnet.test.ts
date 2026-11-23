@@ -17,7 +17,7 @@ import {
 	type IndexerStatus,
 	rpcURL,
 } from "@primary-name-gateway/shared";
-import { serve } from "@namestone/ezccip/serve";
+import { serveEZCCIP } from "@adraffy/ezccip/serve";
 import {
 	type Abi,
 	type Address,
@@ -72,7 +72,7 @@ const COIN_TYPE = deployment ? coinTypeFromChainId(deployment.l2.id) : 0n;
 describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 	const d = deployment!;
 	let anvil: Bun.Subprocess;
-	let ccip: Awaited<ReturnType<typeof serve>>;
+	let ccip: Awaited<ReturnType<typeof serveEZCCIP>>;
 	let gateway: RegistrarGateway;
 	let l1: PublicClient;
 	let wallet: WalletClient;
@@ -87,7 +87,7 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 			layout: d.layout,
 		});
 		await gateway.sync();
-		ccip = await serve(createEZCCIP(gateway), { protocol: "raw", log: false });
+		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });
 
 		anvil = Bun.spawn(["anvil", "--fork-url", rpcURL(d.l1), "--port", String(ANVIL_PORT), "--silent"], {
 			stdout: "ignore",

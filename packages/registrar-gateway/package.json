@@ -5,9 +5,9 @@
 	"type": "module",
 	"main": "src/index.ts",
 	"dependencies": {
-		"@primary-name-gateway/shared": "workspace:*",
+		"@adraffy/ezccip": "^0.2.0",
 		"@ensdomains/merkle-builder": "^0.2.0",
-		"@namestone/ezccip": "^0.1.2",
+		"@primary-name-gateway/shared": "workspace:*",
 		"viem": "^2.58.4"
 	}
 }

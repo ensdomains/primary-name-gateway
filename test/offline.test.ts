@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
 import { coinTypeFromChainId, type OPDeployment, PLAIN_LAYOUT } from "@primary-name-gateway/shared";
 import { Foundry } from "@adraffy/blocksmith";
-import { serve } from "@namestone/ezccip/serve";
+import { serveEZCCIP } from "@adraffy/ezccip/serve";
 import {
 	type Address,
 	createPublicClient,
@@ -77,7 +77,7 @@ describe("offline e2e", () => {
 	let gateway: RegistrarGateway;
 	let gatewayDB: Database;
 	let gatewayConfig: GatewayConfig;
-	let ccip: Awaited<ReturnType<typeof serve>>;
+	let ccip: Awaited<ReturnType<typeof serveEZCCIP>>;
 	let resolver: Address;
 	const games: { address: Address; gameIndex: number }[] = [];
 
@@ -127,7 +127,7 @@ describe("offline e2e", () => {
 		gatewayDB = new Database(":memory:");
 		gatewayConfig = { indexerURL: indexerServer.url.origin, keep: 2, marginSec: 0 };
 		gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(gatewayDB)), gatewayConfig);
-		ccip = await serve(createEZCCIP(gateway), { protocol: "raw", log: false });
+		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });
 
 		const verifier = await foundry.deploy({
 			file: "OPFaultVerifier",

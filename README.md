@@ -35,7 +35,7 @@ The serving rules are the same on every chain: the gateway serves the newest val
 |---|---|
 | [`shared`](packages/shared) | Chain config and deployments, registrar layouts and events, row formats and provers for each trie kind ([trie.ts](packages/shared/src/trie.ts): Merkle-Patricia, [linea.ts](packages/shared/src/linea.ts): Linea), and the indexer ↔ gateway JSON types. |
 | [`registrar-indexer`](packages/registrar-indexer) | `RegistrarIndexer` (event replay, commits, tries of retained commits), a `CommitSource` per chain family, SQLite, HTTP API. |
-| [`registrar-gateway`](packages/registrar-gateway) | `NodeStore`, `RegistrarGateway` (sync + `proveName`), the ezccip endpoint. The library (`src/index.ts`) is runtime-agnostic; `src/main.ts` is the bun server. |
+| [`registrar-gateway`](packages/registrar-gateway) | `NodeStore`, `RegistrarGateway` (sync + `proveName`), the [ezccip](https://github.com/adraffy/ezccip.js) endpoint. The library (`src/index.ts`) is runtime-agnostic; `src/main.ts` is the bun server. |
 | [`contracts`](packages/contracts) | `L2ReverseResolver`, `IL2StorageVerifier`, and one verifier per chain family (`OPFaultVerifier`, `LineaVerifier`), deployed per chain and shareable by other resolvers. |
 
 ## Gateway storage (`NodeStore`)
@@ -46,7 +46,7 @@ The serving rules are the same on every chain: the gateway serves the newest val
 |---|---|
 | `MemoryNodeStore` | tests, ephemeral |
 | `SqlNodeStore` + `bunSqliteAdapter(db)` | the bun server (`GATEWAY_DB`, default `data/gateway-<chain>.sqlite`) |
-| `SqlNodeStore` + a Durable Object adapter | `{ exec: (q, ...p) => ctx.storage.sql.exec(q, ...p).toArray(), transaction: (fn) => ctx.storage.transactionSync(fn) }`, with `sync()` driven by an alarm and requests handled with `ezccip.handleRead(sender, data, { protocol: "raw" })`. A snapshot load saves its cursor after each page, so it can continue across alarms. |
+| `SqlNodeStore` + a Durable Object adapter | `{ exec: (q, ...p) => ctx.storage.sql.exec(q, ...p).toArray(), transaction: (fn) => ctx.storage.transactionSync(fn) }`, with `sync()` driven by an alarm and requests handled by `createFetchHandler(createEZCCIP(gateway))` from [`@adraffy/ezccip`](https://github.com/adraffy/ezccip.js). A snapshot load saves its cursor after each page, so it can continue across alarms. |
 
 ## Setup
 

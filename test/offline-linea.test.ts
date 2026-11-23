@@ -17,7 +17,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { IndexerDB, LineaCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
 import { coinTypeFromChainId, type LineaDeployment, type RegistrarLayout } from "@primary-name-gateway/shared";
 import { Foundry } from "@adraffy/blocksmith";
-import { serve } from "@namestone/ezccip/serve";
+import { serveEZCCIP } from "@adraffy/ezccip/serve";
 import {
 	type Address,
 	createPublicClient,
@@ -77,7 +77,7 @@ describe("offline e2e (linea)", () => {
 	let gateway: RegistrarGateway;
 	let gatewayDB: Database;
 	let gatewayConfig: GatewayConfig;
-	let ccip: Awaited<ReturnType<typeof serve>>;
+	let ccip: Awaited<ReturnType<typeof serveEZCCIP>>;
 	let resolver: Address;
 	const finalized: number[] = [];
 
@@ -118,7 +118,7 @@ describe("offline e2e (linea)", () => {
 		gatewayDB = new Database(":memory:");
 		gatewayConfig = { indexerURL: indexerServer.url.origin, keep: 2, marginSec: 0, layout: LAYOUT };
 		gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(gatewayDB)), gatewayConfig);
-		ccip = await serve(createEZCCIP(gateway), { protocol: "raw", log: false });
+		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });
 
 		const verifier = await foundry.deploy({ file: "LineaVerifier", args: [lineaRollup.target, MAX_BLOCK_LAG] });
 		const r = await foundry.deploy({

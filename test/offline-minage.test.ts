@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
 import { coinTypeFromChainId, type OPDeployment, PLAIN_LAYOUT } from "@primary-name-gateway/shared";
 import { Foundry } from "@adraffy/blocksmith";
-import { serve } from "@namestone/ezccip/serve";
+import { serveEZCCIP } from "@adraffy/ezccip/serve";
 import { type Address, concat, createPublicClient, http, numberToHex, parseAbi, type PublicClient, zeroAddress } from "viem";
 import { createEZCCIP, RegistrarGateway, SqlNodeStore } from "../packages/registrar-gateway/src/index.js";
 import { bunSqliteAdapter } from "../packages/registrar-gateway/src/sqlite.js";
@@ -38,7 +38,7 @@ describe.each([
 	let indexerServer: ReturnType<typeof serveIndexer>;
 	let gateway: RegistrarGateway;
 	let gatewayDB: Database;
-	let ccip: Awaited<ReturnType<typeof serve>>;
+	let ccip: Awaited<ReturnType<typeof serveEZCCIP>>;
 	let early: Address; // resolver with minAgeSec = MIN_AGE
 	let finalOnly: Address; // resolver with minAgeSec = 0
 
@@ -82,7 +82,7 @@ describe.each([
 			keep: 2,
 			marginSec: 0,
 		});
-		ccip = await serve(createEZCCIP(gateway), { protocol: "raw", log: false });
+		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });
 		const resolver = async (minAge: number) => {
 			const v = await foundry.deploy({ file: "OPFaultVerifier", args: [asr.target, chainId, 1_000_000, minAge] });
 			const r = await foundry.deploy({
