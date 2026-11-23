@@ -33,10 +33,13 @@ Games are created about every 20 minutes.
 
 Base's registrar is `L2ReverseRegistrarWithMigration` (Ownable), so its storage includes the owner at slot 1 and the indexer replays `OwnershipTransferred` as well as `NameForAddrChanged`. The migration's `batchSetName` writes names in bulk, and it also emits `NameForAddrChanged`, so the storage is still a fold over events.
 
+Base is big enough that two storage keys share a 9-nibble prefix, so some leaves sit deep enough to encode in under 32 bytes. Those leaves are embedded in their parent instead of referenced by hash. merkle-builder 0.2.0 encoded those references wrong, so every Base game failed the storage hash check (replaying 3.77M events gave `0xeb7cab…` where Base had `0xf48b24cf…` at L2 block 58,458,360). 0.3.0 encodes them correctly; `test/inline-node.test.ts` checks embedded nodes end to end.
+
 ## Operating
 
 - The indexer's defaults follow `gameFinalitySec` (5 days): it looks back 6 days on first start and starts polling validity for games older than 4 days.
 - The 6-day lookback needs archive `eth_getProof` on Base (Alchemy serves it; drpc doesn't that far back).
+- The trie (about 5M rows, 730 MB) lives in the indexer's database. On first start the indexer builds it from the change log: replaying 3.77M events took 3.5 minutes with a 783 MB peak RSS on an M-series Mac (2026-11-22, defaults). The in-memory trie it replaced needed about 2.5 GB. Larger `INDEXER_FLUSH_CHANGES` builds faster but uses more memory (100,000: 2.7 minutes, 2 GB; 10,000: 6.4 minutes, 340 MB).
 - Base's L2 finalized head trails its tip by about 3 hours. Games for blocks above it are deferred until it catches up ([optimism.md#reorgs](optimism.md#reorgs)).
 - `mainnet.base.org` rate limits `eth_getLogs`, so there is no public RPC fallback: set `DRPC_KEY` or `INFURA_KEY` for logs.
 - The registrar's history has very dense stretches (the migration's `batchSetName`: over 12,000 events in ~120 blocks), past what providers return per request (drpc: 20,000 results). The reader shrinks its range down to a single block when needed, and grows it back once events are sparse ([rpc.md](rpc.md)).
@@ -45,3 +48,11 @@ Base's registrar is `L2ReverseRegistrarWithMigration` (Ownable), so its storage 
 bun run indexer:base   # :8102
 bun run gateway:base   # :8202
 ```
+
+## Checked on mainnet
+
+2026-11-23:
+
+- **Commits.** The indexer replayed 3,775,126 registrar events. Every game's storage hash matched Base's `eth_getProof`, including 16 games for blocks older than the synced head, which were rebuilt from the newest trie in under a second each. It ended with 84 valid commits and 359 pending, and none skipped.
+- **Names.** `test:mainnet` resolved names through `L2ReverseResolver` on an L1 fork at game 26698 (L2 block 58,956,360, 3,711,020 addresses). It verified 959 names against the registrar, 250 of them long (32 bytes or more).
+- **Memory.** The indexer ran at 63 MB RSS in steady state.

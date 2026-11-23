@@ -17,7 +17,6 @@
 // https://github.com/Consensys/shomei/blob/main/trie/src/main/java/net/consensys/shomei/trie/ZKTrie.java
 
 import {
-	EMPTY_BYTES,
 	LINEA_TREE_DEPTH,
 	lineaHashKey,
 	lineaHashValue,
@@ -25,10 +24,13 @@ import {
 	poseidon2Pad,
 	SlotStorage,
 	toWord,
+	trie,
 	trimLeadingZeros,
 } from "@ensdomains/merkle-builder";
 import { bytesToHex, concat, encodeAbiParameters, type Hex, hexToBytes, numberToBytes } from "viem";
 import type { TrieRow } from "./trie.js";
+
+const { EMPTY_BYTES } = trie;
 
 export const LINEA_DEPTH = LINEA_TREE_DEPTH;
 export const LINEA_ROOT_PATH = "r";

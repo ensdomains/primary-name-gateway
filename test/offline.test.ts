@@ -13,8 +13,9 @@ import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Foundry } from "@adraffy/blocksmith";
 import { serveEZCCIP } from "@adraffy/ezccip/serve";
+import { trieRows } from "@ensdomains/merkle-builder";
 import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
-import { coinTypeFromChainId, type OPDeployment, PLAIN_LAYOUT } from "@primary-name-gateway/shared";
+import { coinTypeFromChainId, type OPDeployment, PLAIN_LAYOUT, type TrieRow } from "@primary-name-gateway/shared";
 import {
 	type Address,
 	createPublicClient,
@@ -307,6 +308,54 @@ describe("offline e2e", () => {
 		expect(await verify(A.short)).toBe("after-restart.eth");
 		expect(await verify(A.never)).toBe(`${"n".repeat(70)}.eth`);
 		expect(await verify(A.emoji)).toBe(round1[A.emoji]);
+	}, 60_000);
+
+	test("a restarted indexer resumes from its stored trie without replaying", async () => {
+		expect(Number(db.getState("trieSeq"))).toBe(indexer.changeSeq); // flushed at the last capture
+		const restarted = new RegistrarIndexer(indexer.config); // same database, new process
+		expect(restarted.changeSeq).toBe(indexer.changeSeq);
+		const ids = db.getCommits(undefined, 100).map((c) => c.id);
+		expect(ids.length).toBeGreaterThan(1);
+		for (const id of ids) {
+			expect(restarted.trie.has(id)).toBe(indexer.trie.has(id));
+			expect(restarted.snapshot(id, undefined, 1e6)).toEqual(indexer.snapshot(id, undefined, 1e6));
+		}
+		expect(restarted.patch(ids[1], ids[0])).toEqual(indexer.patch(ids[1], ids[0]));
+	}, 30_000);
+
+	test("a game for an older L2 block than synced is rebuilt from the newest trie", async () => {
+		rollup.setName(A.short, "older.eth");
+		rollup.mine();
+		const older = rollup.head;
+		rollup.setName(A.short, "newer.eth");
+		rollup.setName(A.never, "");
+		rollup.setName(A.emoji, `${"e".repeat(40)}.eth`);
+		rollup.mine();
+		const newer = await propose();
+		await finalize(newer);
+		await indexer.tick(); // synced past `older`, which was never a commit
+		const game = await propose({ block: older });
+		await finalize(game);
+		await indexer.tick();
+		expect(db.getCommit(game.gameIndex)?.status).toBe("valid");
+		const rows = (id: number) => indexer.snapshot(id, undefined, 1e6)?.rows;
+		expect(rows(game.gameIndex)).toEqual([...trieRows(older.storage.node)]);
+		expect(rows(newer.gameIndex)).toEqual([...trieRows(rollup.head.storage.node)]);
+		// patches both ways around the rebuilt version
+		const table = (r: TrieRow[] = []) => new Map(r.map((x) => [x.path, x.node]));
+		const apply = (t: Map<string, Hex | null>, patch: TrieRow[] = []) => {
+			for (const r of patch) r.node === null ? t.delete(r.path) : t.set(r.path, r.node);
+			return t;
+		};
+		const [first] = db.getCommits("valid", 100).slice(-1);
+		expect(apply(table(rows(first.id)), indexer.patch(first.id, game.gameIndex))).toEqual(table(rows(game.gameIndex)));
+		expect(apply(table(rows(game.gameIndex)), indexer.patch(game.gameIndex, newer.gameIndex))).toEqual(
+			table(rows(newer.gameIndex)),
+		);
+		// and it survives a restart
+		expect(new RegistrarIndexer(indexer.config).snapshot(game.gameIndex, undefined, 1e6)?.rows).toEqual(
+			rows(game.gameIndex),
+		);
 	}, 60_000);
 
 	test("a game for an L2 block that isn't finalized yet is deferred, without blocking later games", async () => {

@@ -24,7 +24,8 @@ export {
 export { LINEA_ROLLUP_ABI, LineaCommitSource, type LineaSourceConfig } from "./linea.js";
 export { OPCommitSource, type OPSourceConfig } from "./op.js";
 export { serveIndexer } from "./server.js";
-export { createIndexerTrie, type IndexerTrie, RowLog } from "./tries.js";
+export { KeptVersions, SqlRowLog } from "./sql-row-log.js";
+export { createIndexerTrie, type IndexerTrie, MPTIndexerTrie, RowLog } from "./tries.js";
 
 type Log = (...args: unknown[]) => void;
 

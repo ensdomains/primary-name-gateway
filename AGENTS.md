@@ -5,7 +5,7 @@ Notes for coding agents working in this repo. Read [README.md](README.md) first 
 ## Layout
 
 - `packages/shared`: chain config and deployments (`chains.ts`), registrar layouts and events (`registrar.ts`), OP game decoding and proof encoders (`op.ts`), Merkle-Patricia rows (`trie.ts`), Linea sparse Merkle rows and multiproofs (`linea.ts`), indexer ↔ gateway types.
-- `packages/registrar-indexer`: `RegistrarIndexer` (event replay, commits, tries of retained commits) with a `CommitSource` per chain family (`op.ts`: dispute games, `linea.ts`: finalizations), trie backends (`tries.ts`: `MPTIndexerTrie`, `LineaIndexerTrie` + `RowLog`), SQLite (`bun:sqlite`), HTTP API.
+- `packages/registrar-indexer`: `RegistrarIndexer` (event replay, commits, tries of retained commits) with a `CommitSource` per chain family (`op.ts`: dispute games, `linea.ts`: finalizations), trie backends (`tries.ts`: `MPTIndexerTrie` = merkle-builder `EthRowStorage` over `SqlRowLog` in `sql-row-log.ts`, `LineaIndexerTrie` + in-memory `RowLog`), SQLite (`bun:sqlite`), HTTP API.
 - `packages/registrar-gateway`: `NodeStore` (versioned trie rows with `get` and `floor`), `RegistrarGateway` (sync + `proveName`, per commit kind), ezccip endpoint. `src/index.ts` must stay runtime-agnostic (no bun/node imports) so it can run in a Cloudflare Durable Object; bun-only code lives in `src/main.ts` and `src/sqlite.ts`.
 - `packages/contracts`: Foundry project. `L2ReverseResolver` (ENSIP-10 + CCIP-Read), `IL2StorageVerifier` implementations `op/OPFaultVerifier` and `linea/LineaVerifier` (+ `linea/LineaTrie` multiproofs). `src/lib/` is vendored; see `src/lib/README.md` before changing it.
 - `test/`: bun tests, including the fake OP rollup and fake Linea used by the offline e2es.
@@ -27,7 +27,8 @@ Run `bun run check`, `bun run lint` and `bun run test` before finishing a change
 ## Invariants
 
 - The gateway never builds a trie or hashes nodes: it only hashes slot keys (keccak / Poseidon2) and the root row of each commit it loads. Anything else that needs hashing belongs in the indexer.
-- OP rows are `(absolute nibble path, RLP node)`; Linea rows are described at the top of `shared/src/linea.ts`. `null` marks a removed row. `diffRows` relies on merkle-builder's copy-on-write tries (unchanged subtree = same object), so don't clone OP tries between commits.
+- OP rows are `(absolute nibble path, RLP node)`; Linea rows are described at the top of `shared/src/linea.ts`. `null` marks a removed row. OP rows are merkle-builder's row format (`EthRowStorage`, `getProofFromRows`): every node has a row, inlined ones included.
+- The OP trie is persistent (`trie_head` / `trie_history`, `state.trieSeq` = last change applied). Versions are change seqs; only the versions of retained commits stay readable, so don't read a version that isn't kept.
 - The indexer refuses a commit whose replayed storage root differs from the L2's account proof (`addCommit`). Keep that check.
 - The registrar's storage is a fold over its events; the layout (`namesSlot`, `ownerSlot`) is a parameter everywhere, never hard-coded.
 - Linea: apply each L2 block's changes together (`LineaStorageTrie.commit()`), in `hkey` order, like Shomei. Leaf indices depend on it.

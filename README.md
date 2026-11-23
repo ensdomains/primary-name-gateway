@@ -12,11 +12,17 @@ Each L2 has a reverse registrar holding its [ENSIP-19](https://docs.ens.domains/
 
 [docs/registrar.md](docs/registrar.md) covers the registrar contract, its storage layouts, and why its storage can be rebuilt from events.
 
-```
- L1 ─ commits ───────────┐                                ┌─ resolve(name, name()) ── L2ReverseResolver ── IL2StorageVerifier ── L1
-                         ▼                                │         │ OffchainLookup                   ▲ verify proofs
- L2 ─ registrar events ─► registrar-indexer ── snapshot / patch ──► registrar-gateway (ezccip) ◄──────────────┘
-     + account proof        (sqlite + tries per commit)  trie rows   (NodeStore: versioned trie rows, latest 2 valid commits)
+```mermaid
+flowchart LR
+    L1c["L1: commits"] --> indexer
+    L2["L2: registrar events<br/>+ account proof"] --> indexer
+    indexer["registrar-indexer<br/>(SQLite: events, commits, trie rows)"] -- "snapshot / patch<br/>(trie rows)" --> gateway
+    gateway["registrar-gateway (ezccip)<br/>NodeStore: versioned trie rows,<br/>latest 2 valid commits"]
+    client["resolve(name, name())"] --> resolver["L2ReverseResolver (L1)"]
+    resolver -- "OffchainLookup: proveName(addr)" --> gateway
+    gateway -- "NameProof" --> resolver
+    resolver -- "verify proofs" --> verifier["IL2StorageVerifier (L1)"]
+    verifier -.->|"commit is valid"| L1c
 ```
 
 ## How it works

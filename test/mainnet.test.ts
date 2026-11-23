@@ -133,10 +133,18 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 
 		// replay the change log up to the commit the gateway serves
 		const { commit } = gateway.proveName("0x0000000000000000000000000000000000000000");
-		const changes = (await fetch(`${INDEXER_URL}/changes?until=${commit.changeSeq}`).then((r) => r.json())) as Change[];
-		names = new Map(changes.filter((c) => c.kind === "name").map((c) => [c.addr.toLowerCase() as Address, c.name]));
+		names = new Map();
+		for (let after = 0; after < commit.changeSeq; ) {
+			const page = (await fetch(`${INDEXER_URL}/changes?after=${after}&until=${commit.changeSeq}`).then((r) =>
+				r.json(),
+			)) as Change[];
+			if (!page.length) break;
+			for (const c of page) if (c.kind === "name") names.set(c.addr.toLowerCase() as Address, c.name);
+			after = page[page.length - 1].seq;
+		}
+		for (const [addr, name] of names) if (name === "0x") names.delete(addr); // cleared
 		console.log(`commit: ${commit.kind} ${commit.id}, L2 block ${commit.l2Block}, ${names.size} addresses`);
-	}, 60_000);
+	}, 600_000); // a large registrar (Base) pages through millions of changes
 
 	afterAll(async () => {
 		await ccip?.shutdown();

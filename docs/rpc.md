@@ -95,6 +95,8 @@ Indexer (`bun run indexer`, `indexer:base`, `indexer:linea`):
 | `INDEXER_MIN_FINAL_AGE_SEC` | game finality − 1 day | OP / Base: start checking validity at this age |
 | `INDEXER_MIN_AGE_SEC` | `0` | OP / Base: accept unchallenged games this old; must equal the verifier's `minAgeSec` ([optimism.md](optimism.md#early-acceptance-minagesec)) |
 | `INDEXER_LOOKBACK_L1_BLOCKS` | `3600` | Linea: L1 blocks to scan on first start |
+| `INDEXER_FLUSH_CHANGES` | `50000` | OP / Base: changes applied in memory before the trie rows are written ([optimism.md](optimism.md#trie-rows)) |
+| `INDEXER_CACHE_MB` | `64` | SQLite page cache |
 
 Gateway (`bun run gateway`, `gateway:base`, `gateway:linea`):
 

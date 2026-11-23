@@ -35,24 +35,30 @@ export class RegistrarIndexer {
 
 	constructor(readonly config: IndexerConfig) {
 		const { db, deployment } = config;
-		this.trie = createIndexerTrie(deployment.kind, deployment.layout);
+		this.trie = createIndexerTrie(deployment.kind, deployment.layout, db);
 		this.syncedBlock = Number(db.getState("syncedBlock") ?? deployment.registrarCreatedAtBlock - 1);
-		// replay the change log, capturing the trie at each retained commit
+		// replay the changes the trie doesn't have yet, capturing retained commits on the way
+		const retained = this.retainedCommits();
+		this.trie.retain(new Set(retained.map((c) => c.id)));
 		const wanted = new Map<number, Commit[]>(); // changeSeq => commits
-		for (const c of this.retainedCommits()) {
+		for (const c of retained) {
+			if (this.trie.has(c.id) || c.changeSeq < this.trie.seq) continue;
 			const v = wanted.get(c.changeSeq);
 			if (v) v.push(c);
 			else wanted.set(c.changeSeq, [c]);
 		}
+		this.changeSeq = this.trie.seq;
 		const capture = () => {
-			for (const c of wanted.get(this.changeSeq) ?? []) this.trie.capture(c.id, c.l2Block);
+			for (const c of wanted.get(this.changeSeq) ?? []) this.trie.capture(c);
 		};
 		capture();
-		for (const c of db.iterateChanges()) {
+		for (const c of db.iterateChanges(this.changeSeq)) {
 			this.trie.apply(c);
 			this.changeSeq = c.seq;
 			capture();
 		}
+		const missing = retained.filter((c) => !this.trie.has(c.id)).length;
+		if (missing) this.log(`${missing} retained commits are older than the stored trie (not served)`);
 	}
 
 	get db(): IndexerDB {
@@ -123,16 +129,16 @@ export class RegistrarIndexer {
 			storageHash = this.trie.storageHash();
 			changeSeq = this.changeSeq;
 		} else {
-			// an older block than we've synced (out-of-order commit): rebuild from the log
+			// an older block than we've synced (out-of-order commit): the trie rebuilds that version
 			changeSeq = this.db.changeSeqAtBlock(l2Block);
-			storageHash = this.trie.captureFrom(id, l2Block, this.db.iterateChanges(0, changeSeq));
+			storageHash = this.trie.storageHashAt({ id, l2Block, changeSeq });
 		}
 		if (storageHash !== l2StorageHash) {
 			throw new Error(
 				`storage hash mismatch at L2 block ${l2Block}: events=${storageHash} l2=${l2StorageHash} (missed a storage write?)`,
 			);
 		}
-		if (!this.trie.has(id)) this.trie.capture(id, l2Block);
+		if (!this.trie.has(id)) this.trie.capture({ id, l2Block, changeSeq });
 		this.db.putCommit({ ...commit, changeSeq } as Commit);
 		this.log(`commit ${id}: L2 block ${l2Block}, ${changeSeq} changes, storageHash ${storageHash} (${commit.status})`);
 	}
