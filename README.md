@@ -55,7 +55,7 @@ bun i
 cd packages/contracts && forge build
 ```
 
-`.env` (see [`.env.sample`](.env.sample)): `DRPC_KEY` and/or `ALCHEMY_KEY`, or `RPC_URL_<chainId>` / `PROOF_RPC_URL_<chainId>`.
+`.env` (see [`.env.sample`](.env.sample)): any of `DRPC_KEY`, `ALCHEMY_KEY`, `INFURA_KEY`, or `RPC_URL_<chainId>` / `PROOF_RPC_URL_<chainId>`. Logs and general calls prefer drpc, then Infura; proofs prefer Alchemy (archive state). Infura serves `getLogs` over at most 10,000 blocks and proofs only near the head, so it can't do the OP / Base lookback alone.
 
 ## Run
 

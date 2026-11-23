@@ -12,7 +12,7 @@
 		"indexer": "bun packages/registrar-indexer/src/index.ts",
 		"gateway": "bun packages/registrar-gateway/src/main.ts",
 		"forge": "cd packages/contracts && forge build",
-		"test": "bun run forge && bun test test/trie.test.ts test/store.test.ts test/linea.test.ts test/offline.test.ts test/offline-base.test.ts test/offline-minage.test.ts test/offline-linea.test.ts && cd packages/contracts && forge test",
+		"test": "bun run forge && bun test test/trie.test.ts test/store.test.ts test/l2.test.ts test/linea.test.ts test/offline.test.ts test/offline-base.test.ts test/offline-minage.test.ts test/offline-linea.test.ts && cd packages/contracts && forge test",
 		"test:mainnet": "bun run forge && bun test test/mainnet.test.ts",
 		"indexer:linea": "INDEXER_CHAIN=linea INDEXER_PORT=8101 bun packages/registrar-indexer/src/index.ts",
 		"gateway:linea": "GATEWAY_CHAIN=linea INDEXER_URL=http://localhost:8101 GATEWAY_PORT=8201 bun packages/registrar-gateway/src/main.ts",

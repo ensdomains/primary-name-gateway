@@ -48,7 +48,7 @@ const OWNERSHIP_TRANSFERRED = getAbiItem({ abi: REGISTRAR_ABI, name: "OwnershipT
 
 export class RPCChangeReader implements ChangeReader {
 	private logStep: number;
-	private readonly maxLogStep: number;
+	private maxLogStep: number;
 	constructor(
 		readonly deployment: Deployment,
 		readonly logsClient: PublicClient, // eth_getLogs (large ranges)
@@ -91,7 +91,10 @@ export class RPCChangeReader implements ChangeReader {
 			} catch (err) {
 				// range too large or too many results (providers cap results, eg. drpc at 20000): shrink and retry
 				if (this.logStep <= 1) throw err;
-				this.logStep >>= 1;
+				// a fixed range limit (eg. infura: "exceeds limit of 10000"): never grow past it
+				const limit = /limit of (\d+)/.exec(String(err instanceof Error ? err.message : err))?.[1];
+				if (limit) this.maxLogStep = Math.max(1, Math.min(this.maxLogStep, Number(limit)));
+				this.logStep = Math.min(this.logStep >> 1, this.maxLogStep);
 				this.log?.(`getLogs failed, step = ${this.logStep}`);
 			}
 		}

@@ -6,6 +6,7 @@ export type ChainInfo = {
 	name: string;
 	drpcSlug: string;
 	alchemySlug: string;
+	infuraSlug?: string;
 	publicRPC?: string;
 	logStep?: number; // eth_getLogs block range
 };
@@ -15,6 +16,7 @@ export const MAINNET: ChainInfo = {
 	name: "mainnet",
 	drpcSlug: "ethereum",
 	alchemySlug: "eth-mainnet",
+	infuraSlug: "mainnet",
 	publicRPC: "https://ethereum-rpc.publicnode.com",
 };
 
@@ -23,6 +25,7 @@ export const OPTIMISM: ChainInfo = {
 	name: "optimism",
 	drpcSlug: "optimism",
 	alchemySlug: "opt-mainnet",
+	infuraSlug: "optimism-mainnet",
 	publicRPC: "https://mainnet.optimism.io",
 	logStep: 500000, // shrinks automatically if the provider refuses
 };
@@ -32,6 +35,7 @@ export const BASE: ChainInfo = {
 	name: "base",
 	drpcSlug: "base",
 	alchemySlug: "base-mainnet",
+	infuraSlug: "base-mainnet",
 	// no publicRPC: mainnet.base.org rate limits eth_getLogs
 	logStep: 500000,
 };
@@ -41,6 +45,7 @@ export const LINEA: ChainInfo = {
 	name: "linea",
 	drpcSlug: "linea",
 	alchemySlug: "linea-mainnet",
+	infuraSlug: "linea-mainnet",
 	publicRPC: "https://rpc.linea.build",
 	logStep: 500000,
 };
@@ -124,21 +129,36 @@ export function coinTypeFromChainId(chainId: number): bigint {
 }
 
 // "default": general calls
-// "logs": eth_getLogs over large ranges (drpc allows them); retried once, the caller shrinks the range
-// "proof": eth_getProof at historical blocks (needs archive state: alchemy)
+// "logs": eth_getLogs over large ranges; retried once, the caller shrinks the range
+// "proof": eth_getProof / linea_getProof at historical blocks (OP Stack lookback needs archive state)
 export type RPCPurpose = "default" | "logs" | "proof";
 
-// PROOF_RPC_URL_<chainId> (proof only) > RPC_URL_<chainId> > DRPC_KEY / ALCHEMY_KEY > public
+// Provider limits seen with our keys (2026-11-22):
+//   drpc     wide getLogs (capped at 20000 results), proofs only ~100k blocks back
+//   alchemy  archive proofs; free plan: getLogs over 10 blocks
+//   infura   getLogs over 10000 blocks, proofs within 10000 blocks of the head, linea_getProof
+const ORDER: Record<RPCPurpose, ("drpc" | "alchemy" | "infura")[]> = {
+	default: ["drpc", "infura", "alchemy"],
+	logs: ["drpc", "infura", "alchemy"],
+	proof: ["alchemy", "drpc", "infura"],
+};
+
+// PROOF_RPC_URL_<chainId> (proof only) > RPC_URL_<chainId> > DRPC_KEY / ALCHEMY_KEY / INFURA_KEY (by purpose) > public
 export function rpcURL(chain: ChainInfo, purpose: RPCPurpose = "default"): string {
 	const env = process.env;
 	const explicit = (purpose === "proof" && env[`PROOF_RPC_URL_${chain.id}`]) || env[`RPC_URL_${chain.id}`];
 	if (explicit) return explicit;
-	const drpc = env.DRPC_KEY && `https://lb.drpc.live/${chain.drpcSlug}/${env.DRPC_KEY}`;
-	const alchemy = env.ALCHEMY_KEY && `https://${chain.alchemySlug}.g.alchemy.com/v2/${env.ALCHEMY_KEY}`;
-	const url = purpose === "proof" ? alchemy || drpc : drpc || alchemy;
-	if (url) return url;
+	const urls = {
+		drpc: env.DRPC_KEY && `https://lb.drpc.live/${chain.drpcSlug}/${env.DRPC_KEY}`,
+		alchemy: env.ALCHEMY_KEY && `https://${chain.alchemySlug}.g.alchemy.com/v2/${env.ALCHEMY_KEY}`,
+		infura: env.INFURA_KEY && chain.infuraSlug && `https://${chain.infuraSlug}.infura.io/v3/${env.INFURA_KEY}`,
+	};
+	for (const provider of ORDER[purpose]) {
+		const url = urls[provider];
+		if (url) return url;
+	}
 	if (chain.publicRPC) return chain.publicRPC;
-	throw new Error(`no rpc for ${chain.name}: set RPC_URL_${chain.id}, DRPC_KEY, or ALCHEMY_KEY`);
+	throw new Error(`no rpc for ${chain.name}: set RPC_URL_${chain.id}, DRPC_KEY, ALCHEMY_KEY or INFURA_KEY`);
 }
 
 export function createClient(chain: ChainInfo, purpose?: RPCPurpose): PublicClient {
@@ -151,5 +171,5 @@ export function createClient(chain: ChainInfo, purpose?: RPCPurpose): PublicClie
 
 // remove secrets from urls before logging
 export function redactURL(url: string): string {
-	return url.replace(/(\/v2\/|drpc\.live\/[^/]+\/)[^/]+$/, "$1***");
+	return url.replace(/(\/v2\/|\/v3\/|drpc\.live\/[^/]+\/)[^/]+$/, "$1***");
 }
