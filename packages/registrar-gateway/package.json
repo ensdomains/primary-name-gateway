@@ -1,0 +1,13 @@
+{
+	"name": "@primary-name-gateway/registrar-gateway",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"main": "src/index.ts",
+	"dependencies": {
+		"@primary-name-gateway/shared": "workspace:*",
+		"@ensdomains/merkle-builder": "^0.2.0",
+		"@namestone/ezccip": "^0.1.2",
+		"viem": "^2.58.4"
+	}
+}

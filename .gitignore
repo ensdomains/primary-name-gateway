@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.sqlite
+*.sqlite-*
+.env
+packages/contracts/out/
+packages/contracts/cache/
+packages/contracts/broadcast/
+data/

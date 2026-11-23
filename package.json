@@ -1,0 +1,23 @@
+{
+	"name": "primary-name-gateway",
+	"private": true,
+	"type": "module",
+	"workspaces": [
+		"packages/shared",
+		"packages/registrar-indexer",
+		"packages/registrar-gateway"
+	],
+	"scripts": {
+		"check": "tsc",
+		"indexer": "bun packages/registrar-indexer/src/index.ts",
+		"gateway": "bun packages/registrar-gateway/src/main.ts",
+		"forge": "cd packages/contracts && forge build",
+		"test": "bun run forge && bun test test/trie.test.ts test/store.test.ts test/offline.test.ts && cd packages/contracts && forge test",
+		"test:mainnet": "bun run forge && bun test test/mainnet.test.ts"
+	},
+	"devDependencies": {
+		"@adraffy/blocksmith": "^0.1.60",
+		"@types/bun": "^1.4.5",
+		"typescript": "^7.0.2"
+	}
+}

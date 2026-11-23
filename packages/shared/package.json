@@ -1,0 +1,11 @@
+{
+	"name": "@primary-name-gateway/shared",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"main": "src/index.ts",
+	"dependencies": {
+		"@ensdomains/merkle-builder": "^0.2.0",
+		"viem": "^2.58.4"
+	}
+}
