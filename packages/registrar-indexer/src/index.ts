@@ -9,10 +9,11 @@ import { OPCommitSource } from "./op.js";
 import { serveIndexer } from "./server.js";
 
 export { IndexerDB } from "./db.js";
-export { type CommitSource, type IndexerConfig, RegistrarIndexer } from "./indexer.js";
+export { type CommitSource, type IndexerConfig, NotFinalizedError, RegistrarIndexer } from "./indexer.js";
 export {
 	type BlockWitness,
 	type ChangeReader,
+	type L2BlockRef,
 	type LineaL2Reader,
 	type OPL2Reader,
 	type RegistrarChange,

@@ -37,7 +37,7 @@ import {
 	SqlNodeStore,
 } from "../packages/registrar-gateway/src/index.js";
 import { bunSqliteAdapter } from "../packages/registrar-gateway/src/sqlite.js";
-import { FakeOPRollup } from "./fake-rollup.js";
+import { type FakeBlock, FakeOPRollup } from "./fake-rollup.js";
 
 const CHAIN_ID = 10;
 const COIN_TYPE = coinTypeFromChainId(CHAIN_ID);
@@ -111,7 +111,15 @@ describe("offline e2e", () => {
 			deployment,
 			l2: rollup,
 			db,
-			source: new OPCommitSource({ deployment, l1, l2: rollup, lookbackSec: 86400, minFinalAgeSec: 0, maxAttempts: 1 }),
+			source: new OPCommitSource({
+				deployment,
+				l1,
+				l2: rollup,
+				lookbackSec: 86400,
+				minFinalAgeSec: 0,
+				maxAttempts: 1,
+				l1BlockTag: "latest", // anvil
+			}),
 		});
 		indexerServer = serveIndexer(indexer, db, 0);
 
@@ -139,9 +147,8 @@ describe("offline e2e", () => {
 		await foundry?.shutdown();
 	});
 
-	// propose the rollup head on L1 (optionally lying about the output root)
-	async function propose({ outputRoot }: { outputRoot?: Hex } = {}) {
-		const block = rollup.head;
+	// propose a block (default: the rollup head) on L1, optionally lying about the output root
+	async function propose({ outputRoot, block = rollup.head }: { outputRoot?: Hex; block?: FakeBlock } = {}) {
 		const superRoot = rollup.superRoot(block, outputRoot);
 		const gameIndex = Number(await factory.gameCount());
 		await foundry.confirm(factory.create(GAME_TYPE, keccak256(superRoot), superRoot, block.timestamp));
@@ -299,5 +306,24 @@ describe("offline e2e", () => {
 		expect(await verify(A.short)).toBe("after-restart.eth");
 		expect(await verify(A.never)).toBe(`${"n".repeat(70)}.eth`);
 		expect(await verify(A.emoji)).toBe(round1[A.emoji]);
+	}, 60_000);
+
+	test("a game for an L2 block that isn't finalized yet is deferred, without blocking later games", async () => {
+		rollup.setName(A.short, "unfinalized.eth");
+		rollup.mine();
+		const finalized = rollup.blocks[rollup.head.number - 1];
+		rollup.finalized = finalized.number;
+		const early = await propose(); // the (unfinalized) head
+		const late = await propose({ block: finalized }); // created later, for a finalized block
+		await indexer.tick();
+		expect(db.getCommit(early.gameIndex)).toBeUndefined();
+		expect(db.isSkipped(early.gameIndex)).toBeFalse();
+		expect(db.getCommit(late.gameIndex)?.l2Block).toBe(finalized.number);
+		expect(indexer.syncedBlock).toBeLessThanOrEqual(finalized.number); // nothing unfinal in the change log
+
+		rollup.finalized = undefined;
+		await indexer.tick();
+		expect(db.getCommit(early.gameIndex)?.status).toBe("pending");
+		expect(db.getState("deferredGames")).toBe("[]");
 	}, 60_000);
 });

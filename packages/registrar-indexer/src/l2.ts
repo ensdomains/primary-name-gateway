@@ -11,10 +11,14 @@ import { type Address, decodeAbiParameters, getAbiItem, type Hex, numberToHex, t
 // a registrar event before it gets a sequence number
 export type RegistrarChange = Omit<Change, "seq">;
 
+export type L2BlockRef = { number: number; timestamp: number };
+
 // What the indexer needs from any L2: the registrar's events (see docs/registrar.md).
 export interface ChangeReader {
 	// events in [fromBlock, toBlock'] for some toBlock' <= toBlock, in chain order
 	getChanges(fromBlock: number, toBlock: number): Promise<{ changes: RegistrarChange[]; toBlock: number }>;
+	// the L2's finalized head, if events above it could still reorg (the indexer never syncs past it)
+	finalizedBlock?(): Promise<L2BlockRef>;
 }
 
 // what an OP output root commits to (and the registrar account under it)
@@ -27,6 +31,7 @@ export type BlockWitness = {
 };
 
 export interface OPL2Reader extends ChangeReader {
+	finalizedBlock(): Promise<L2BlockRef>;
 	// L2 block with this timestamp (super roots are keyed by timestamp)
 	blockAtTimestamp(timestamp: bigint): Promise<number>;
 	// must be called while the L2 still has state for `block` (soon after the commit is proposed)
@@ -96,6 +101,11 @@ export class RPCOPReader extends RPCChangeReader implements OPL2Reader {
 		log?: (...args: unknown[]) => void,
 	) {
 		super(deployment, logsClient, log);
+	}
+
+	async finalizedBlock(): Promise<L2BlockRef> {
+		const b = await this.logsClient.getBlock({ blockTag: "finalized" });
+		return { number: Number(b.number), timestamp: Number(b.timestamp) };
 	}
 
 	async blockAtTimestamp(timestamp: bigint): Promise<number> {

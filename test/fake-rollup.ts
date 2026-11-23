@@ -8,7 +8,7 @@
 // It implements OPL2Reader so a real RegistrarIndexer can index it.
 
 import { hashOutputRootProof, type OutputRootProof, setPrimaryName } from "@primary-name-gateway/shared";
-import type { BlockWitness, OPL2Reader, RegistrarChange } from "@primary-name-gateway/registrar-indexer";
+import type { BlockWitness, L2BlockRef, OPL2Reader, RegistrarChange } from "@primary-name-gateway/registrar-indexer";
 import { EthStorage } from "@ensdomains/merkle-builder";
 import {
 	type Address,
@@ -39,6 +39,7 @@ const MESSAGE_PASSER_ROOT = keccak256(stringToHex("message passer"));
 
 export class FakeOPRollup implements OPL2Reader {
 	readonly blocks: FakeBlock[] = [];
+	finalized: number | undefined; // finalized head (default: the head)
 	private readonly storage = new EthStorage();
 	private queued: { addr: Address; name: Hex }[] = [];
 
@@ -112,6 +113,11 @@ export class FakeOPRollup implements OPL2Reader {
 	}
 
 	// -- OPL2Reader
+
+	async finalizedBlock(): Promise<L2BlockRef> {
+		const b = this.blocks[this.finalized ?? this.head.number];
+		return { number: b.number, timestamp: b.timestamp };
+	}
 
 	async blockAtTimestamp(timestamp: bigint): Promise<number> {
 		const offset = Number(timestamp) - this.genesisTimestamp;

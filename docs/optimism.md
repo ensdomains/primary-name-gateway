@@ -22,6 +22,16 @@ The indexer's `OPCommitSource` ([op.ts](../packages/registrar-indexer/src/op.ts)
 4. Replays the registrar's events up to that block and checks the storage root against the account proof.
 5. Stores the commit as `pending`. Once it's old enough (`INDEXER_MIN_FINAL_AGE_SEC`), it polls `isGameClaimValid` and marks it `valid`. Recent valid games are re-checked, and a game that is blacklisted, retired, or lost (`CHALLENGER_WINS`) becomes `invalid`. The gateway then rewinds past it.
 
+## Reorgs
+
+The indexer's change log is append-only, so it must only ever contain final state:
+
+- Games are discovered, and become `valid`, from **finalized L1** state (`l1BlockTag`, default `finalized`). Invalidation (blacklisting, a lost game) is read from the latest state so it takes effect quickly.
+- Anyone can create a game for any L2 block, including one that isn't final. A game whose L2 block (or super root timestamp) is above the **finalized L2** head is deferred, not failed: it's kept in a list and retried every tick, and later games are indexed meanwhile.
+- `RegistrarIndexer.addCommit` refuses to sync events past the reader's finalized head, as a backstop.
+
+Waiting for finality costs nothing here: a game takes about 7 days to become valid anyway.
+
 ## Verification (on L1)
 
 `OPFaultVerifier.verifyStorageRoot(commitProof, registrar, accountProof)`:

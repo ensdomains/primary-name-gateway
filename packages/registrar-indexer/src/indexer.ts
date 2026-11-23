@@ -10,6 +10,9 @@ export interface CommitSource {
 	tick(indexer: RegistrarIndexer): Promise<void>;
 }
 
+// the commit's L2 block isn't final yet: try again later (not a failure)
+export class NotFinalizedError extends Error {}
+
 export type IndexerConfig = {
 	deployment: Deployment;
 	l2: ChangeReader;
@@ -99,8 +102,13 @@ export class RegistrarIndexer {
 
 	// Store a commit after checking the replayed storage hash against the L2's.
 	// That check catches any storage write the events don't cover.
+	// The change log is append-only, so it only ever contains final L2 blocks.
 	async addCommit(commit: Omit<Commit, "changeSeq">, l2StorageHash: Hex) {
 		const { l2Block, id } = commit;
+		const finalized = await this.config.l2.finalizedBlock?.();
+		if (finalized && l2Block > finalized.number) {
+			throw new NotFinalizedError(`L2 block ${l2Block} is above the finalized head ${finalized.number}`);
+		}
 		let storageHash: Hex;
 		let changeSeq: number;
 		if (l2Block >= this.syncedBlock) {

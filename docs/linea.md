@@ -33,6 +33,8 @@ The indexer's `LineaCommitSource` ([linea.ts](../packages/registrar-indexer/src/
 3. Replays the registrar's events up to `endBlock` and checks the storage root against the account.
 4. Stores the commit as `valid` immediately: there is no challenge period.
 
+Nothing it reads can reorg: finalizations are read up to L1's `finalized` block, and the L2 blocks they finalize are ZK proven, so events are only synced up to final L2 blocks.
+
 ## Verification (on L1)
 
 `LineaVerifier`:
