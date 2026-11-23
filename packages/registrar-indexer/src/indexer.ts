@@ -41,8 +41,8 @@ export class RegistrarIndexer {
 		const { db, deployment } = config;
 		this.trie = createIndexerTrie(deployment.kind, deployment.layout, db);
 		this.syncedBlock = Number(db.getState("syncedBlock") ?? deployment.registrarCreatedAtBlock - 1);
-		const dropped = db.useCommitKind(deployment.kind);
-		if (dropped) this.log(`dropped ${dropped} commits from another commit source (${deployment.kind} now)`);
+		const aside = db.useCommitKind(deployment.kind);
+		if (aside) this.log(`${aside} commits of another commit source set aside (${deployment.kind} now)`);
 		// replay the changes the trie doesn't have yet, capturing retained commits on the way
 		const retained = this.retainedCommits();
 		this.trie.retain(new Set(retained.map((c) => c.id)));
@@ -109,6 +109,12 @@ export class RegistrarIndexer {
 		};
 	}
 
+	// valid commits whose tries were dropped (another source used the database, or minAgeSec changed)
+	private keepTries() {
+		if (this.config.deployment.kind === "linea") return; // Linea's trie takes commits only in order
+		for (const c of this.db.getCommits("valid", this.config.retainValid ?? 24)) this.keepTrie(c);
+	}
+
 	// Keep the trie of a stored commit whose trie was dropped (it stopped being retained, and is valid
 	// again): rebuilt from the newest trie and checked against the commit's storage hash.
 	keepTrie(c: Commit) {
@@ -122,8 +128,10 @@ export class RegistrarIndexer {
 	}
 
 	async tick() {
+		this.keepTries(); // first: it needs no RPC
 		await this.catchUp();
 		await this.config.source.tick(this);
+		this.keepTries();
 		this.trie.retain(new Set(this.retainedCommits().map((c) => c.id)));
 	}
 

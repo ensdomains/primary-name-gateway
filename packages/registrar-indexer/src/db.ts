@@ -121,27 +121,33 @@ export class IndexerDB {
 			.map(toChange);
 	}
 
-	// An L2's commit sources (op and inbox) replay the same events into the same trie, so they can
-	// share a database, one at a time. Commits, skipped batches and where a source resumes are its own:
-	// switching sources drops them. Returns the number of commits dropped.
+	// An L2's commit sources (op and inbox) replay the same events into the same trie, so they share a
+	// database, one at a time. Each source's commits stay in it, and only the active source's are read:
+	// switching back resumes where that source left off. (Their ids don't collide: game indexes against
+	// L1 block * 10000 + ...; skipped ids likewise, and resume state has its own keys.)
+	private kind: CommitKind | undefined;
+
+	// Returns the number of other sources' commits set aside.
 	useCommitKind(kind: CommitKind): number {
-		const prev = this.getState("commitKind");
-		if (prev === kind) return 0;
-		return this.db.transaction(() => {
-			const { changes } = this.db.run("DELETE FROM commits WHERE json_extract(json, '$.kind') != ?", [kind]);
-			// a database from before kinds were recorded is a switch only if it held another kind's commits
-			if (prev !== undefined || changes) {
-				this.db.run("DELETE FROM skipped");
-				this.db.run("DELETE FROM state WHERE key IN ('nextGameIndex', 'deferredGames', 'nextL1Block')");
-			}
-			this.setState("commitKind", kind);
-			return changes;
-		})();
+		this.kind = kind;
+		this.setState("commitKind", kind);
+		return (
+			this.db
+				.query<{ n: number }, [string]>("SELECT COUNT(*) AS n FROM commits WHERE json_extract(json, '$.kind') != ?")
+				.get(kind)?.n ?? 0
+		);
 	}
 
-	// -- commits
+	// -- commits (of the active source)
+
+	private get kindFilter(): [string, string[]] {
+		return this.kind ? ["json_extract(json, '$.kind') = ?", [this.kind]] : ["1", []];
+	}
 
 	putCommit(c: Commit) {
+		const prev = this.db.query<{ json: string }, [number]>("SELECT json FROM commits WHERE id = ?").get(c.id);
+		const kind = prev && JSON.parse(prev.json).kind;
+		if (kind && kind !== c.kind) throw new Error(`commit ${c.id} belongs to the ${kind} commit source`);
 		this.db.run("REPLACE INTO commits (id, status, l2_block, json) VALUES (?, ?, ?, ?)", [
 			c.id,
 			c.status,
@@ -151,26 +157,27 @@ export class IndexerDB {
 	}
 	getCommit(id: number): Commit | undefined {
 		const row = this.db.query<{ json: string }, [number]>("SELECT json FROM commits WHERE id = ?").get(id);
-		return row ? JSON.parse(row.json) : undefined;
+		const c: Commit | undefined = row && JSON.parse(row.json);
+		return c && (!this.kind || c.kind === this.kind) ? c : undefined;
 	}
 	// newest first (by L2 block, then id)
 	getCommits(status: CommitStatus | undefined, limit: number): Commit[] {
-		const rows = status
-			? this.db
-					.query<{ json: string }, [string, number]>(
-						"SELECT json FROM commits WHERE status = ? ORDER BY l2_block DESC, id DESC LIMIT ?",
-					)
-					.all(status, limit)
-			: this.db
-					.query<{ json: string }, [number]>("SELECT json FROM commits ORDER BY l2_block DESC, id DESC LIMIT ?")
-					.all(limit);
+		const [kind, args] = this.kindFilter;
+		const rows = this.db
+			.query<{ json: string }, (string | number)[]>(
+				`SELECT json FROM commits WHERE ${kind} ${status ? "AND status = ?" : ""} ORDER BY l2_block DESC, id DESC LIMIT ?`,
+			)
+			.all(...args, ...(status ? [status] : []), limit);
 		return rows.map((x) => JSON.parse(x.json));
 	}
 	countCommits(): Record<CommitStatus, number> {
+		const [kind, args] = this.kindFilter;
 		const counts = { pending: 0, valid: 0, invalid: 0 };
 		for (const { status, n } of this.db
-			.query<{ status: CommitStatus; n: number }, []>("SELECT status, COUNT(*) AS n FROM commits GROUP BY status")
-			.all()) {
+			.query<{ status: CommitStatus; n: number }, string[]>(
+				`SELECT status, COUNT(*) AS n FROM commits WHERE ${kind} GROUP BY status`,
+			)
+			.all(...args)) {
 			counts[status] = n;
 		}
 		return counts;
