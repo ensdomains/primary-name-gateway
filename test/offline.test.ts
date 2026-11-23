@@ -11,10 +11,11 @@
 
 import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
-import { coinTypeFromChainId, type OPDeployment, PLAIN_LAYOUT } from "@primary-name-gateway/shared";
 import { Foundry } from "@adraffy/blocksmith";
-import { serve } from "@namestone/ezccip/serve";
+import { serveEZCCIP } from "@adraffy/ezccip/serve";
+import { trieRows } from "@ensdomains/merkle-builder";
+import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
+import { coinTypeFromChainId, type OPDeployment, PLAIN_LAYOUT, type TrieRow } from "@primary-name-gateway/shared";
 import {
 	type Address,
 	createPublicClient,
@@ -24,8 +25,8 @@ import {
 	http,
 	keccak256,
 	namehash,
-	parseAbi,
 	type PublicClient,
+	parseAbi,
 	stringToHex,
 	toHex,
 } from "viem";
@@ -77,7 +78,7 @@ describe("offline e2e", () => {
 	let gateway: RegistrarGateway;
 	let gatewayDB: Database;
 	let gatewayConfig: GatewayConfig;
-	let ccip: Awaited<ReturnType<typeof serve>>;
+	let ccip: Awaited<ReturnType<typeof serveEZCCIP>>;
 	let resolver: Address;
 	const games: { address: Address; gameIndex: number }[] = [];
 
@@ -105,6 +106,7 @@ describe("offline e2e", () => {
 			L2ReverseRegistrar: REGISTRAR,
 			registrarCreatedAtBlock: 0,
 			l2BlockTime: rollup.blockTime,
+			gameFinalitySec: 0,
 		};
 		db = new IndexerDB(":memory:");
 		indexer = new RegistrarIndexer({
@@ -126,11 +128,11 @@ describe("offline e2e", () => {
 		gatewayDB = new Database(":memory:");
 		gatewayConfig = { indexerURL: indexerServer.url.origin, keep: 2, marginSec: 0 };
 		gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(gatewayDB)), gatewayConfig);
-		ccip = await serve(createEZCCIP(gateway), { protocol: "raw", log: false });
+		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });
 
 		const verifier = await foundry.deploy({
 			file: "OPFaultVerifier",
-			args: [asr.target, CHAIN_ID, MAX_SEQUENCE_LAG],
+			args: [asr.target, CHAIN_ID, MAX_SEQUENCE_LAG, 0],
 		});
 		const r = await foundry.deploy({
 			file: "L2ReverseResolver",
@@ -308,6 +310,54 @@ describe("offline e2e", () => {
 		expect(await verify(A.emoji)).toBe(round1[A.emoji]);
 	}, 60_000);
 
+	test("a restarted indexer resumes from its stored trie without replaying", async () => {
+		expect(Number(db.getState("trieSeq"))).toBe(indexer.changeSeq); // flushed at the last capture
+		const restarted = new RegistrarIndexer(indexer.config); // same database, new process
+		expect(restarted.changeSeq).toBe(indexer.changeSeq);
+		const ids = db.getCommits(undefined, 100).map((c) => c.id);
+		expect(ids.length).toBeGreaterThan(1);
+		for (const id of ids) {
+			expect(restarted.trie.has(id)).toBe(indexer.trie.has(id));
+			expect(restarted.snapshot(id, undefined, 1e6)).toEqual(indexer.snapshot(id, undefined, 1e6));
+		}
+		expect(restarted.patch(ids[1], ids[0])).toEqual(indexer.patch(ids[1], ids[0]));
+	}, 30_000);
+
+	test("a game for an older L2 block than synced is rebuilt from the newest trie", async () => {
+		rollup.setName(A.short, "older.eth");
+		rollup.mine();
+		const older = rollup.head;
+		rollup.setName(A.short, "newer.eth");
+		rollup.setName(A.never, "");
+		rollup.setName(A.emoji, `${"e".repeat(40)}.eth`);
+		rollup.mine();
+		const newer = await propose();
+		await finalize(newer);
+		await indexer.tick(); // synced past `older`, which was never a commit
+		const game = await propose({ block: older });
+		await finalize(game);
+		await indexer.tick();
+		expect(db.getCommit(game.gameIndex)?.status).toBe("valid");
+		const rows = (id: number) => indexer.snapshot(id, undefined, 1e6)?.rows;
+		expect(rows(game.gameIndex)).toEqual([...trieRows(older.storage.node)]);
+		expect(rows(newer.gameIndex)).toEqual([...trieRows(rollup.head.storage.node)]);
+		// patches both ways around the rebuilt version
+		const table = (r: TrieRow[] = []) => new Map(r.map((x) => [x.path, x.node]));
+		const apply = (t: Map<string, Hex | null>, patch: TrieRow[] = []) => {
+			for (const r of patch) r.node === null ? t.delete(r.path) : t.set(r.path, r.node);
+			return t;
+		};
+		const [first] = db.getCommits("valid", 100).slice(-1);
+		expect(apply(table(rows(first.id)), indexer.patch(first.id, game.gameIndex))).toEqual(table(rows(game.gameIndex)));
+		expect(apply(table(rows(game.gameIndex)), indexer.patch(game.gameIndex, newer.gameIndex))).toEqual(
+			table(rows(newer.gameIndex)),
+		);
+		// and it survives a restart
+		expect(new RegistrarIndexer(indexer.config).snapshot(game.gameIndex, undefined, 1e6)?.rows).toEqual(
+			rows(game.gameIndex),
+		);
+	}, 60_000);
+
 	test("a game for an L2 block that isn't finalized yet is deferred, without blocking later games", async () => {
 		rollup.setName(A.short, "unfinalized.eth");
 		rollup.mine();
@@ -325,5 +375,17 @@ describe("offline e2e", () => {
 		await indexer.tick();
 		expect(db.getCommit(early.gameIndex)?.status).toBe("pending");
 		expect(db.getState("deferredGames")).toBe("[]");
+	}, 60_000);
+
+	test("an event sync failure is retried without counting against the game", async () => {
+		rollup.setName(A.short, "after-sync-error.eth");
+		rollup.mine();
+		const game = await propose();
+		rollup.failChanges = 1;
+		await indexer.tick(); // maxAttempts is 1: a counted failure would skip the game
+		expect(db.isSkipped(game.gameIndex)).toBeFalse();
+		expect(db.getCommit(game.gameIndex)).toBeUndefined();
+		await indexer.tick();
+		expect(db.getCommit(game.gameIndex)?.status).toBe("pending");
 	}, 60_000);
 });

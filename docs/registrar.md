@@ -36,7 +36,7 @@ Deployed (checked 2026-11-22 with `eth_getStorageAt` and `owner()`):
 | Linea | 59144 | `0x8000e708` | plain |
 | Arbitrum One | 42161 | `0x8000a4b1` | plain |
 | Scroll | 534352 | `0x80082750` | plain |
-| Base | 8453 | `0x80002105` | Ownable: slot 1 = `owner()` = `0xf9Bb…63e9` |
+| Base | 8453 | `0x80002105` | Ownable: slot 1 = `owner()` = `0xf9Bb…63e9` ([base.md](base.md)) |
 
 In code the layout is a parameter, not an assumption: `RegistrarLayout { namesSlot, ownerSlot? }`
 (`packages/shared/src/registrar.ts`, per deployment in `chains.ts`), `L2ReverseResolver(namesSlot)` and

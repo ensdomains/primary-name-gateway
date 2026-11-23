@@ -2,7 +2,7 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { serve } from "@namestone/ezccip/serve";
+import { serveEZCCIP } from "@adraffy/ezccip/serve";
 import { DEPLOYMENTS } from "@primary-name-gateway/shared";
 import { createEZCCIP, RegistrarGateway, SqlNodeStore } from "./index.js";
 import { bunSqliteAdapter } from "./sqlite.js";
@@ -34,9 +34,5 @@ const poll = async () => {
 	setTimeout(poll, pollMs);
 };
 await poll();
-const ccip = await serve(createEZCCIP(gateway), {
-	port: Number(env.GATEWAY_PORT ?? 8200),
-	protocol: "raw",
-	log,
-});
+const ccip = await serveEZCCIP(createEZCCIP(gateway), { port: Number(env.GATEWAY_PORT ?? 8200) });
 log(`ccip-read endpoint: ${ccip.endpoint}`);

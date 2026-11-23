@@ -7,9 +7,15 @@
 //
 // It implements OPL2Reader so a real RegistrarIndexer can index it.
 
-import { hashOutputRootProof, type OutputRootProof, setPrimaryName } from "@primary-name-gateway/shared";
-import type { BlockWitness, L2BlockRef, OPL2Reader, RegistrarChange } from "@primary-name-gateway/registrar-indexer";
 import { EthStorage } from "@ensdomains/merkle-builder";
+import type { BlockWitness, L2BlockRef, OPL2Reader, RegistrarChange } from "@primary-name-gateway/registrar-indexer";
+import {
+	applyChange,
+	hashOutputRootProof,
+	type OutputRootProof,
+	PLAIN_LAYOUT,
+	type RegistrarLayout,
+} from "@primary-name-gateway/shared";
 import {
 	type Address,
 	concat,
@@ -40,8 +46,9 @@ const MESSAGE_PASSER_ROOT = keccak256(stringToHex("message passer"));
 export class FakeOPRollup implements OPL2Reader {
 	readonly blocks: FakeBlock[] = [];
 	finalized: number | undefined; // finalized head (default: the head)
+	failChanges = 0; // make the next getChanges() calls fail (a provider error)
 	private readonly storage = new EthStorage();
-	private queued: { addr: Address; name: Hex }[] = [];
+	private queued: Omit<RegistrarChange, "block" | "logIndex">[] = [];
 
 	constructor(
 		readonly chainId: number,
@@ -49,6 +56,7 @@ export class FakeOPRollup implements OPL2Reader {
 		readonly genesisTimestamp: number,
 		readonly blockTime = 2,
 		readonly otherChains: { chainId: number; outputRoot: Hex }[] = [], // extra super root entries
+		readonly layout: RegistrarLayout = PLAIN_LAYOUT,
 	) {
 		this.mine(); // genesis
 	}
@@ -59,15 +67,21 @@ export class FakeOPRollup implements OPL2Reader {
 
 	// queue a NameForAddrChanged for the next block
 	setName(addr: Address, name: string | Uint8Array) {
-		this.queued.push({ addr, name: toHex(typeof name === "string" ? stringToBytes(name) : name) });
+		this.queued.push({ kind: "name", addr, name: toHex(typeof name === "string" ? stringToBytes(name) : name) });
+	}
+
+	// queue an OwnershipTransferred for the next block (Ownable layout)
+	transferOwnership(owner: Address) {
+		if (this.layout.ownerSlot === undefined) throw new Error("registrar is not Ownable");
+		this.queued.push({ kind: "owner", addr: owner, name: "0x" });
 	}
 
 	mine(count = 1): FakeBlock {
 		for (let i = 0; i < count; i++) {
 			const number = this.blocks.length;
-			const changes = this.queued.map((c, logIndex): RegistrarChange => ({ block: number, logIndex, kind: "name", ...c }));
+			const changes = this.queued.map((c, logIndex): RegistrarChange => ({ block: number, logIndex, ...c }));
 			this.queued = [];
-			for (const c of changes) setPrimaryName(this.storage, c.addr, Buffer.from(c.name.slice(2), "hex"));
+			for (const c of changes) applyChange(this.storage, this.layout, c);
 			const storageHash = this.storage.storageHash;
 
 			// state trie with one account: the root is a leaf node
@@ -127,6 +141,10 @@ export class FakeOPRollup implements OPL2Reader {
 	}
 
 	async getChanges(fromBlock: number, toBlock: number) {
+		if (this.failChanges > 0) {
+			this.failChanges--;
+			throw new Error("query exceeds max results 20000");
+		}
 		toBlock = Math.min(toBlock, this.head.number);
 		const changes = this.blocks.slice(fromBlock, toBlock + 1).flatMap((b) => b.changes);
 		return { changes, toBlock };

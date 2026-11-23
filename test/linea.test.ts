@@ -3,17 +3,17 @@
 import { describe, expect, test } from "bun:test";
 import { LineaStorage } from "@ensdomains/merkle-builder";
 import {
+	type LineaPathProof,
+	LineaStorageTrie,
 	lineaAccountKey,
 	lineaAccountValueHash,
-	type LineaPathProof,
 	lineaMultiProofFromPath,
 	lineaMultiProofRoot,
-	LineaStorageTrie,
 	proveLineaSlots,
 	type RowFloor,
 	type TrieRow,
 } from "@primary-name-gateway/shared";
-import { bytesToHex, type Hex, hexToBytes, toHex } from "viem";
+import { bytesToHex, type Hex, hexToBytes } from "viem";
 import FIXTURE from "../packages/contracts/test/fixtures/linea.json" with { type: "json" };
 
 function rng(seed: number) {
@@ -57,7 +57,9 @@ describe("linea trie", () => {
 					const slot = known.length && rand() < 0.4 ? known[Math.floor(rand() * known.length)] : randomSlot();
 					known.push(slot);
 					const value =
-						rand() < 0.25 ? new Uint8Array(0) : Uint8Array.from({ length: 1 + Math.floor(rand() * 32) }, () => Math.floor(rand() * 256));
+						rand() < 0.25
+							? new Uint8Array(0)
+							: Uint8Array.from({ length: 1 + Math.floor(rand() * 32) }, () => Math.floor(rand() * 256));
 					oracle.setStorage(slot, value);
 					trie.setStorage(slot, value);
 				}
@@ -74,7 +76,9 @@ describe("linea trie", () => {
 			for (const slot of probe) {
 				const { proof, values } = proveLineaSlots(rows.get, rows.floor, [slot]);
 				expect(lineaMultiProofRoot(proof)).toBe(trie.storageRoot);
-				expect(bytesToHex(values[0])).toBe(bytesToHex(oracle.getStorage(slot).length ? toWord(oracle.getStorage(slot)) : new Uint8Array(0)));
+				expect(bytesToHex(values[0])).toBe(
+					bytesToHex(oracle.getStorage(slot).length ? toWord(oracle.getStorage(slot)) : new Uint8Array(0)),
+				);
 				const expected = oracle.getProof(slot);
 				if ("proof" in expected) {
 					// a single path: identical to linea_getProof once preimages are hashed
@@ -106,7 +110,9 @@ describe("linea mainnet fixture", () => {
 
 	test("account key and value hashes", () => {
 		expect(bytesToHex(lineaAccountKey(FIXTURE.registrar as Hex))).toBe(bytesToHex(leaf.subarray(128, 160)));
-		expect(bytesToHex(lineaAccountValueHash(hexToBytes(account.proof.value)))).toBe(bytesToHex(leaf.subarray(160, 192)));
+		expect(bytesToHex(lineaAccountValueHash(hexToBytes(account.proof.value)))).toBe(
+			bytesToHex(leaf.subarray(160, 192)),
+		);
 	});
 
 	test("path => multiproof roots", () => {

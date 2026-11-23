@@ -1,6 +1,6 @@
 # OP Mainnet
 
-| | |
+| chain | OP Mainnet |
 |---|---|
 | chain id / coin type | 10 / `0x8000000a` |
 | registrar | `0x0000000000D8e504002cC26E3Ec46D81971C1664` (plain layout, see [registrar.md](registrar.md)) |
@@ -21,6 +21,20 @@ The indexer's `OPCommitSource` ([op.ts](../packages/registrar-indexer/src/op.ts)
 3. Checks `outputRoot == keccak(abi.encode(0, stateRoot, messagePasserStorageRoot, blockHash))`. A mismatch is a lying proposal: it's stored as `invalid` and never served.
 4. Replays the registrar's events up to that block and checks the storage root against the account proof.
 5. Stores the commit as `pending`. Once it's old enough (`INDEXER_MIN_FINAL_AGE_SEC`), it polls `isGameClaimValid` and marks it `valid`. Recent valid games are re-checked, and a game that is blacklisted, retired, or lost (`CHALLENGER_WINS`) becomes `invalid`. The gateway then rewinds past it.
+
+## Early acceptance (`minAgeSec`)
+
+A game takes about 7 days to become a valid claim. `OPFaultVerifier` can optionally accept games sooner: with `minAgeSec > 0` (constructor argument), `isGameAcceptable(game)` is true for a finalized game (`isGameClaimValid`, as with `minAgeSec = 0`), or for a game that is
+
+1. proper and respected according to the `AnchorStateRegistry` (registered, not blacklisted, not retired, not paused, of the respected type when created),
+2. not lost (`status != CHALLENGER_WINS`), and
+3. either resolved for the defender (waiting for the airgap), or at least `minAgeSec` old and **unchallenged**: `claimDataLen() == 1` for OP's fault dispute games, `counteredByIntermediateRootIndexPlusOne() == 0` for Base's `AggregateVerifier` (type 621). Unknown game types are never accepted early.
+
+**Trust:** this assumes honest challengers respond within `minAgeSec`. A fraudulent proposal that nobody challenges in time is accepted until it is challenged, loses, or is blacklisted; from then on the verifier rejects it, the indexer marks it `invalid`, and gateways rewind to their newest acceptable commit. For calibration, 2 of OP Mainnet's last 200 games (as of 2026-11-22) had been challenged.
+
+The indexer has to apply the same rule as the deployed verifier, or a gateway serves commits the verifier rejects: set `INDEXER_MIN_AGE_SEC` to the verifier's `minAgeSec`. It then polls pending games from that age on, and keeps re-checking the valid games a gateway may hold (the newest `retainValid`).
+
+Freshness doesn't get weaker: `maxSequenceLag` still bounds a game's lag behind the anchor (the newest finalized state), so the oldest acceptable state is the same as without `minAgeSec`. An honest gateway just serves much newer state.
 
 ## Reorgs
 
@@ -48,7 +62,15 @@ Encodings: `commitProof = abi.encode(OPFaultCommitProof { game, superRoot, outpu
 
 ## Trie rows
 
-Rows are `(absolute nibble path, RLP node)` ([trie.ts](../packages/shared/src/trie.ts)). The indexer's tries are merkle-builder copy-on-write tries, so a commit is just its root node, and the patch between two commits walks only the nodes that differ (including leaves that moved when a neighbour was inserted or deleted). The gateway proves a slot by walking rows along its key.
+Rows are `(absolute nibble path, RLP node)`, merkle-builder's row format ([`EthRowStorage`](https://github.com/ensdomains/merkle-builder#row-storage)): every node, including nodes under 32 bytes that are inlined in their parent. The gateway proves a slot by walking rows along its key.
+
+The indexer keeps the trie in its SQLite database as versioned rows ([sql-row-log.ts](../packages/registrar-indexer/src/sql-row-log.ts)), with the change seq as the version:
+
+- Events are applied to an `EthRowStorage`, which reads only the nodes along the touched paths. The changed rows are written every `INDEXER_FLUSH_CHANGES` changes (default 50,000) and at each commit. Rows sit at hashed paths, so each write touches pages all over the table; larger batches share pages and cost memory.
+- `trie_head` holds the newest node of every path. `trie_history` holds older nodes for as long as a retained commit (pending, or one of the newest valid) still reads them.
+- A snapshot is the rows at a commit's version. A patch is the rows written between two versions.
+- Memory doesn't grow with the registrar, and a restart resumes from the stored trie instead of replaying every event. On first start with an existing change log, the indexer builds the rows from it.
+- A game for an older L2 block than the indexer has synced (out of order) is rebuilt from the newest trie. Every key written since is set back to its value then, from the change log; that gives the storage hash to check. The rows that differ are written into history at the game's version.
 
 ## Operating
 

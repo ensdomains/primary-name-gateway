@@ -6,7 +6,7 @@
 	"main": "src/index.ts",
 	"dependencies": {
 		"@primary-name-gateway/shared": "workspace:*",
-		"@ensdomains/merkle-builder": "^0.2.0",
+		"@ensdomains/merkle-builder": "^0.3.0",
 		"viem": "^2.58.4"
 	}
 }

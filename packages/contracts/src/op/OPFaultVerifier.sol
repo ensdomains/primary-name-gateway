@@ -4,9 +4,13 @@ pragma solidity ^0.8.24;
 import {IL2StorageVerifier} from "../interfaces/IL2StorageVerifier.sol";
 import {EthTrie} from "../lib/EthTrie.sol";
 
-/// @dev Subset of OP's AnchorStateRegistry (v4+).
+/// @dev Subset of OP's AnchorStateRegistry (v3.7+ / v4+).
 interface IAnchorStateRegistry {
     function isGameClaimValid(address game) external view returns (bool);
+    /// @dev registered, not blacklisted, not retired, not paused
+    function isGameProper(address game) external view returns (bool);
+    /// @dev of the respected game type when it was created
+    function isGameRespected(address game) external view returns (bool);
     function getAnchorRoot() external view returns (bytes32 root, uint256 l2SequenceNumber);
 }
 
@@ -14,6 +18,19 @@ interface IAnchorStateRegistry {
 interface IDisputeGame {
     function rootClaim() external view returns (bytes32);
     function l2SequenceNumber() external view returns (uint256);
+    function gameType() external view returns (uint32);
+    function createdAt() external view returns (uint64);
+    function status() external view returns (uint8); // 0 IN_PROGRESS, 1 CHALLENGER_WINS, 2 DEFENDER_WINS
+}
+
+/// @dev OP's FaultDisputeGame / SuperFaultDisputeGame: the root claim is the only claim until someone challenges.
+interface IFaultDisputeGame {
+    function claimDataLen() external view returns (uint256);
+}
+
+/// @dev Base's AggregateVerifier (game type 621): set when the TEE proof is challenged with a ZK proof.
+interface IAggregateVerifier {
+    function counteredByIntermediateRootIndexPlusOne() external view returns (uint256);
 }
 
 /// @notice OP Stack `Types.OutputRootProof`.
@@ -35,7 +52,8 @@ struct OPFaultCommitProof {
 /// @notice Verifies OP Stack L2 storage against a finalized dispute game on L1.
 ///         Supports both output root games and super root games (interop).
 /// @dev Deploy one per chain: (AnchorStateRegistry, L2 chain id).
-///      1. `game` is a valid, finalized claim according to the AnchorStateRegistry
+///      1. `game` is a valid, finalized claim according to the AnchorStateRegistry, or (if `minAgeSec > 0`)
+///         proper, respected, not lost, and either resolved for the defender or unchallenged for `minAgeSec`
 ///      2. `game` is not older than the current anchor by more than `maxSequenceLag` (freshness)
 ///      3. rootClaim = keccak(superRoot) and superRoot has (l2ChainId => outputRoot), or rootClaim = outputRoot
 ///      4. outputRoot = keccak(outputRootProof)
@@ -49,6 +67,9 @@ contract OPFaultVerifier is IL2StorageVerifier {
     error InvalidStorageProof();
 
     bytes1 constant SUPER_ROOT_VERSION = 0x01;
+    uint8 constant CHALLENGER_WINS = 1;
+    uint8 constant DEFENDER_WINS = 2;
+    uint32 constant AGGREGATE_VERIFIER = 621;
 
     IAnchorStateRegistry public immutable anchorStateRegistry;
     uint256 public immutable l2ChainId;
@@ -58,11 +79,21 @@ contract OPFaultVerifier is IL2StorageVerifier {
     ///         or a gateway's fallback commit is rejected. The anchor only moves when it is updated, so it
     ///         can trail the newest valid game.
     uint256 public immutable maxSequenceLag;
+    /// @notice 0: only finalized games (`isGameClaimValid`). Otherwise also accept a game that nobody has
+    ///         challenged for this many seconds. That trusts honest challengers to respond within `minAgeSec`:
+    ///         an unchallenged fraudulent proposal would be accepted until it is challenged or blacklisted.
+    uint256 public immutable minAgeSec;
 
-    constructor(IAnchorStateRegistry anchorStateRegistry_, uint256 l2ChainId_, uint256 maxSequenceLag_) {
+    constructor(
+        IAnchorStateRegistry anchorStateRegistry_,
+        uint256 l2ChainId_,
+        uint256 maxSequenceLag_,
+        uint256 minAgeSec_
+    ) {
         anchorStateRegistry = anchorStateRegistry_;
         l2ChainId = l2ChainId_;
         maxSequenceLag = maxSequenceLag_;
+        minAgeSec = minAgeSec_;
     }
 
     /// @dev `accountProof` = abi.encode(bytes[]) (eth_getProof accountProof)
@@ -92,7 +123,7 @@ contract OPFaultVerifier is IL2StorageVerifier {
 
     /// @notice Verify `p` against L1 and return the committed L2 state root.
     function verifyStateRoot(OPFaultCommitProof memory p) public view returns (bytes32) {
-        if (!anchorStateRegistry.isGameClaimValid(p.game)) revert InvalidGame(p.game);
+        if (!isGameAcceptable(p.game)) revert InvalidGame(p.game);
         IDisputeGame game = IDisputeGame(p.game);
         uint256 seq = game.l2SequenceNumber();
         (, uint256 anchorSeq) = anchorStateRegistry.getAnchorRoot();
@@ -101,6 +132,34 @@ contract OPFaultVerifier is IL2StorageVerifier {
         bytes32 outputRoot = p.superRoot.length == 0 ? rootClaim : findOutputRoot(p.superRoot, rootClaim);
         if (keccak256(abi.encode(p.outputRootProof)) != outputRoot) revert InvalidOutputRoot();
         return p.outputRootProof.stateRoot;
+    }
+
+    /// @notice Whether `game`'s root claim may be used (see `minAgeSec`).
+    function isGameAcceptable(address game) public view returns (bool) {
+        if (anchorStateRegistry.isGameClaimValid(game)) return true;
+        if (minAgeSec == 0) return false;
+        if (!anchorStateRegistry.isGameProper(game) || !anchorStateRegistry.isGameRespected(game)) return false;
+        IDisputeGame g = IDisputeGame(game);
+        uint8 status = g.status();
+        if (status == CHALLENGER_WINS) return false;
+        if (status == DEFENDER_WINS) return true; // resolved, waiting for the airgap
+        if (g.createdAt() + minAgeSec > block.timestamp) return false;
+        return _isUnchallenged(g);
+    }
+
+    function _isUnchallenged(IDisputeGame g) internal view returns (bool) {
+        if (g.gameType() == AGGREGATE_VERIFIER) {
+            try IAggregateVerifier(address(g)).counteredByIntermediateRootIndexPlusOne() returns (uint256 n) {
+                return n == 0;
+            } catch {
+                return false;
+            }
+        }
+        try IFaultDisputeGame(address(g)).claimDataLen() returns (uint256 n) {
+            return n == 1;
+        } catch {
+            return false; // unknown game type: only finalized games
+        }
     }
 
     /// @dev SuperRootV1 = version(1) . timestamp(8) . [chainId(32) . outputRoot(32)]*

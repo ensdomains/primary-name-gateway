@@ -6,13 +6,15 @@ import {
 	FACTORY_ABI,
 	GAME_ABI,
 	GAME_STATUS_CHALLENGER_WINS,
+	GAME_STATUS_DEFENDER_WINS,
+	GAME_TYPE_AGGREGATE_VERIFIER,
 	hashOutputRootProof,
 	type OPCommit,
 	type OPDeployment,
 	type OutputRootProof,
 } from "@primary-name-gateway/shared";
 import { type Address, type BlockTag, type PublicClient, zeroHash } from "viem";
-import { type CommitSource, errorMessage, NotFinalizedError, type RegistrarIndexer } from "./indexer.js";
+import { type CommitSource, errorMessage, NotFinalizedError, type RegistrarIndexer, SyncError } from "./indexer.js";
 import type { OPL2Reader } from "./l2.js";
 
 export type OPSourceConfig = {
@@ -24,6 +26,8 @@ export type OPSourceConfig = {
 	maxAttempts: number; // give up on a game after this many failures
 	// L1 state to trust for discovery and validity (default "finalized": games and their validity can't reorg)
 	l1BlockTag?: BlockTag;
+	// accept unchallenged games this old before they are finalized: must equal the verifier's minAgeSec (default 0: finalized only)
+	minAgeSec?: number;
 };
 
 type GameResult = "done" | "deferred" | "retry";
@@ -109,6 +113,10 @@ export class OPCommitSource implements CommitSource {
 			await this.indexGame(indexer, id, game, gameType, Number(timestamp));
 			return "done";
 		} catch (err) {
+			if (err instanceof SyncError) {
+				indexer.log(`game ${id}: waiting for event sync: ${err.message}`);
+				return "retry";
+			}
 			if (err instanceof NotFinalizedError) {
 				indexer.log(`game ${id}: deferred: ${err.message}`);
 				return "deferred";
@@ -162,10 +170,11 @@ export class OPCommitSource implements CommitSource {
 		// only snapshot final L2 state: the change log is append-only
 		const finalized = await l2.finalizedBlock();
 		if (claim.kind === "output" ? claim.l2BlockNumber > finalized.number : claim.timestamp > finalized.timestamp) {
-			throw new NotFinalizedError(`claims L2 ${claim.kind === "output" ? `block ${claim.l2BlockNumber}` : `time ${claim.timestamp}`}, finalized is block ${finalized.number}`);
+			throw new NotFinalizedError(
+				`claims L2 ${claim.kind === "output" ? `block ${claim.l2BlockNumber}` : `time ${claim.timestamp}`}, finalized is block ${finalized.number}`,
+			);
 		}
-		const l2Block =
-			claim.kind === "output" ? Number(claim.l2BlockNumber) : await l2.blockAtTimestamp(claim.timestamp);
+		const l2Block = claim.kind === "output" ? Number(claim.l2BlockNumber) : await l2.blockAtTimestamp(claim.timestamp);
 
 		// the parts of the proof that can't be rebuilt from events (must be fetched while L2 state is available)
 		const witness = await l2.getBlockWitness(l2Block);
@@ -206,40 +215,89 @@ export class OPCommitSource implements CommitSource {
 		return Number(block.timestamp);
 	}
 
-	private async refreshStatuses(indexer: RegistrarIndexer) {
-		const { l1, deployment, minFinalAgeSec } = this.config;
-		const { db } = indexer;
-		const now = await this.l1Time();
-		// pending games old enough to be final + recent valid games (the guardian can still blacklist or retire them)
-		const pending = [
-			...db.getCommits("pending", 10000).filter((c) => c.createdAt + minFinalAgeSec <= now),
-			...db.getCommits("valid", 4),
-		].filter((c): c is OPCommit => c.kind === "op");
-		if (!pending.length) return;
+	// mirrors OPFaultVerifier.isGameAcceptable() at an L1 block
+	private async isAcceptable(c: OPCommit, blockTag: BlockTag, time: number): Promise<boolean> {
+		const { l1, deployment, minAgeSec = 0 } = this.config;
 		const asr = deployment.AnchorStateRegistry;
+		const valid = await l1.readContract({
+			address: asr,
+			abi: ASR_ABI,
+			functionName: "isGameClaimValid",
+			args: [c.game],
+			blockTag,
+		});
+		if (valid) return true;
+		if (!minAgeSec) return false;
+		const [proper, respected, status] = await Promise.all([
+			l1.readContract({ address: asr, abi: ASR_ABI, functionName: "isGameProper", args: [c.game], blockTag }),
+			l1.readContract({ address: asr, abi: ASR_ABI, functionName: "isGameRespected", args: [c.game], blockTag }),
+			l1.readContract({ address: c.game, abi: GAME_ABI, functionName: "status", blockTag }),
+		]);
+		if (!proper || !respected || status === GAME_STATUS_CHALLENGER_WINS) return false;
+		if (status === GAME_STATUS_DEFENDER_WINS) return true;
+		if (c.createdAt + minAgeSec > time) return false;
+		try {
+			if (c.gameType === GAME_TYPE_AGGREGATE_VERIFIER) {
+				const n = await l1.readContract({
+					address: c.game,
+					abi: GAME_ABI,
+					functionName: "counteredByIntermediateRootIndexPlusOne",
+					blockTag,
+				});
+				return n === 0n;
+			}
+			return (await l1.readContract({ address: c.game, abi: GAME_ABI, functionName: "claimDataLen", blockTag })) === 1n;
+		} catch {
+			return false;
+		}
+	}
+
+	private async refreshStatuses(indexer: RegistrarIndexer) {
+		const { l1, deployment, minFinalAgeSec, minAgeSec = 0 } = this.config;
+		const retainValid = indexer.config.retainValid ?? 24;
+		const { db } = indexer;
 		const finalTag = this.l1BlockTag;
+		const [latest, final] = await Promise.all([
+			l1.getBlock({ blockTag: "latest" }),
+			finalTag === "latest" ? undefined : l1.getBlock({ blockTag: finalTag }),
+		]);
+		const now = Number(latest.timestamp);
+		const finalTime = final ? Number(final.timestamp) : now;
+		// pending games old enough to become acceptable + the valid games a gateway may still hold
+		// (they can still be blacklisted, retired, challenged or lost)
+		const pollAge = minAgeSec > 0 ? minAgeSec : minFinalAgeSec;
+		const candidates = [
+			...db.getCommits("pending", 10000).filter((c) => c.createdAt + pollAge <= now),
+			...db.getCommits("valid", retainValid),
+		].filter((c): c is OPCommit => c.kind === "op");
+		if (!candidates.length) return;
+		const asr = deployment.AnchorStateRegistry;
 		const results = await Promise.all(
-			pending.map((c) =>
+			candidates.map((c) =>
 				Promise.all([
-					// valid on finalized L1 (can't be reorged away) and still valid now
-					l1.readContract({ address: asr, abi: ASR_ABI, functionName: "isGameClaimValid", args: [c.game], blockTag: finalTag }),
-					l1.readContract({ address: asr, abi: ASR_ABI, functionName: "isGameClaimValid", args: [c.game] }),
+					// acceptable on finalized L1 (can't be reorged away) and still acceptable now
+					this.isAcceptable(c, finalTag, finalTime),
+					this.isAcceptable(c, "latest", now),
 					// invalidation reacts to the latest state
 					l1.readContract({ address: asr, abi: ASR_ABI, functionName: "isGameBlacklisted", args: [c.game] }),
 					l1.readContract({ address: c.game, abi: GAME_ABI, functionName: "status" }),
 				]),
 			),
 		);
-		pending.forEach((c, i) => {
-			const [validFinal, validNow, blacklisted, status] = results[i];
-			if (validFinal && validNow) {
+		candidates.forEach((c, i) => {
+			const [acceptableFinal, acceptableNow, blacklisted, status] = results[i];
+			if (acceptableFinal && acceptableNow) {
 				if (c.status === "valid") return;
 				// wall-clock: the gateway compares this against its own clock
 				db.putCommit({ ...c, status: "valid", validAt: Math.floor(Date.now() / 1000) });
 				indexer.log(`game ${c.id}: valid (L2 block ${c.l2Block})`);
-			} else if ((c.status === "valid" && !validNow) || blacklisted || status === GAME_STATUS_CHALLENGER_WINS) {
+			} else if ((c.status === "valid" && !acceptableNow) || blacklisted || status === GAME_STATUS_CHALLENGER_WINS) {
 				db.putCommit({ ...c, status: "invalid" });
-				const reason = blacklisted ? "blacklisted" : status === GAME_STATUS_CHALLENGER_WINS ? "challenger wins" : "no longer valid";
+				const reason = blacklisted
+					? "blacklisted"
+					: status === GAME_STATUS_CHALLENGER_WINS
+						? "challenger wins"
+						: "no longer acceptable (challenged, retired or paused)";
 				indexer.log(`game ${c.id}: invalid (${reason})`);
 			}
 		});

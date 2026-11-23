@@ -1,6 +1,6 @@
 # Linea
 
-| | |
+| chain | Linea |
 |---|---|
 | chain id / coin type | 59144 / `0x8000e708` |
 | registrar | `0x0000000000D8e504002cC26E3Ec46D81971C1664` (plain layout, see [registrar.md](registrar.md)) |

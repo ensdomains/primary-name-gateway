@@ -48,12 +48,13 @@ const OWNERSHIP_TRANSFERRED = getAbiItem({ abi: REGISTRAR_ABI, name: "OwnershipT
 
 export class RPCChangeReader implements ChangeReader {
 	private logStep: number;
+	private maxLogStep: number;
 	constructor(
 		readonly deployment: Deployment,
 		readonly logsClient: PublicClient, // eth_getLogs (large ranges)
 		readonly log?: (...args: unknown[]) => void,
 	) {
-		this.logStep = deployment.l2.logStep ?? 10000;
+		this.logStep = this.maxLogStep = deployment.l2.logStep ?? 10000;
 	}
 
 	get registrar(): Address {
@@ -83,10 +84,17 @@ export class RPCChangeReader implements ChangeReader {
 					const [name] = decodeAbiParameters([{ type: "bytes" }], log.data);
 					return { ...at, kind: "name", addr: log.args.addr, name };
 				});
+				// sparse again after a dense stretch: grow back
+				if (logs.length < 100 && this.logStep < this.maxLogStep)
+					this.logStep = Math.min(this.maxLogStep, this.logStep * 2);
 				return { changes, toBlock: end };
 			} catch (err) {
-				if (this.logStep <= 1000) throw err;
-				this.logStep >>= 1; // range too large (or too many results): shrink and retry
+				// range too large or too many results (providers cap results, eg. drpc at 20000): shrink and retry
+				if (this.logStep <= 1) throw err;
+				// a fixed range limit (eg. infura: "exceeds limit of 10000"): never grow past it
+				const limit = /limit of (\d+)/.exec(String(err instanceof Error ? err.message : err))?.[1];
+				if (limit) this.maxLogStep = Math.max(1, Math.min(this.maxLogStep, Number(limit)));
+				this.logStep = Math.min(this.logStep >> 1, this.maxLogStep);
 				this.log?.(`getLogs failed, step = ${this.logStep}`);
 			}
 		}

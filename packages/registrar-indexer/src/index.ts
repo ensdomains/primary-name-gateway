@@ -9,7 +9,7 @@ import { OPCommitSource } from "./op.js";
 import { serveIndexer } from "./server.js";
 
 export { IndexerDB } from "./db.js";
-export { type CommitSource, type IndexerConfig, NotFinalizedError, RegistrarIndexer } from "./indexer.js";
+export { type CommitSource, type IndexerConfig, NotFinalizedError, RegistrarIndexer, SyncError } from "./indexer.js";
 export {
 	type BlockWitness,
 	type ChangeReader,
@@ -24,7 +24,8 @@ export {
 export { LINEA_ROLLUP_ABI, LineaCommitSource, type LineaSourceConfig } from "./linea.js";
 export { OPCommitSource, type OPSourceConfig } from "./op.js";
 export { serveIndexer } from "./server.js";
-export { createIndexerTrie, type IndexerTrie, RowLog } from "./tries.js";
+export { KeptVersions, SqlRowLog } from "./sql-row-log.js";
+export { createIndexerTrie, type IndexerTrie, MPTIndexerTrie, RowLog } from "./tries.js";
 
 type Log = (...args: unknown[]) => void;
 
@@ -34,19 +35,31 @@ function createSource(deployment: Deployment, log: Log): { l2: ChangeReader; sou
 	const l1 = createClient(deployment.l1);
 	const maxAttempts = Number(env.INDEXER_MAX_ATTEMPTS ?? 5);
 	if (deployment.kind === "op") {
-		const l2 = new RPCOPReader(deployment, createClient(deployment.l2), createClient(deployment.l2, "proof"), log);
+		const l2 = new RPCOPReader(
+			deployment,
+			createClient(deployment.l2, "logs"),
+			createClient(deployment.l2, "proof"),
+			log,
+		);
 		const source = new OPCommitSource({
 			deployment,
 			l1,
 			l2,
-			// a game is final ~7 days after creation (3.5d clock + 3.5d airgap); look back further so we start with valid commits
-			lookbackSec: Number(env.INDEXER_LOOKBACK_SEC ?? 8 * 86400),
-			minFinalAgeSec: Number(env.INDEXER_MIN_FINAL_AGE_SEC ?? 6 * 86400),
+			// look back a day past finality so we start with valid commits; don't poll younger games
+			lookbackSec: Number(env.INDEXER_LOOKBACK_SEC ?? deployment.gameFinalitySec + 86400),
+			minFinalAgeSec: Number(env.INDEXER_MIN_FINAL_AGE_SEC ?? deployment.gameFinalitySec - 86400),
 			maxAttempts,
+			// accept unchallenged games this old before finality; must match the deployed OPFaultVerifier's minAgeSec
+			minAgeSec: Number(env.INDEXER_MIN_AGE_SEC ?? 0),
 		});
 		return { l2, source };
 	}
-	const l2 = new RPCLineaReader(deployment, createClient(deployment.l2), createClient(deployment.l2, "proof"), log);
+	const l2 = new RPCLineaReader(
+		deployment,
+		createClient(deployment.l2, "logs"),
+		createClient(deployment.l2, "proof"),
+		log,
+	);
 	const source = new LineaCommitSource({
 		deployment,
 		l1,

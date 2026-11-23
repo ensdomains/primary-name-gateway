@@ -14,10 +14,10 @@ import {
 	getAbiItem,
 	type Hex,
 	hexToBytes,
-	parseAbi,
 	type PublicClient,
+	parseAbi,
 } from "viem";
-import { type CommitSource, errorMessage, type RegistrarIndexer } from "./indexer.js";
+import { type CommitSource, errorMessage, type RegistrarIndexer, SyncError } from "./indexer.js";
 import type { LineaL2Reader } from "./l2.js";
 
 export const LINEA_ROLLUP_ABI = parseAbi([
@@ -50,7 +50,7 @@ export class LineaCommitSource implements CommitSource {
 	}
 
 	async tick(indexer: RegistrarIndexer) {
-		const { l1, deployment, lookbackBlocks, maxAttempts, blockTag = "finalized" } = this.config;
+		const { l1, lookbackBlocks, maxAttempts, blockTag = "finalized" } = this.config;
 		const { db } = indexer;
 		const head = Number((await l1.getBlock({ blockTag })).number);
 		let from = Number(db.getState("nextL1Block") ?? -1);
@@ -75,6 +75,12 @@ export class LineaCommitSource implements CommitSource {
 				try {
 					await this.indexFinalization(indexer, log);
 				} catch (err) {
+					if (err instanceof SyncError) {
+						// not this finalization's fault: retry next tick without using up an attempt
+						indexer.log(`finalization ${id}: waiting for event sync: ${err.message}`);
+						db.setState("nextL1Block", Number(log.blockNumber));
+						return;
+					}
 					const n = (this.attempts.get(id) ?? 0) + 1;
 					this.attempts.set(id, n);
 					if (n < maxAttempts) {

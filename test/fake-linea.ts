@@ -11,13 +11,23 @@ import { LineaStorage } from "@ensdomains/merkle-builder";
 import type { LineaL2Reader, RegistrarChange } from "@primary-name-gateway/registrar-indexer";
 import {
 	applyChange,
-	lineaAccountKey,
-	lineaAccountValueHash,
 	type LineaPathProof,
 	LineaTrie,
+	lineaAccountKey,
+	lineaAccountValueHash,
 	type RegistrarLayout,
 } from "@primary-name-gateway/shared";
-import { type Address, concat, type Hex, hexToBytes, keccak256, numberToHex, stringToBytes, stringToHex, toHex } from "viem";
+import {
+	type Address,
+	concat,
+	type Hex,
+	hexToBytes,
+	keccak256,
+	numberToHex,
+	stringToBytes,
+	stringToHex,
+	toHex,
+} from "viem";
 
 export type FakeLineaBlock = {
 	number: number;

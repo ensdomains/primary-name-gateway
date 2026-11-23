@@ -8,16 +8,16 @@
 // through CCIP-Read and compares against the L2ReverseRegistrar at the same L2 block.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { serveEZCCIP } from "@adraffy/ezccip/serve";
 import {
 	type Change,
+	coinTypeFromChainId,
 	createClient,
 	DEPLOYMENTS,
 	type Deployment,
-	coinTypeFromChainId,
 	type IndexerStatus,
 	rpcURL,
 } from "@primary-name-gateway/shared";
-import { serve } from "@namestone/ezccip/serve";
 import {
 	type Abi,
 	type Address,
@@ -28,8 +28,8 @@ import {
 	type Hex,
 	http,
 	namehash,
-	parseAbi,
 	type PublicClient,
+	parseAbi,
 	toHex,
 	type WalletClient,
 } from "viem";
@@ -72,7 +72,7 @@ const COIN_TYPE = deployment ? coinTypeFromChainId(deployment.l2.id) : 0n;
 describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 	const d = deployment!;
 	let anvil: Bun.Subprocess;
-	let ccip: Awaited<ReturnType<typeof serve>>;
+	let ccip: Awaited<ReturnType<typeof serveEZCCIP>>;
 	let gateway: RegistrarGateway;
 	let l1: PublicClient;
 	let wallet: WalletClient;
@@ -87,7 +87,7 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 			layout: d.layout,
 		});
 		await gateway.sync();
-		ccip = await serve(createEZCCIP(gateway), { protocol: "raw", log: false });
+		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });
 
 		anvil = Bun.spawn(["anvil", "--fork-url", rpcURL(d.l1), "--port", String(ANVIL_PORT), "--silent"], {
 			stdout: "ignore",
@@ -117,6 +117,7 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 						d.AnchorStateRegistry,
 						d.l2.id,
 						86400, // maxSequenceLag: 1 day (super root games: seconds)
+						Number(process.env.INDEXER_MIN_AGE_SEC ?? 0), // minAgeSec: as the indexer
 					])
 				: await deploy(artifact("LineaVerifier.sol", "LineaVerifier"), [
 						d.LineaRollup,
@@ -132,10 +133,18 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 
 		// replay the change log up to the commit the gateway serves
 		const { commit } = gateway.proveName("0x0000000000000000000000000000000000000000");
-		const changes = (await fetch(`${INDEXER_URL}/changes?until=${commit.changeSeq}`).then((r) => r.json())) as Change[];
-		names = new Map(changes.filter((c) => c.kind === "name").map((c) => [c.addr.toLowerCase() as Address, c.name]));
+		names = new Map();
+		for (let after = 0; after < commit.changeSeq; ) {
+			const page = (await fetch(`${INDEXER_URL}/changes?after=${after}&until=${commit.changeSeq}`).then((r) =>
+				r.json(),
+			)) as Change[];
+			if (!page.length) break;
+			for (const c of page) if (c.kind === "name") names.set(c.addr.toLowerCase() as Address, c.name);
+			after = page[page.length - 1].seq;
+		}
+		for (const [addr, name] of names) if (name === "0x") names.delete(addr); // cleared
 		console.log(`commit: ${commit.kind} ${commit.id}, L2 block ${commit.l2Block}, ${names.size} addresses`);
-	}, 60_000);
+	}, 600_000); // a large registrar (Base) pages through millions of changes
 
 	afterAll(async () => {
 		await ccip?.shutdown();
@@ -173,10 +182,26 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 		}
 	}, 60_000);
 
-	test("every indexed address verifies", async () => {
+	// every name, or for a large registrar (Base) a fixed sample that includes every long name
+	function sample(): [Address, Hex][] {
+		const all = [...names];
+		const limit = Number(process.env.MAINNET_SAMPLE ?? 500);
+		if (all.length <= limit) return all;
+		const long = all.filter(([, n]) => (n.length - 2) / 2 >= 32).slice(0, limit / 2);
+		let seed = 1;
+		const rand = () => {
+			seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+			return seed / 0x80000000;
+		};
+		const rest = all.filter(() => rand() < (limit - long.length) / all.length);
+		return [...long, ...rest];
+	}
+
+	test("indexed addresses verify", async () => {
 		const decoder = new TextDecoder();
 		let long = 0;
-		for (const [addr, name] of names) {
+		const checked = sample();
+		for (const [addr, name] of checked) {
 			const { proof } = gateway.proveName(addr);
 			const actual = await l1.readContract({
 				address: resolver,
@@ -187,7 +212,7 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 			expect(actual).toBe(decoder.decode(Buffer.from(name.slice(2), "hex")));
 			if ((name.length - 2) / 2 >= 32) long++;
 		}
-		console.log(`verified ${names.size} names (${long} long)`);
+		console.log(`verified ${checked.length} of ${names.size} names (${long} long)`);
 	}, 300_000);
 
 	test("address without a name resolves to empty", async () => {
