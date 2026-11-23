@@ -1,18 +1,22 @@
-// Prove one address's primary name through a running indexer and gateway, end to end on an L1 fork:
-// deploys the chain's verifier and an L2ReverseResolver that points at the gateway, resolves
-// `{addr}.{coinType}.reverse` with CCIP-Read, and compares the result with the L2 registrar.
+// Prove one address's primary name through a gateway, end to end on an L1 fork: deploys the chain's
+// verifier and an L2ReverseResolver that points at the gateway, resolves `{addr}.{coinType}.reverse`
+// with CCIP-Read as a client would, and compares the result with the L2 registrar at the proof's block.
+// Only the gateway (and RPC) is contacted: the proof itself says which L2 block it is for.
 //
-//   bun run prove <address> [chain]            chain: the indexer/gateway ports of `bun run indexer:<chain>`
-//   bun run prove <address> --indexer URL --gateway URL
+//   bun run prove <address> <chain> [--gateway URL] [--min-age SEC]
 //
-// The chain and commit kind come from the indexer's /status. Needs .env RPC keys (an L1 fork, L2 reads).
+// chain: a deployment (base, base-inbox, optimism, linea, ...); the gateway defaults to the port of
+// `bun run gateway:<chain>`. --min-age: the verifier's minAgeSec for OP Stack fault proofs, as the
+// indexer's INDEXER_MIN_AGE_SEC (default: that variable, or 0). Needs .env RPC keys.
 
 import { Foundry } from "@adraffy/blocksmith";
 import {
-	type Commit,
 	coinTypeFromChainId,
 	createClient,
-	type IndexerStatus,
+	DEPLOYMENTS,
+	type Deployment,
+	decodeOPBatchInboxCommitProof,
+	decodeOPFaultCommitProof,
 	rpcURL,
 } from "@primary-name-gateway/shared";
 import {
@@ -23,8 +27,10 @@ import {
 	decodeAbiParameters,
 	decodeFunctionResult,
 	encodeFunctionData,
+	fromRlp,
 	getAddress,
 	type Hex,
+	hexToBigInt,
 	http,
 	isAddress,
 	namehash,
@@ -32,15 +38,10 @@ import {
 	toHex,
 } from "viem";
 import { packetToBytes } from "viem/ens";
-import { deploymentOf, verifierContract } from "./verifiers.js";
+import { verifierContract } from "./verifiers.js";
 
-// the ports of the package.json scripts
-const PORTS: Record<string, [indexer: number, gateway: number]> = {
-	optimism: [8100, 8200],
-	linea: [8101, 8201],
-	base: [8102, 8202],
-	"base-inbox": [8103, 8203],
-};
+// the ports of the package.json gateway scripts
+const GATEWAY_PORTS: Record<string, number> = { optimism: 8200, linea: 8201, base: 8202, "base-inbox": 8203 };
 
 const RESOLVER_ABI = parseAbi([
 	"function resolve(bytes name, bytes data) view returns (bytes)",
@@ -61,39 +62,29 @@ const NAME_PROOF = {
 function usage(message?: string): never {
 	if (message) console.error(message);
 	console.error(
-		`usage: bun run prove <address> [${Object.keys(PORTS).join(" | ")}]\n       bun run prove <address> --indexer URL --gateway URL`,
+		`usage: bun run prove <address> <${Object.keys(DEPLOYMENTS).join(" | ")}> [--gateway URL] [--min-age SEC]`,
 	);
 	process.exit(1);
 }
 
 function parseArgs() {
 	const args = process.argv.slice(2);
-	let indexer = process.env.INDEXER_URL;
 	let gateway = process.env.GATEWAY_URL;
+	let minAge = process.env.INDEXER_MIN_AGE_SEC;
 	const rest: string[] = [];
 	for (let i = 0; i < args.length; i++) {
-		if (args[i] === "--indexer") indexer = args[++i];
-		else if (args[i] === "--gateway") gateway = args[++i];
+		if (args[i] === "--gateway") gateway = args[++i];
+		else if (args[i] === "--min-age") minAge = args[++i];
 		else rest.push(args[i]);
 	}
 	const [addr, chain] = rest;
 	if (!addr || !isAddress(addr)) usage(addr && `not an address: ${addr}`);
-	if (chain) {
-		const ports = PORTS[chain] ?? usage(`no default ports for ${chain}: pass --indexer and --gateway`);
-		indexer ??= `http://localhost:${ports[0]}`;
-		gateway ??= `http://localhost:${ports[1]}`;
-	}
-	return {
-		addr: getAddress(addr),
-		indexer: (indexer ?? "http://localhost:8100").replace(/\/$/, ""),
-		gateway: gateway ?? "http://localhost:8200",
-	};
-}
-
-async function getJSON<T>(url: string): Promise<T> {
-	const res = await fetch(url).catch((err) => usage(`${url}: ${err.message} (is the indexer running?)`));
-	if (!res.ok) throw new Error(`${url}: ${res.status} ${await res.text()}`);
-	return res.json() as Promise<T>;
+	const d = (chain && DEPLOYMENTS[chain]) || usage(chain ? `unknown chain: ${chain}` : "which chain?");
+	const port = GATEWAY_PORTS[chain];
+	gateway ??= port ? `http://localhost:${port}` : usage(`no default gateway for ${chain}: pass --gateway`);
+	const minAgeSec = Number(minAge ?? 0);
+	if (!Number.isInteger(minAgeSec) || minAgeSec < 0) usage(`not a number of seconds: ${minAge}`);
+	return { addr: getAddress(addr), chain, d, gateway, minAgeSec };
 }
 
 const n = (x: number | bigint) => x.toLocaleString("en-US");
@@ -108,20 +99,30 @@ function duration(sec: number): string {
 		: `${Math.floor(h / 24)}d${String(h % 24).padStart(2, "0")}h`;
 }
 
-const { addr, indexer, gateway } = parseArgs();
-const status = await getJSON<IndexerStatus>(`${indexer}/status`);
-const [chain, d] =
-	deploymentOf(status) ??
-	usage(
-		`${indexer}: no deployment for L1 ${status.l1ChainId} → L2 ${status.l2ChainId} (${status.kind}); an older indexer?`,
-	);
-if (!status.latestValid) usage(`${indexer}: no valid commit yet (synced to L2 block ${status.syncedBlock})`);
-const blockTime = status.l2BlockMs ? `, ${status.l2BlockMs} ms blocks` : "";
-const minAgeSec = status.minAgeSec ?? 0; // the verifier must accept what the indexer marks valid
+// the L2 block a commit proof is for, and what names the commit
+async function proofBlock(d: Deployment, commitProof: Hex): Promise<{ block: number; commit: string }> {
+	switch (d.kind) {
+		case "op": {
+			const { game, outputRootProof } = decodeOPFaultCommitProof(commitProof);
+			const block = await createClient(d.l2).getBlock({ blockHash: outputRootProof.latestBlockhash });
+			return { block: Number(block.number), commit: `game ${game}` };
+		}
+		case "inbox": {
+			const p = decodeOPBatchInboxCommitProof(commitProof);
+			const number = (h: Hex) => Number(hexToBigInt((fromRlp(h) as Hex[])[8]));
+			return { block: number(p.l2Header), commit: `batch in L1 block ${n(number(p.l1Header))}` };
+		}
+		case "linea": {
+			const [block] = decodeAbiParameters([{ type: "uint256" }], commitProof);
+			return { block: Number(block), commit: "finalization" };
+		}
+	}
+}
+
+const { addr, chain, d, gateway, minAgeSec } = parseArgs();
+const blockMs = "l2Blocks" in d ? `, ${d.l2Blocks[d.l2Blocks.length - 1].ms} ms blocks` : "";
 const early = minAgeSec ? `, games accepted unchallenged after ${minAgeSec}s` : "";
-console.log(
-	`${chain} (${d.kind}, L1 ${d.l1.id} → L2 ${d.l2.id}${blockTime}${early}): indexer ${indexer}, gateway ${gateway}`,
-);
+console.log(`${chain} (${d.kind}, L1 ${d.l1.id} → L2 ${d.l2.id}${blockMs}${early}): gateway ${gateway}`);
 
 const started = Date.now();
 const foundry = await Foundry.launch({
@@ -176,51 +177,47 @@ try {
 		args: [addr, proof],
 	});
 
-	// the commit the proof is for: the gateway sends the indexer's commit proof as it is
+	// the L2 block the proof is for, from the proof
 	const [{ commitProof }] = decodeAbiParameters([NAME_PROOF], proof);
-	const commits = await getJSON<Commit[]>(`${indexer}/commits?status=valid&limit=100`);
-	const commit = commits.find((c) => c.commitProof === commitProof);
+	const { block, commit } = await proofBlock(d, commitProof);
 	const l2 = createClient(d.l2);
-	const finalized = await l2.getBlock({ blockTag: "finalized" });
-
+	const [finalized, header] = await Promise.all([
+		l2.getBlock({ blockTag: "finalized" }),
+		l2.getBlock({ blockNumber: BigInt(block) }),
+	]);
+	const actual = await createClient(d.l2, "proof").readContract({
+		address: d.L2ReverseRegistrar,
+		abi: L2_REGISTRAR_ABI,
+		functionName: "nameForAddr",
+		args: [addr],
+		blockNumber: BigInt(block),
+	});
+	if (actual !== primary) process.exitCode = 1;
+	const behind = Number(finalized.number) - block;
 	const rows: [string, string][] = [
 		["name", JSON.stringify(primary)],
 		["gateway", `${ms(gatewayMs)}, ${n((response!.length - 2) / 2)}-byte response`],
 		["verify", `${n(gas)} gas (verifyName on the L1 fork)`],
-	];
-	if (commit) {
-		const block = await l2.getBlock({ blockNumber: BigInt(commit.l2Block) });
-		const behind = Number(finalized.number) - commit.l2Block;
-		const sec = Number(finalized.timestamp - block.timestamp);
-		rows.push(
-			["proof", `L2 block ${n(commit.l2Block)} (${d.kind} commit ${commit.id})`],
-			["finalized", `L2 block ${n(finalized.number)}: the proof is ${n(behind)} blocks (${duration(sec)}) behind`],
-		);
-		const actual = await createClient(d.l2, "proof").readContract({
-			address: d.L2ReverseRegistrar,
-			abi: L2_REGISTRAR_ABI,
-			functionName: "nameForAddr",
-			args: [addr],
-			blockNumber: BigInt(commit.l2Block),
-		});
-		rows.push([
+		["proof", `L2 block ${n(block)} (${d.kind}: ${commit})`],
+		[
+			"finalized",
+			`L2 block ${n(finalized.number)}: the proof is ${n(behind)} blocks (${duration(Number(finalized.timestamp - header.timestamp))}) behind`,
+		],
+		[
 			"L2",
 			actual === primary
-				? `matches L2ReverseRegistrar.nameForAddr at L2 block ${n(commit.l2Block)}`
-				: `differs: L2ReverseRegistrar.nameForAddr at L2 block ${n(commit.l2Block)} is ${JSON.stringify(actual)}`,
-		]);
-		if (actual !== primary) process.exitCode = 1;
-	} else {
-		rows.push(
-			["proof", "for a commit that isn't among the indexer's valid commits (another indexer, or retired)"],
-			["finalized", `L2 block ${n(finalized.number)}`],
-		);
-	}
+				? `matches L2ReverseRegistrar.nameForAddr at L2 block ${n(block)}`
+				: `differs: L2ReverseRegistrar.nameForAddr at L2 block ${n(block)} is ${JSON.stringify(actual)}`,
+		],
+	];
 	for (const [k, v] of rows) console.log(`${k.padEnd(10)}${v}`);
 } catch (err) {
 	// viem's errors repeat the call: the first cause that isn't viem's wrapper says what failed
 	const e = err as BaseError;
 	console.error(e.walk?.((x) => !(x instanceof BaseError))?.message ?? e.shortMessage ?? e.message);
+	if (d.kind === "op" && !minAgeSec) {
+		console.error("(if the indexer accepts games early, pass --min-age with its INDEXER_MIN_AGE_SEC)");
+	}
 	process.exitCode = 1;
 } finally {
 	await foundry.shutdown();

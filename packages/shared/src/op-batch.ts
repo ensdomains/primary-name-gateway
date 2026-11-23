@@ -6,6 +6,7 @@
 import {
 	bytesToBigInt,
 	bytesToHex,
+	decodeAbiParameters,
 	encodeAbiParameters,
 	type Hex,
 	hexToBytes,
@@ -158,25 +159,35 @@ export type OPBatchInboxCommitProof = {
 	l2Header: Hex;
 };
 
-export function encodeOPBatchInboxCommitProof(p: OPBatchInboxCommitProof): Hex {
-	return encodeAbiParameters(
-		[
-			{
-				type: "tuple",
-				components: [
-					{ name: "l1Header", type: "bytes" },
-					{ name: "txIndex", type: "uint256" },
-					{ name: "txProof", type: "bytes[]" },
-					{ name: "blobIndex", type: "uint256" },
-					{ name: "commitment", type: "bytes" },
-					{ name: "fieldElements", type: "bytes" },
-					{ name: "blobProofs", type: "bytes[]" },
-					{ name: "l2Header", type: "bytes" },
-				],
-			},
+const OP_BATCH_INBOX_COMMIT_PROOF = [
+	{
+		type: "tuple",
+		components: [
+			{ name: "l1Header", type: "bytes" },
+			{ name: "txIndex", type: "uint256" },
+			{ name: "txProof", type: "bytes[]" },
+			{ name: "blobIndex", type: "uint256" },
+			{ name: "commitment", type: "bytes" },
+			{ name: "fieldElements", type: "bytes" },
+			{ name: "blobProofs", type: "bytes[]" },
+			{ name: "l2Header", type: "bytes" },
 		],
-		[{ ...p, txIndex: BigInt(p.txIndex), blobIndex: BigInt(p.blobIndex) }],
-	);
+	},
+] as const;
+export function encodeOPBatchInboxCommitProof(p: OPBatchInboxCommitProof): Hex {
+	return encodeAbiParameters(OP_BATCH_INBOX_COMMIT_PROOF, [
+		{ ...p, txIndex: BigInt(p.txIndex), blobIndex: BigInt(p.blobIndex) },
+	]);
+}
+export function decodeOPBatchInboxCommitProof(proof: Hex): OPBatchInboxCommitProof {
+	const p = decodeAbiParameters(OP_BATCH_INBOX_COMMIT_PROOF, proof)[0];
+	return {
+		...p,
+		txIndex: Number(p.txIndex),
+		blobIndex: Number(p.blobIndex),
+		txProof: [...p.txProof],
+		blobProofs: [...p.blobProofs],
+	};
 }
 
 // Field elements (whole rounds of 4) that carry a channel's first `compressedBytes` brotli bytes:
