@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Notes for coding agents working in this repo. Read [README.md](README.md) first for the architecture, and [docs/registrar.md](docs/registrar.md) for the registrar contract.
+Notes for coding agents working in this repo. Read [README.md](README.md) first for the architecture, [docs/registrar.md](docs/registrar.md) for the registrar contract, and [docs/optimism.md](docs/optimism.md) / [docs/linea.md](docs/linea.md) for the chain-specific parts.
 
 ## Layout
 
