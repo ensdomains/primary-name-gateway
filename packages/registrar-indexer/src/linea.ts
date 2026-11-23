@@ -14,8 +14,8 @@ import {
 	getAbiItem,
 	type Hex,
 	hexToBytes,
-	parseAbi,
 	type PublicClient,
+	parseAbi,
 } from "viem";
 import { type CommitSource, errorMessage, type RegistrarIndexer } from "./indexer.js";
 import type { LineaL2Reader } from "./l2.js";
@@ -50,7 +50,7 @@ export class LineaCommitSource implements CommitSource {
 	}
 
 	async tick(indexer: RegistrarIndexer) {
-		const { l1, deployment, lookbackBlocks, maxAttempts, blockTag = "finalized" } = this.config;
+		const { l1, lookbackBlocks, maxAttempts, blockTag = "finalized" } = this.config;
 		const { db } = indexer;
 		const head = Number((await l1.getBlock({ blockTag })).number);
 		let from = Number(db.getState("nextL1Block") ?? -1);

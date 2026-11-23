@@ -7,6 +7,8 @@
 //
 // It implements OPL2Reader so a real RegistrarIndexer can index it.
 
+import { EthStorage } from "@ensdomains/merkle-builder";
+import type { BlockWitness, L2BlockRef, OPL2Reader, RegistrarChange } from "@primary-name-gateway/registrar-indexer";
 import {
 	applyChange,
 	hashOutputRootProof,
@@ -14,8 +16,6 @@ import {
 	PLAIN_LAYOUT,
 	type RegistrarLayout,
 } from "@primary-name-gateway/shared";
-import type { BlockWitness, L2BlockRef, OPL2Reader, RegistrarChange } from "@primary-name-gateway/registrar-indexer";
-import { EthStorage } from "@ensdomains/merkle-builder";
 import {
 	type Address,
 	concat,

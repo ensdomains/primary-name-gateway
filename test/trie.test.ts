@@ -1,8 +1,8 @@
 // trie rows: snapshots, patches and row-walked proofs must match merkle-builder exactly
 
 import { describe, expect, test } from "bun:test";
-import { diffRows, proveSlot, rootHash, type TrieRow, trieRows } from "@primary-name-gateway/shared";
 import { EthStorage } from "@ensdomains/merkle-builder";
+import { diffRows, proveSlot, rootHash, type TrieRow, trieRows } from "@primary-name-gateway/shared";
 import { bytesToHex, hexToBytes } from "viem";
 
 // deterministic PRNG
@@ -51,7 +51,10 @@ describe("trie rows", () => {
 					const slot = slotOf(Math.floor(random() * universe));
 					const r = random();
 					// ~30% deletes, rest random words of varying length
-					const value = r < 0.3 ? new Uint8Array(0) : Uint8Array.from({ length: 1 + Math.floor(r * 32) }, () => 1 + Math.floor(random() * 255));
+					const value =
+						r < 0.3
+							? new Uint8Array(0)
+							: Uint8Array.from({ length: 1 + Math.floor(r * 32) }, () => 1 + Math.floor(random() * 255));
 					storage.setStorage(slot, value);
 				}
 				apply(table, diffRows(prev, storage.node));

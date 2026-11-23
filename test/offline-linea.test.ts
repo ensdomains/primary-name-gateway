@@ -14,10 +14,10 @@
 
 import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { IndexerDB, LineaCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
-import { coinTypeFromChainId, type LineaDeployment, type RegistrarLayout } from "@primary-name-gateway/shared";
 import { Foundry } from "@adraffy/blocksmith";
 import { serveEZCCIP } from "@adraffy/ezccip/serve";
+import { IndexerDB, LineaCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
+import { coinTypeFromChainId, type LineaDeployment, type RegistrarLayout } from "@primary-name-gateway/shared";
 import {
 	type Address,
 	createPublicClient,
@@ -25,8 +25,8 @@ import {
 	encodeFunctionData,
 	http,
 	namehash,
-	parseAbi,
 	type PublicClient,
+	parseAbi,
 	toHex,
 } from "viem";
 import { packetToBytes } from "viem/ens";

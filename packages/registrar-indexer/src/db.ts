@@ -2,7 +2,14 @@ import { Database } from "bun:sqlite";
 import type { Change, Commit, CommitStatus } from "@primary-name-gateway/shared";
 import { type Address, bytesToHex, type Hex, hexToBytes } from "viem";
 
-type ChangeRow = { seq: number; block: number; log_index: number; kind: Change["kind"]; addr: string; name: Uint8Array };
+type ChangeRow = {
+	seq: number;
+	block: number;
+	log_index: number;
+	kind: Change["kind"];
+	addr: string;
+	name: Uint8Array;
+};
 
 const SCHEMA = "2";
 

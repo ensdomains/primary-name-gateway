@@ -166,10 +166,11 @@ export class OPCommitSource implements CommitSource {
 		// only snapshot final L2 state: the change log is append-only
 		const finalized = await l2.finalizedBlock();
 		if (claim.kind === "output" ? claim.l2BlockNumber > finalized.number : claim.timestamp > finalized.timestamp) {
-			throw new NotFinalizedError(`claims L2 ${claim.kind === "output" ? `block ${claim.l2BlockNumber}` : `time ${claim.timestamp}`}, finalized is block ${finalized.number}`);
+			throw new NotFinalizedError(
+				`claims L2 ${claim.kind === "output" ? `block ${claim.l2BlockNumber}` : `time ${claim.timestamp}`}, finalized is block ${finalized.number}`,
+			);
 		}
-		const l2Block =
-			claim.kind === "output" ? Number(claim.l2BlockNumber) : await l2.blockAtTimestamp(claim.timestamp);
+		const l2Block = claim.kind === "output" ? Number(claim.l2BlockNumber) : await l2.blockAtTimestamp(claim.timestamp);
 
 		// the parts of the proof that can't be rebuilt from events (must be fetched while L2 state is available)
 		const witness = await l2.getBlockWitness(l2Block);
@@ -214,7 +215,13 @@ export class OPCommitSource implements CommitSource {
 	private async isAcceptable(c: OPCommit, blockTag: BlockTag, time: number): Promise<boolean> {
 		const { l1, deployment, minAgeSec = 0 } = this.config;
 		const asr = deployment.AnchorStateRegistry;
-		const valid = await l1.readContract({ address: asr, abi: ASR_ABI, functionName: "isGameClaimValid", args: [c.game], blockTag });
+		const valid = await l1.readContract({
+			address: asr,
+			abi: ASR_ABI,
+			functionName: "isGameClaimValid",
+			args: [c.game],
+			blockTag,
+		});
 		if (valid) return true;
 		if (!minAgeSec) return false;
 		const [proper, respected, status] = await Promise.all([
@@ -227,7 +234,12 @@ export class OPCommitSource implements CommitSource {
 		if (c.createdAt + minAgeSec > time) return false;
 		try {
 			if (c.gameType === GAME_TYPE_AGGREGATE_VERIFIER) {
-				const n = await l1.readContract({ address: c.game, abi: GAME_ABI, functionName: "counteredByIntermediateRootIndexPlusOne", blockTag });
+				const n = await l1.readContract({
+					address: c.game,
+					abi: GAME_ABI,
+					functionName: "counteredByIntermediateRootIndexPlusOne",
+					blockTag,
+				});
 				return n === 0n;
 			}
 			return (await l1.readContract({ address: c.game, abi: GAME_ABI, functionName: "claimDataLen", blockTag })) === 1n;

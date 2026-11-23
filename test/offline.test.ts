@@ -11,10 +11,10 @@
 
 import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
-import { coinTypeFromChainId, type OPDeployment, PLAIN_LAYOUT } from "@primary-name-gateway/shared";
 import { Foundry } from "@adraffy/blocksmith";
 import { serveEZCCIP } from "@adraffy/ezccip/serve";
+import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
+import { coinTypeFromChainId, type OPDeployment, PLAIN_LAYOUT } from "@primary-name-gateway/shared";
 import {
 	type Address,
 	createPublicClient,
@@ -24,8 +24,8 @@ import {
 	http,
 	keccak256,
 	namehash,
-	parseAbi,
 	type PublicClient,
+	parseAbi,
 	stringToHex,
 	toHex,
 } from "viem";

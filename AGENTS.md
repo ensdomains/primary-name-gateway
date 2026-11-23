@@ -16,12 +16,13 @@ Notes for coding agents working in this repo. Read [README.md](README.md) first 
 ```sh
 bun i                      # bunfig.toml uses the hoisted linker; don't change it
 bun run check              # tsc
+bun run lint               # biome (lint:fix applies fixes and formatting)
 bun run test               # forge build + property tests + both offline e2es + forge tests
 bun run test:mainnet       # needs a running indexer (either chain) with a valid commit, and .env keys
 bun run indexer:linea      # / gateway:linea: Linea on :8101 / :8201 (indexer:base / gateway:base: Base on :8102 / :8202)
 ```
 
-Run `bun run check` and `bun run test` before finishing a change.
+Run `bun run check`, `bun run lint` and `bun run test` before finishing a change.
 
 ## Invariants
 
@@ -37,7 +38,7 @@ Run `bun run check` and `bun run test` before finishing a change.
 
 ## Style
 
-- TypeScript: ESM, tabs, viem for encoding/RPC, explicit `.js` extensions on relative imports.
+- TypeScript: ESM, viem for encoding/RPC, explicit `.js` extensions on relative imports; formatting and import order are Biome's (`biome.json`).
 - Solidity 0.8.33 with via-IR, 4-space indent, custom errors.
 - Don't vendor AGPL code (Linea's `SparseMerkleProof.sol` is AGPL; `LineaTrie.sol` is an independent implementation). Vendored files keep their header and get an entry in `packages/contracts/src/lib/README.md`.
 - Keep comments short and about why, not what.

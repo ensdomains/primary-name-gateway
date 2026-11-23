@@ -8,16 +8,16 @@
 // through CCIP-Read and compares against the L2ReverseRegistrar at the same L2 block.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { serveEZCCIP } from "@adraffy/ezccip/serve";
 import {
 	type Change,
+	coinTypeFromChainId,
 	createClient,
 	DEPLOYMENTS,
 	type Deployment,
-	coinTypeFromChainId,
 	type IndexerStatus,
 	rpcURL,
 } from "@primary-name-gateway/shared";
-import { serveEZCCIP } from "@adraffy/ezccip/serve";
 import {
 	type Abi,
 	type Address,
@@ -28,8 +28,8 @@ import {
 	type Hex,
 	http,
 	namehash,
-	parseAbi,
 	type PublicClient,
+	parseAbi,
 	toHex,
 	type WalletClient,
 } from "viem";
@@ -181,7 +181,10 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 		if (all.length <= limit) return all;
 		const long = all.filter(([, n]) => (n.length - 2) / 2 >= 32).slice(0, limit / 2);
 		let seed = 1;
-		const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff), seed / 0x80000000);
+		const rand = () => {
+			seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+			return seed / 0x80000000;
+		};
 		const rest = all.filter(() => rand() < (limit - long.length) / all.length);
 		return [...long, ...rest];
 	}

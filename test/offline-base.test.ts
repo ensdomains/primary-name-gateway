@@ -10,10 +10,10 @@
 
 import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
-import { coinTypeFromChainId, type OPDeployment, OWNABLE_LAYOUT } from "@primary-name-gateway/shared";
 import { Foundry } from "@adraffy/blocksmith";
 import { serveEZCCIP } from "@adraffy/ezccip/serve";
+import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
+import { coinTypeFromChainId, type OPDeployment, OWNABLE_LAYOUT } from "@primary-name-gateway/shared";
 import {
 	type Address,
 	concat,
@@ -25,8 +25,8 @@ import {
 	keccak256,
 	namehash,
 	numberToHex,
-	parseAbi,
 	type PublicClient,
+	parseAbi,
 	stringToHex,
 	toHex,
 	zeroAddress,
@@ -76,7 +76,11 @@ describe("offline e2e (base: output root games, Ownable layout)", () => {
 		foundry = await Foundry.launch({ root: `${import.meta.dir}/../packages/contracts`, infoLog: false });
 		l1 = createPublicClient({ transport: http(`http://127.0.0.1:${foundry.port}`) });
 		asr = await foundry.deploy({ file: "MockOP", contract: "MockAnchorStateRegistry", args: [GAME_TYPE] });
-		factory = await foundry.attach({ to: await asr.disputeGameFactory(), file: "MockOP", contract: "MockDisputeGameFactory" });
+		factory = await foundry.attach({
+			to: await asr.disputeGameFactory(),
+			file: "MockOP",
+			contract: "MockDisputeGameFactory",
+		});
 
 		rollup = new FakeOPRollup(CHAIN_ID, REGISTRAR, Math.floor(Date.now() / 1000) - 3600, 2, [], OWNABLE_LAYOUT);
 		const deployment: OPDeployment = {
@@ -116,7 +120,10 @@ describe("offline e2e (base: output root games, Ownable layout)", () => {
 		});
 		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });
 
-		const verifier = await foundry.deploy({ file: "OPFaultVerifier", args: [asr.target, CHAIN_ID, MAX_SEQUENCE_LAG, 0] });
+		const verifier = await foundry.deploy({
+			file: "OPFaultVerifier",
+			args: [asr.target, CHAIN_ID, MAX_SEQUENCE_LAG, 0],
+		});
 		const r = await foundry.deploy({
 			file: "L2ReverseResolver",
 			args: [verifier.target, REGISTRAR, OWNABLE_LAYOUT.namesSlot, COIN_TYPE, [ccip.endpoint]],
@@ -135,7 +142,11 @@ describe("offline e2e (base: output root games, Ownable layout)", () => {
 	// an output root game for a block, with AggregateVerifier-style extraData
 	async function propose({ outputRoot, block = rollup.head }: { outputRoot?: Hex; block?: FakeBlock } = {}) {
 		const parent = games.at(-1)?.address ?? zeroAddress;
-		const extraData = concat([numberToHex(block.number, { size: 32 }), parent, keccak256(stringToHex(`intermediate ${block.number}`))]);
+		const extraData = concat([
+			numberToHex(block.number, { size: 32 }),
+			parent,
+			keccak256(stringToHex(`intermediate ${block.number}`)),
+		]);
 		const gameIndex = Number(await factory.gameCount());
 		await foundry.confirm(factory.create(GAME_TYPE, outputRoot ?? block.outputRoot, extraData, block.number));
 		const [, , address] = await factory.gameAtIndex(gameIndex);

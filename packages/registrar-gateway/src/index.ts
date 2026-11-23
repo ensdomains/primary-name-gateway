@@ -1,6 +1,5 @@
 // runtime-agnostic: no bun / node imports (usable from a Cloudflare Durable Object)
 import { EZCCIP } from "@adraffy/ezccip";
-import type { Hex } from "viem";
 import type { RegistrarGateway } from "./gateway.js";
 
 export { type GatewayConfig, type GatewayStats, RegistrarGateway } from "./gateway.js";

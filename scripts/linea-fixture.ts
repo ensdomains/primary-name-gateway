@@ -4,7 +4,16 @@
 //   bun scripts/linea-fixture.ts
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dataSlots, LINEA_MAINNET, primarySlot, REGISTRAR_ABI, rpcURL } from "@primary-name-gateway/shared";
-import { createPublicClient, decodeAbiParameters, getAbiItem, type Hex, http, numberToHex, parseAbi, toHex } from "viem";
+import {
+	createPublicClient,
+	decodeAbiParameters,
+	getAbiItem,
+	type Hex,
+	http,
+	numberToHex,
+	parseAbi,
+	toHex,
+} from "viem";
 
 const d = LINEA_MAINNET;
 const l1 = createPublicClient({ transport: http(rpcURL(d.l1)) });
@@ -13,7 +22,11 @@ const ROLLUP_ABI = parseAbi([
 	"function currentL2BlockNumber() view returns (uint256)",
 	"function stateRootHashes(uint256) view returns (bytes32)",
 ]);
-const l2Block = await l1.readContract({ address: d.LineaRollup, abi: ROLLUP_ABI, functionName: "currentL2BlockNumber" });
+const l2Block = await l1.readContract({
+	address: d.LineaRollup,
+	abi: ROLLUP_ABI,
+	functionName: "currentL2BlockNumber",
+});
 const stateRoot = await l1.readContract({
 	address: d.LineaRollup,
 	abi: ROLLUP_ABI,

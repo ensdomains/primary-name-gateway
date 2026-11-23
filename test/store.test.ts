@@ -9,7 +9,10 @@ import { bunSqliteAdapter } from "../packages/registrar-gateway/src/sqlite.js";
 
 test("memory and sql stores match an unpruned reference", () => {
 	let seed = 7;
-	const random = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff), seed / 0x7fffffff);
+	const random = () => {
+		seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+		return seed / 0x7fffffff;
+	};
 	const db = new Database(":memory:");
 	const stores: NodeStore[] = [new MemoryNodeStore(), new SqlNodeStore(bunSqliteAdapter(db))];
 	const paths = Array.from({ length: 40 }, (_, i) => i.toString(16));
@@ -34,7 +37,10 @@ test("memory and sql stores match an unpruned reference", () => {
 			version += 1 + Math.floor(random() * 3);
 			const rows: TrieRow[] = paths
 				.filter(() => random() < 0.2)
-				.map((path) => ({ path, node: random() < 0.25 ? null : (`0x${(step + 1).toString(16).padStart(4, "0")}` as Hex) }));
+				.map((path) => ({
+					path,
+					node: random() < 0.25 ? null : (`0x${(step + 1).toString(16).padStart(4, "0")}` as Hex),
+				}));
 			for (const s of stores) s.put(version, rows);
 			history.push({ version, rows });
 		} else if (r < 0.85) {
@@ -52,7 +58,9 @@ test("memory and sql stores match an unpruned reference", () => {
 			// floor: the greatest live path below `before`
 			const before = random() < 0.1 ? "z" : paths[Math.floor(random() * paths.length)];
 			const live = paths.filter((p, i) => p < before && want[i] !== undefined).sort();
-			const floor = live.length ? { path: live[live.length - 1], node: want[paths.indexOf(live[live.length - 1])] as Hex } : undefined;
+			const floor = live.length
+				? { path: live[live.length - 1], node: want[paths.indexOf(live[live.length - 1])] as Hex }
+				: undefined;
 			for (const s of stores) {
 				const f = s.floor("", before, v);
 				expect(f && { path: f.path, node: bytesToHex(f.node) }).toEqual(floor);

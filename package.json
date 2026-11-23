@@ -18,10 +18,13 @@
 		"gateway:linea": "GATEWAY_CHAIN=linea INDEXER_URL=http://localhost:8101 GATEWAY_PORT=8201 bun packages/registrar-gateway/src/main.ts",
 		"fixture:linea": "bun scripts/linea-fixture.ts",
 		"indexer:base": "INDEXER_CHAIN=base INDEXER_PORT=8102 bun packages/registrar-indexer/src/index.ts",
-		"gateway:base": "GATEWAY_CHAIN=base INDEXER_URL=http://localhost:8102 GATEWAY_PORT=8202 bun packages/registrar-gateway/src/main.ts"
+		"gateway:base": "GATEWAY_CHAIN=base INDEXER_URL=http://localhost:8102 GATEWAY_PORT=8202 bun packages/registrar-gateway/src/main.ts",
+		"lint": "biome check",
+		"lint:fix": "biome check --write"
 	},
 	"devDependencies": {
 		"@adraffy/blocksmith": "^0.1.60",
+		"@biomejs/biome": "2.6.8",
 		"@types/bun": "^1.4.5",
 		"typescript": "^7.0.2"
 	}

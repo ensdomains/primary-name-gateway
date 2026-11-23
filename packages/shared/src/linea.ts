@@ -217,7 +217,10 @@ export class LineaTrie {
 			indices = parents;
 		}
 		for (const [hex, index] of this.#keys) {
-			rows.push({ path: lineaKeyPath(hexToBytes(hex)), node: index === null ? null : bytesToHex(numberToBytes(index, { size: 8 })) });
+			rows.push({
+				path: lineaKeyPath(hexToBytes(hex)),
+				node: index === null ? null : bytesToHex(numberToBytes(index, { size: 8 })),
+			});
 		}
 		this.#keys.clear();
 		if (dirty.length) rows.push({ path: LINEA_ROOT_PATH, node: bytesToHex(this.#rootNode()) });
@@ -251,7 +254,10 @@ export class LineaTrie {
 		}
 		const leaf = this.#leaves.get(index)!;
 		nodes.push(encodeLeaf(leaf));
-		return { leafIndex: index, proof: { value: bytesToHex(leaf.value), proofRelatedNodes: nodes.map((x) => bytesToHex(x)) } };
+		return {
+			leafIndex: index,
+			proof: { value: bytesToHex(leaf.value), proofRelatedNodes: nodes.map((x) => bytesToHex(x)) },
+		};
 	}
 
 	// every row of the current trie (after flush())
@@ -262,7 +268,8 @@ export class LineaTrie {
 			yield { path: lineaLeafPath(index), node: bytesToHex(concat([encodeLeaf(leaf), leaf.value])) };
 		}
 		for (let level = 0; level < LINEA_DEPTH; level++) {
-			for (const [index, hash] of this.#nodes[level]) yield { path: lineaNodePath(level, index), node: bytesToHex(hash) };
+			for (const [index, hash] of this.#nodes[level])
+				yield { path: lineaNodePath(level, index), node: bytesToHex(hash) };
 		}
 		for (const [hex, index] of this.#indexOf) {
 			yield { path: lineaKeyPath(hexToBytes(hex)), node: bytesToHex(numberToBytes(index, { size: 8 })) };
@@ -454,7 +461,8 @@ export function lineaMultiProofRoot(p: LineaMultiProof): Hex {
 		h = nh;
 	}
 	const top = hexToBytes(p.top);
-	if (s !== p.siblings.length || bytesToHex(h[0]) !== bytesToHex(top.subarray(64))) throw new Error("invalid multiproof");
+	if (s !== p.siblings.length || bytesToHex(h[0]) !== bytesToHex(top.subarray(64)))
+		throw new Error("invalid multiproof");
 	return bytesToHex(poseidon2(top));
 }
 

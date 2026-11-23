@@ -34,7 +34,12 @@ function createSource(deployment: Deployment, log: Log): { l2: ChangeReader; sou
 	const l1 = createClient(deployment.l1);
 	const maxAttempts = Number(env.INDEXER_MAX_ATTEMPTS ?? 5);
 	if (deployment.kind === "op") {
-		const l2 = new RPCOPReader(deployment, createClient(deployment.l2, "logs"), createClient(deployment.l2, "proof"), log);
+		const l2 = new RPCOPReader(
+			deployment,
+			createClient(deployment.l2, "logs"),
+			createClient(deployment.l2, "proof"),
+			log,
+		);
 		const source = new OPCommitSource({
 			deployment,
 			l1,
@@ -48,7 +53,12 @@ function createSource(deployment: Deployment, log: Log): { l2: ChangeReader; sou
 		});
 		return { l2, source };
 	}
-	const l2 = new RPCLineaReader(deployment, createClient(deployment.l2, "logs"), createClient(deployment.l2, "proof"), log);
+	const l2 = new RPCLineaReader(
+		deployment,
+		createClient(deployment.l2, "logs"),
+		createClient(deployment.l2, "proof"),
+		log,
+	);
 	const source = new LineaCommitSource({
 		deployment,
 		l1,

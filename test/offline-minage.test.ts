@@ -6,11 +6,20 @@
 
 import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
-import { coinTypeFromChainId, type OPDeployment, PLAIN_LAYOUT } from "@primary-name-gateway/shared";
 import { Foundry } from "@adraffy/blocksmith";
 import { serveEZCCIP } from "@adraffy/ezccip/serve";
-import { type Address, concat, createPublicClient, http, numberToHex, parseAbi, type PublicClient, zeroAddress } from "viem";
+import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
+import { coinTypeFromChainId, type OPDeployment, PLAIN_LAYOUT } from "@primary-name-gateway/shared";
+import {
+	type Address,
+	concat,
+	createPublicClient,
+	http,
+	numberToHex,
+	type PublicClient,
+	parseAbi,
+	zeroAddress,
+} from "viem";
 import { createEZCCIP, RegistrarGateway, SqlNodeStore } from "../packages/registrar-gateway/src/index.js";
 import { bunSqliteAdapter } from "../packages/registrar-gateway/src/sqlite.js";
 import { FakeOPRollup } from "./fake-rollup.js";
@@ -46,7 +55,11 @@ describe.each([
 		foundry = await Foundry.launch({ root: `${import.meta.dir}/../packages/contracts`, infoLog: false });
 		l1 = createPublicClient({ transport: http(`http://127.0.0.1:${foundry.port}`) });
 		asr = await foundry.deploy({ file: "MockOP", contract: "MockAnchorStateRegistry", args: [gameType] });
-		factory = await foundry.attach({ to: await asr.disputeGameFactory(), file: "MockOP", contract: "MockDisputeGameFactory" });
+		factory = await foundry.attach({
+			to: await asr.disputeGameFactory(),
+			file: "MockOP",
+			contract: "MockDisputeGameFactory",
+		});
 		rollup = new FakeOPRollup(chainId, REGISTRAR, Math.floor(Date.now() / 1000) - 3600);
 		const deployment: OPDeployment = {
 			kind: "op",
@@ -145,7 +158,11 @@ describe.each([
 	test("a challenged game stops being accepted", async () => {
 		const [commit] = gateway.commits;
 		const { proof } = gateway.proveName(ADDR);
-		const game = await foundry.attach({ to: (commit as { game: Address }).game, file: "MockOP", contract: "MockDisputeGame" });
+		const game = await foundry.attach({
+			to: (commit as { game: Address }).game,
+			file: "MockOP",
+			contract: "MockDisputeGame",
+		});
 		await foundry.confirm(game.challenge());
 		await expect(
 			l1.readContract({ address: early, abi: RESOLVER_ABI, functionName: "verifyName", args: [ADDR, proof] }),

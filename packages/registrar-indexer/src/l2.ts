@@ -85,7 +85,8 @@ export class RPCChangeReader implements ChangeReader {
 					return { ...at, kind: "name", addr: log.args.addr, name };
 				});
 				// sparse again after a dense stretch: grow back
-				if (logs.length < 100 && this.logStep < this.maxLogStep) this.logStep = Math.min(this.maxLogStep, this.logStep * 2);
+				if (logs.length < 100 && this.logStep < this.maxLogStep)
+					this.logStep = Math.min(this.maxLogStep, this.logStep * 2);
 				return { changes, toBlock: end };
 			} catch (err) {
 				if (this.logStep <= 1000) throw err;
