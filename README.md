@@ -55,7 +55,7 @@ bun i
 cd packages/contracts && forge build
 ```
 
-`.env` (see [`.env.sample`](.env.sample)): any of `DRPC_KEY`, `ALCHEMY_KEY`, `INFURA_KEY`, or `RPC_URL_<chainId>` / `PROOF_RPC_URL_<chainId>`. Logs and general calls prefer drpc, then Infura; proofs prefer Alchemy (archive state). Infura serves `getLogs` over at most 10,000 blocks and proofs only near the head, so it can't do the OP / Base lookback alone.
+`.env` (see [`.env.sample`](.env.sample)): any of `DRPC_KEY`, `ALCHEMY_KEY`, `INFURA_KEY`, or `RPC_URL_<chainId>` / `PROOF_RPC_URL_<chainId>`. [docs/rpc.md](docs/rpc.md) covers which provider is used for what, their known limits, and every environment variable.
 
 ## Run
 
@@ -70,7 +70,7 @@ bun run gateway:base     # :8202
 
 Indexer API: `GET /status`, `/commits?status=valid&limit=2`, `/commits/:id`, `/snapshot?commit=ID&after=PATH`, `/patch?from=A&to=B`, `/changes?after=&until=`.
 
-Env: `INDEXER_CHAIN`, `INDEXER_PORT`, `INDEXER_MIN_AGE_SEC` (OP/Base: accept unchallenged games this old, must match the verifier), `INDEXER_DB`, `INDEXER_POLL_MS`, `INDEXER_MAX_ATTEMPTS`, `GATEWAY_CHAIN`, `GATEWAY_PORT`, `GATEWAY_DB`, `GATEWAY_KEEP`, `GATEWAY_MARGIN_SEC`, `GATEWAY_POLL_MS`, plus chain-specific settings in the chain docs.
+Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
 
 ## Test
 

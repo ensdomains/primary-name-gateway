@@ -39,7 +39,7 @@ Base's registrar is `L2ReverseRegistrarWithMigration` (Ownable), so its storage 
 - The 6-day lookback needs archive `eth_getProof` on Base (Alchemy serves it; drpc doesn't that far back).
 - Base's L2 finalized head trails its tip by about 3 hours. Games for blocks above it are deferred until it catches up ([optimism.md#reorgs](optimism.md#reorgs)).
 - `mainnet.base.org` rate limits `eth_getLogs`, so there is no public RPC fallback: set `DRPC_KEY` or `INFURA_KEY` for logs.
-- The registrar's history has very dense stretches (the migration's `batchSetName`: over 12,000 events in ~120 blocks), past what providers return per request (drpc: 20,000 results). The reader shrinks its range down to a single block when needed, and grows it back once events are sparse.
+- The registrar's history has very dense stretches (the migration's `batchSetName`: over 12,000 events in ~120 blocks), past what providers return per request (drpc: 20,000 results). The reader shrinks its range down to a single block when needed, and grows it back once events are sparse ([rpc.md](rpc.md)).
 
 ```sh
 bun run indexer:base   # :8102
