@@ -3,7 +3,16 @@
 // https://specs.optimism.io/protocol/derivation.html#batch-format
 // https://specs.optimism.io/protocol/delta/span-batches.html
 
-import { bytesToBigInt, bytesToHex, encodeAbiParameters, type Hex } from "viem";
+import {
+	bytesToBigInt,
+	bytesToHex,
+	encodeAbiParameters,
+	type Hex,
+	hexToBytes,
+	keccak256,
+	numberToHex,
+	toRlp,
+} from "viem";
 
 export type BatchPrefix =
 	| {
@@ -168,4 +177,69 @@ export function encodeOPBatchInboxCommitProof(p: OPBatchInboxCommitProof): Hex {
 		],
 		[{ ...p, txIndex: BigInt(p.txIndex), blobIndex: BigInt(p.blobIndex) }],
 	);
+}
+
+// Field elements (whole rounds of 4) that carry a channel's first `compressedBytes` brotli bytes:
+// 4 bytes of blob header, 24 of batcher data (version, frame header, channel version), then the stream.
+export function fieldElementsFor(compressedBytes: number): number {
+	return 4 * Math.ceil((4 + 24 + compressedBytes) / 127);
+}
+
+// A block's transactions trie (keys rlp(index), values the raw transactions) and the proof of one.
+export function transactionsTrieProof(raw: Hex[], index: number): { root: Hex; proof: Hex[] } {
+	const items = raw.map((value, i) => ({ key: nibbles(hexToBytes(toRlp(i ? numberToHex(i) : "0x"))), value }));
+	const { enc, path } = buildTrie(items, 0, items[index].key);
+	return { root: keccak256(enc), proof: path };
+}
+
+type Rlp = Hex | Rlp[];
+
+function nibbles(b: Uint8Array): number[] {
+	return [...b].flatMap((x) => [x >> 4, x & 15]);
+}
+
+// hex-prefix encoding: flag nibble (leaf 2, odd length 1), then the path
+function compactPath(path: number[], leaf: boolean): Hex {
+	const odd = path.length & 1;
+	const flag = ((leaf ? 2 : 0) + odd) << 4;
+	const rest = odd ? path.slice(1) : path;
+	const bytes = [odd ? flag | path[0] : flag];
+	for (let i = 0; i < rest.length; i += 2) bytes.push((rest[i] << 4) | rest[i + 1]);
+	return bytesToHex(Uint8Array.from(bytes));
+}
+
+// the node over `items` (keys from `depth`) and, for `target`, the encoded nodes from it down
+function buildTrie(
+	items: { key: number[]; value: Hex }[],
+	depth: number,
+	target: number[] | undefined,
+): { node: Rlp; enc: Hex; path: Hex[] } {
+	const done = (node: Rlp, below: Hex[] = []) => {
+		const enc = toRlp(node as never) as Hex;
+		return { node, enc, path: target ? [enc, ...below] : [] };
+	};
+	if (items.length === 1) return done([compactPath(items[0].key.slice(depth), true), items[0].value]);
+	// a child under 32 bytes is embedded, otherwise referenced by hash
+	const ref = (c: { node: Rlp; enc: Hex }) => ((c.enc.length - 2) / 2 < 32 ? c.node : keccak256(c.enc));
+	let n = 0;
+	while (items.every((x) => x.key.length > depth + n && x.key[depth + n] === items[0].key[depth + n])) n++;
+	if (n > 0) {
+		const child = buildTrie(items, depth + n, target);
+		return done([compactPath(items[0].key.slice(depth, depth + n), false), ref(child)], child.path);
+	}
+	const branch: Rlp[] = [];
+	let below: Hex[] = [];
+	for (let i = 0; i < 16; i++) {
+		const group = items.filter((x) => x.key[depth] === i);
+		if (!group.length) {
+			branch.push("0x");
+			continue;
+		}
+		const t = target && target[depth] === i ? target : undefined;
+		const child = buildTrie(group, depth + 1, t);
+		if (t) below = child.path;
+		branch.push(ref(child));
+	}
+	branch.push("0x"); // keys are never prefixes of each other: no branch values
+	return done(branch, below);
 }

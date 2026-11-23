@@ -1,10 +1,12 @@
 import {
 	type Change,
 	type Deployment,
+	type InboxDeployment,
 	L2_TO_L1_MESSAGE_PASSER,
 	type LineaPathProof,
 	type OPDeployment,
 	REGISTRAR_ABI,
+	type RpcBlockHeader,
 } from "@primary-name-gateway/shared";
 import { type Address, decodeAbiParameters, getAbiItem, type Hex, numberToHex, type PublicClient } from "viem";
 
@@ -36,6 +38,14 @@ export interface OPL2Reader extends ChangeReader {
 	blockAtTimestamp(timestamp: bigint): Promise<number>;
 	// must be called while the L2 still has state for `block` (soon after the commit is proposed)
 	getBlockWitness(block: number): Promise<BlockWitness>;
+}
+
+export interface InboxL2Reader extends ChangeReader {
+	finalizedBlock(): Promise<L2BlockRef>;
+	// a block's header fields, by number or hash
+	header(block: number | Hex): Promise<RpcBlockHeader>;
+	// the registrar's account at `block`
+	account(block: number): Promise<{ accountProof: Hex[]; storageHash: Hex }>;
 }
 
 export interface LineaL2Reader extends ChangeReader {
@@ -166,5 +176,40 @@ export class RPCLineaReader extends RPCChangeReader implements LineaL2Reader {
 			params: [this.registrar, [], numberToHex(block)],
 		});
 		return accountProof;
+	}
+}
+
+export class RPCInboxReader extends RPCChangeReader implements InboxL2Reader {
+	constructor(
+		override readonly deployment: InboxDeployment,
+		logsClient: PublicClient,
+		readonly proofClient: PublicClient, // eth_getProof
+		log?: (...args: unknown[]) => void,
+	) {
+		super(deployment, logsClient, log);
+	}
+
+	async finalizedBlock(): Promise<L2BlockRef> {
+		const b = await this.logsClient.getBlock({ blockTag: "finalized" });
+		return { number: Number(b.number), timestamp: Number(b.timestamp) };
+	}
+
+	async header(block: number | Hex): Promise<RpcBlockHeader> {
+		const byHash = typeof block === "string";
+		const h = (await this.proofClient.request({
+			method: byHash ? "eth_getBlockByHash" : "eth_getBlockByNumber",
+			params: [byHash ? block : numberToHex(block), false],
+		} as never)) as RpcBlockHeader | null;
+		if (!h) throw new Error(`no L2 block ${block}`);
+		return h;
+	}
+
+	async account(block: number): Promise<{ accountProof: Hex[]; storageHash: Hex }> {
+		const { accountProof, storageHash } = await this.proofClient.getProof({
+			address: this.registrar,
+			storageKeys: [],
+			blockNumber: BigInt(block),
+		});
+		return { accountProof, storageHash };
 	}
 }

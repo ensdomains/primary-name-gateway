@@ -2,22 +2,28 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { createClient, DEPLOYMENTS, type Deployment, redactURL, rpcURL } from "@primary-name-gateway/shared";
 import { IndexerDB } from "./db.js";
+import { InboxCommitSource } from "./inbox.js";
 import { type CommitSource, type IndexerConfig, RegistrarIndexer } from "./indexer.js";
-import { type ChangeReader, RPCLineaReader, RPCOPReader } from "./l2.js";
+import { KZG } from "./kzg.js";
+import { type ChangeReader, RPCInboxReader, RPCLineaReader, RPCOPReader } from "./l2.js";
 import { LineaCommitSource } from "./linea.js";
 import { OPCommitSource } from "./op.js";
 import { serveIndexer } from "./server.js";
 
 export { IndexerDB } from "./db.js";
+export { InboxCommitSource, type InboxSourceConfig } from "./inbox.js";
 export { type CommitSource, type IndexerConfig, NotFinalizedError, RegistrarIndexer, SyncError } from "./indexer.js";
+export { KZG } from "./kzg.js";
 export {
 	type BlockWitness,
 	type ChangeReader,
+	type InboxL2Reader,
 	type L2BlockRef,
 	type LineaL2Reader,
 	type OPL2Reader,
 	type RegistrarChange,
 	RPCChangeReader,
+	RPCInboxReader,
 	RPCLineaReader,
 	RPCOPReader,
 } from "./l2.js";
@@ -54,6 +60,31 @@ function createSource(deployment: Deployment, log: Log): { l2: ChangeReader; sou
 		});
 		return { l2, source };
 	}
+	if (deployment.kind === "inbox") {
+		const l2 = new RPCInboxReader(
+			deployment,
+			createClient(deployment.l2, "logs"),
+			createClient(deployment.l2, "proof"),
+			log,
+		);
+		let kzg: Promise<KZG> | undefined;
+		const source = new InboxCommitSource({
+			deployment,
+			l1,
+			l2,
+			beaconURL: env.BEACON_URL ?? "https://ethereum-beacon-api.publicnode.com",
+			kzg: () => {
+				kzg ??= KZG.load(env.KZG_TRUSTED_SETUP);
+				return kzg;
+			},
+			intervalSec: Number(env.INDEXER_INBOX_INTERVAL_SEC ?? 600),
+			scanBlocks: Number(env.INDEXER_INBOX_SCAN_BLOCKS ?? 64),
+			// below the verifier's maxBlockLag (EIP-2935 keeps 8191 block hashes)
+			maxBlockLag: Number(env.INDEXER_INBOX_MAX_BLOCK_LAG ?? 7200),
+			maxAttempts,
+		});
+		return { l2, source };
+	}
 	const l2 = new RPCLineaReader(
 		deployment,
 		createClient(deployment.l2, "logs"),
@@ -78,7 +109,7 @@ if (import.meta.main) {
 	if (!deployment) throw new Error(`unknown INDEXER_CHAIN: ${chain} (${Object.keys(DEPLOYMENTS).join(", ")})`);
 	const port = Number(env.INDEXER_PORT ?? 8100);
 	const pollMs = Number(env.INDEXER_POLL_MS ?? 30_000);
-	const dbPath = env.INDEXER_DB ?? `data/${deployment.l2.name}.sqlite`;
+	const dbPath = env.INDEXER_DB ?? `data/${chain}.sqlite`;
 
 	mkdirSync(dirname(dbPath), { recursive: true });
 	const db = new IndexerDB(dbPath);

@@ -85,9 +85,18 @@ The fixtures `packages/contracts/test/fixtures/op-batch/{op,base}-blob.json` hol
 | OP Mainnet (64 field elements) | 7.6M |
 | Base | 10.0M |
 
+## Indexer and gateway
+
+`bun run indexer:base-inbox` (`INDEXER_CHAIN=base-inbox` or `optimism-inbox`) runs [inbox.ts](../packages/registrar-indexer/src/inbox.ts):
+
+- Every tick it looks back from the finalized L1 head (`INDEXER_INBOX_SCAN_BLOCKS`, 64) for the newest batcher blob that starts a channel. It makes at most one commit per `INDEXER_INBOX_INTERVAL_SEC` (600) of L1 time.
+- It builds the whole commit proof. The blob comes from a beacon API (`BEACON_URL`). The KZG proofs come from [kzg.ts](../packages/registrar-indexer/src/kzg.ts) (`@noble/curves`, about 0.25s each; the trusted setup is downloaded to `data/kzg/` and checked against its hash). It proves only as many field elements as the batch prefix needs.
+- The parent L2 block must be at or below the L2's finalized head, and its storage hash must match the replayed events, as for every commit. Commits are valid when found and invalid once their L1 block is `INDEXER_INBOX_MAX_BLOCK_LAG` (7200) blocks old, below the verifier's limit (EIP-2935 keeps 8191).
+- The gateway serves inbox commits like OP ones (Merkle-Patricia rows): `bun run gateway:base-inbox`.
+
+Checked on mainnet (2026-11-23): with its database seeded from the Base indexer's change log, the inbox indexer made its first commit about 20 seconds after starting (L1 block 26,476,802 → L2 block 61,170,215), and `INDEXER_URL=http://localhost:8103 bun run test:mainnet` resolved Base names through CCIP-Read and `OPBatchInboxVerifier` on an L1 fork: 959 of 3,713,621 names verified (250 long).
+
 ## Open
 
-- A commit source for the indexer (each new batcher transaction that starts a channel is a commit) and the gateway's proof assembly (blob field elements and KZG proofs from a beacon API).
-- OP Mainnet only needs 40 field elements: size them to the batch.
 - The batcher key is trusted. A batch whose channel never completes, or an unsafe-head reorg on the sequencer, would name a parent that never became safe. That's rare with an honest batcher, but `maxBlockLag` limits how long such a commit is accepted.
 - Batcher transactions that put several channels' frames in one blob, or start a blob with the end of a previous channel.

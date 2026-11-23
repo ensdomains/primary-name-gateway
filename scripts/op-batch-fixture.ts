@@ -21,8 +21,9 @@ import {
 	encodeBlockHeader,
 	MAINNET,
 	type RpcBlockHeader,
+	transactionsTrieProof,
 } from "@primary-name-gateway/shared";
-import { bytesToHex, type Hex, hexToBytes, keccak256, numberToHex, parseAbi, sha256, toRlp } from "viem";
+import { bytesToHex, type Hex, hexToBytes, numberToHex, parseAbi, sha256 } from "viem";
 
 const BEACON = "https://ethereum-beacon-api.publicnode.com";
 const FIELD_ELEMENTS = 64; // enough for Base's batch prefix (OP needs 40)
@@ -128,10 +129,7 @@ for (let i = 0; i < l1Raw.transactions.length; i += 25) {
 	);
 }
 const txIndex = tx.transactionIndex;
-const { root: txRoot, proof: txProof } = trieProof(
-	raws.map((value, i) => ({ key: nibbles(hexToBytes(toRlp(i ? numberToHex(i) : "0x"))), value })),
-	txIndex,
-);
+const { root: txRoot, proof: txProof } = transactionsTrieProof(raws, txIndex);
 if (txRoot !== l1Raw.transactionsRoot) throw new Error("transactions root mismatch");
 
 // -- the batch's parent L2 block, and the registrar's account proof there
@@ -182,64 +180,3 @@ const out = {
 const file = `${import.meta.dir}/../packages/contracts/test/fixtures/op-batch/${chain}-blob.json`;
 await Bun.write(file, `${JSON.stringify(out, null, "\t")}\n`);
 console.log(`wrote ${file}`);
-
-// -- a minimal Merkle-Patricia trie over raw keys (the transactions trie; merkle-builder's are storage tries)
-function nibbles(b: Uint8Array): number[] {
-	return [...b].flatMap((x) => [x >> 4, x & 15]);
-}
-
-type Rlp = Hex | Rlp[];
-
-function compact(path: number[], leaf: boolean): Hex {
-	// hex-prefix encoding: flag nibble (leaf 2, odd length 1), then the path
-	const odd = path.length & 1;
-	const flag = ((leaf ? 2 : 0) + odd) << 4;
-	const bytes = odd ? [flag | path[0], ...pairs(path.slice(1))] : [flag, ...pairs(path)];
-	return bytesToHex(Uint8Array.from(bytes));
-}
-
-function pairs(path: number[]): number[] {
-	const out: number[] = [];
-	for (let i = 0; i < path.length; i += 2) out.push((path[i] << 4) | path[i + 1]);
-	return out;
-}
-
-// returns the node and, for `target`, the encoded nodes from this one down
-function build(
-	items: { key: number[]; value: Hex }[],
-	depth: number,
-	target: number[] | undefined,
-): { node: Rlp; enc: Hex; path: Hex[] } {
-	const done = (node: Rlp, below: Hex[] = []) => {
-		const enc = toRlp(node as never) as Hex;
-		return { node, enc, path: target ? [enc, ...below] : [] };
-	};
-	if (items.length === 1) return done([compact(items[0].key.slice(depth), true), items[0].value]);
-	let n = 0;
-	while (items.every((x) => x.key.length > depth + n && x.key[depth + n] === items[0].key[depth + n])) n++;
-	const ref = (c: { node: Rlp; enc: Hex }) => ((c.enc.length - 2) / 2 < 32 ? c.node : keccak256(c.enc));
-	if (n > 0) {
-		const child = build(items, depth + n, target);
-		return done([compact(items[0].key.slice(depth, depth + n), false), ref(child)], child.path);
-	}
-	const branch: Rlp[] = [];
-	let below: Hex[] = [];
-	for (let i = 0; i < 16; i++) {
-		const group = items.filter((x) => x.key[depth] === i);
-		if (!group.length) {
-			branch.push("0x");
-			continue;
-		}
-		const t = target && target[depth] === i ? target : undefined;
-		const child = build(group, depth + 1, t);
-		if (t) below = child.path;
-		branch.push(ref(child));
-	}
-	branch.push("0x");
-	return done(branch, below);
-}
-
-function trieProof(items: { key: number[]; value: Hex }[], index: number): { root: Hex; proof: Hex[] } {
-	const { enc, path } = build(items, 0, items[index].key);
-	return { root: keccak256(enc), proof: path };
-}

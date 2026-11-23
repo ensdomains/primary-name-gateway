@@ -5,7 +5,7 @@ Notes for coding agents working in this repo. Read [README.md](README.md) first 
 ## Layout
 
 - `packages/shared`: chain config and deployments (`chains.ts`), registrar layouts and events (`registrar.ts`), OP game decoding and proof encoders (`op.ts`), Merkle-Patricia rows (`trie.ts`), Linea sparse Merkle rows and multiproofs (`linea.ts`), indexer ↔ gateway types.
-- `packages/registrar-indexer`: `RegistrarIndexer` (event replay, commits, tries of retained commits) with a `CommitSource` per chain family (`op.ts`: dispute games, `linea.ts`: finalizations), trie backends (`tries.ts`: `MPTIndexerTrie` = merkle-builder `EthRowStorage` over `SqlRowLog` in `sql-row-log.ts`, `LineaIndexerTrie` + in-memory `RowLog`), SQLite (`bun:sqlite`), HTTP API.
+- `packages/registrar-indexer`: `RegistrarIndexer` (event replay, commits, tries of retained commits) with a `CommitSource` per chain family (`op.ts`: dispute games, `linea.ts`: finalizations, `inbox.ts`: batcher blobs, with `kzg.ts`), trie backends (`tries.ts`: `MPTIndexerTrie` = merkle-builder `EthRowStorage` over `SqlRowLog` in `sql-row-log.ts`, `LineaIndexerTrie` + in-memory `RowLog`), SQLite (`bun:sqlite`), HTTP API.
 - `packages/registrar-gateway`: `NodeStore` (versioned trie rows with `get` and `floor`), `RegistrarGateway` (sync + `proveName`, per commit kind), ezccip endpoint. `src/index.ts` must stay runtime-agnostic (no bun/node imports) so it can run in a Cloudflare Durable Object; bun-only code lives in `src/main.ts` and `src/sqlite.ts`.
 - `packages/contracts`: Foundry project. `L2ReverseResolver` (ENSIP-10 + CCIP-Read), `IL2StorageVerifier` implementations `op/OPFaultVerifier` and `linea/LineaVerifier` (+ `linea/LineaTrie` multiproofs). `op/OPBatchInboxVerifier` (+ `brotli/BrotliPrefix`, `op/OPBlob`, `op/OPBatchPrefix`, `op/OPBatchInbox`) is research for a verifier from batcher posts ([docs/op-batch-inbox.md](docs/op-batch-inbox.md)). `src/lib/` is vendored; see `src/lib/README.md` before changing it.
 - `test/`: bun tests, including the fake OP rollup and fake Linea used by the offline e2es.
@@ -20,7 +20,7 @@ bun run lint               # biome (lint:fix applies fixes and formatting)
 bun run test               # forge build + property tests + both offline e2es + forge tests
 bun run test:mainnet       # needs a running indexer (either chain) with a valid commit, and .env keys
 bun run test:fork          # OPBatchInboxVerifier on L1 mainnet forks (archive RPC, fixtures < 8191 blocks old)
-bun run indexer:linea      # / gateway:linea: Linea on :8101 / :8201 (indexer:base / gateway:base: Base on :8102 / :8202)
+bun run indexer:linea      # / gateway:linea: Linea on :8101 / :8201 (indexer:base / gateway:base: Base on :8102 / :8202, :base-inbox on :8103 / :8203)
 ```
 
 Run `bun run check`, `bun run lint` and `bun run test` before finishing a change.
