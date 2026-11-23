@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IExtendedResolver, INameResolver} from "./interfaces/IExtendedResolver.sol";
+import {IExtendedResolver} from "./interfaces/IExtendedResolver.sol";
+import {INameResolver} from "./interfaces/INameResolver.sol";
 import {IL2StorageVerifier} from "./interfaces/IL2StorageVerifier.sol";
 
 /// @notice The CCIP-Read gateway interface (see packages/registrar-gateway).
