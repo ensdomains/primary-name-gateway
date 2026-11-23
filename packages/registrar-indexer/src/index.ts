@@ -9,6 +9,7 @@ import { type ChangeReader, RPCInboxReader, RPCLineaReader, RPCOPReader } from "
 import { LineaCommitSource } from "./linea.js";
 import { lockDatabase } from "./lock.js";
 import { OPCommitSource } from "./op.js";
+import { n } from "./progress.js";
 import { serveIndexer } from "./server.js";
 
 export { chunkPage, chunkPatch, type NodeSource } from "./chunks.js";
@@ -133,8 +134,8 @@ if (import.meta.main) {
 	const indexer = new RegistrarIndexer(config);
 	log(
 		indexer.changeSeq
-			? `restored ${indexer.changeSeq} changes through L2 block ${indexer.syncedBlock}`
-			: `new database: events from L2 block ${indexer.syncedBlock + 1}`,
+			? `restored ${n(indexer.changeSeq)} changes through L2 block ${n(indexer.syncedBlock)}`
+			: `new database: events from L2 block ${n(indexer.syncedBlock + 1)}`,
 	);
 	const server = serveIndexer(indexer, db, port);
 	log(`listening on ${server.url}`);

@@ -56,6 +56,11 @@ export interface LineaL2Reader extends ChangeReader {
 const NAME_CHANGED = getAbiItem({ abi: REGISTRAR_ABI, name: "NameForAddrChanged" });
 const OWNERSHIP_TRANSFERRED = getAbiItem({ abi: REGISTRAR_ABI, name: "OwnershipTransferred" });
 
+// Logs per eth_getLogs to aim for: drpc answers up to about 15,000 of the registrar's logs (20,000 is
+// refused), and a refused range can take half a minute. On Base, density ranges from 0.001 to over 3
+// logs per block, so each range is sized from the last one's density.
+const TARGET_LOGS = 5000;
+
 export class RPCChangeReader implements ChangeReader {
 	private logStep: number;
 	private maxLogStep: number;
@@ -64,7 +69,9 @@ export class RPCChangeReader implements ChangeReader {
 		readonly logsClient: PublicClient, // eth_getLogs (large ranges)
 		readonly log?: (...args: unknown[]) => void,
 	) {
-		this.logStep = this.maxLogStep = deployment.l2.logStep ?? 10000;
+		this.maxLogStep = deployment.l2.logStep ?? 10000;
+		// start small (the density is unknown) and double while sparse
+		this.logStep = Math.min(this.maxLogStep, TARGET_LOGS);
 	}
 
 	get registrar(): Address {
@@ -95,17 +102,18 @@ export class RPCChangeReader implements ChangeReader {
 					const [name] = decodeAbiParameters([{ type: "bytes" }], log.data);
 					return { ...at, kind: "name", addr: log.args.addr, name };
 				});
-				// sparse again after a dense stretch: grow back
-				if (logs.length < 100 && this.logStep < this.maxLogStep)
-					this.logStep = Math.min(this.maxLogStep, this.logStep * 2);
+				// the next range: TARGET_LOGS at this one's density, at most double (density can jump)
+				const fit = logs.length ? Math.floor(((end - fromBlock + 1) * TARGET_LOGS) / logs.length) : Infinity;
+				this.logStep = Math.max(1, Math.min(this.maxLogStep, 2 * this.logStep, fit));
 				return { changes, toBlock: end };
 			} catch (err) {
-				// range too large or too many results (providers cap results, eg. drpc at 20000): shrink and retry
+				// range too large or too many results (providers cap results, eg. drpc at 20000): shrink and retry.
+				// By 8: a refusal is slow, and a jump into a dense stretch can be 1000x; the next success resizes.
 				if (this.logStep <= 1) throw err;
 				// a fixed range limit (eg. infura: "exceeds limit of 10000"): never grow past it
 				const limit = /limit of (\d+)/.exec(String(err instanceof Error ? err.message : err))?.[1];
 				if (limit) this.maxLogStep = Math.max(1, Math.min(this.maxLogStep, Number(limit)));
-				this.logStep = Math.min(this.logStep >> 1, this.maxLogStep);
+				this.logStep = Math.max(1, Math.min(this.logStep >> 3, this.maxLogStep));
 				const why = String(err instanceof Error ? err.message : err)
 					.split("\n")[0]
 					.replace(/https?:\/\/\S+/g, "<rpc>");

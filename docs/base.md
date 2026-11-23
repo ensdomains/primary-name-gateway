@@ -42,7 +42,7 @@ Base is big enough that two storage keys share a 9-nibble prefix, so some leaves
 - The trie (about 5M rows, 730 MB) lives in the indexer's database. On first start the indexer builds it from the change log: replaying 3.77M events took 3.5 minutes with a 783 MB peak RSS on an M-series Mac (2026-11-22, defaults). The in-memory trie it replaced needed about 2.5 GB. Larger `INDEXER_FLUSH_CHANGES` builds faster but uses more memory (100,000: 2.7 minutes, 2 GB; 10,000: 6.4 minutes, 340 MB).
 - Base's L2 finalized head trails its tip by about 3 hours. Games for blocks above it are deferred until it catches up ([optimism.md#reorgs](optimism.md#reorgs)).
 - `mainnet.base.org` rate limits `eth_getLogs`, so there is no public RPC fallback: set `DRPC_KEY` or `INFURA_KEY` for logs.
-- The registrar's history has very dense stretches (the migration's `batchSetName`: over 12,000 events in ~120 blocks), past what providers return per request (drpc: 20,000 results). The reader shrinks its range down to a single block when needed, and grows it back once events are sparse ([rpc.md](rpc.md)).
+- The registrar's history has very dense stretches (the migration's `batchSetName`: over 12,000 events in ~120 blocks), past what providers return per request (drpc: 20,000 results). The reader sizes each range for about 5,000 logs from the previous range's density (at most doubling), cuts it by 8 when a provider refuses it, down to a single block if needed, and starts each run at 5,000 blocks ([rpc.md](rpc.md)). On drpc a refused range takes 5–30 s, so avoiding refusals matters more than range size: a catch-up through Base's dense stretch ran at about 10,000 blocks/s.
 
 ```sh
 bun run indexer:base   # :8102
