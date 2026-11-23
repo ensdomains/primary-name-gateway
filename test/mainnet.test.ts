@@ -14,8 +14,6 @@ import {
 	type Change,
 	coinTypeFromChainId,
 	createClient,
-	DEPLOYMENTS,
-	type Deployment,
 	type IndexerStatus,
 	rpcURL,
 } from "@primary-name-gateway/shared";
@@ -37,6 +35,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { packetToBytes } from "viem/ens";
 import { createEZCCIP, MemoryNodeStore, RegistrarGateway } from "../packages/registrar-gateway/src/index.js";
+import { deploymentOf, verifierContract } from "../scripts/verifiers.js";
 
 const INDEXER_URL = process.env.INDEXER_URL ?? "http://localhost:8100";
 const ANVIL_PORT = 8545 + Math.floor(Math.random() * 1000);
@@ -55,18 +54,18 @@ function artifact(file: string, name: string): { abi: Abi; bytecode: Hex } {
 	return { abi: json.abi, bytecode: json.bytecode.object };
 }
 
-// the indexer's deployment, if it has a valid commit
-async function indexedDeployment(): Promise<Deployment | undefined> {
+// the indexer's status, if it has a valid commit
+async function indexerStatus(): Promise<IndexerStatus | undefined> {
 	try {
 		const status = (await fetch(`${INDEXER_URL}/status`).then((r) => r.json())) as IndexerStatus;
-		if (!status.latestValid) return;
-		return Object.values(DEPLOYMENTS).find((d) => d.l2.id === status.chainId && d.kind === status.kind);
+		return status.latestValid ? status : undefined;
 	} catch {
 		return;
 	}
 }
 
-const deployment = await indexedDeployment();
+const status = await indexerStatus();
+const deployment = status && deploymentOf(status)?.[1];
 if (!deployment) console.warn(`skipping e2e: no valid commits at ${INDEXER_URL}`);
 const COIN_TYPE = deployment ? coinTypeFromChainId(deployment.l2.id) : 0n;
 
@@ -112,25 +111,8 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 			const receipt = await l1.waitForTransactionReceipt({ hash });
 			return receipt.contractAddress!;
 		};
-		const verifier =
-			d.kind === "op"
-				? await deploy(artifact("OPFaultVerifier.sol", "OPFaultVerifier"), [
-						d.AnchorStateRegistry,
-						d.l2.id,
-						86400, // maxSequenceLag: 1 day (super root games: seconds)
-						Number(process.env.INDEXER_MIN_AGE_SEC ?? 0), // minAgeSec: as the indexer
-					])
-				: d.kind === "inbox"
-					? await deploy(artifact("OPBatchInboxVerifier.sol", "OPBatchInboxVerifier"), [
-							d.SystemConfig,
-							d.BatchInbox,
-							3000, // maxOriginLag: L1 blocks (sequencing window 3600)
-							8191, // maxBlockLag: what EIP-2935 keeps
-						])
-					: await deploy(artifact("LineaVerifier.sol", "LineaVerifier"), [
-							d.LineaRollup,
-							100000, // maxBlockLag: L2 blocks (a few days)
-						]);
+		const { contract, args } = verifierContract(d, status?.minAgeSec ?? 0);
+		const verifier = await deploy(artifact(`${contract}.sol`, contract), args);
 		resolver = await deploy(artifact("L2ReverseResolver.sol", "L2ReverseResolver"), [
 			verifier,
 			d.L2ReverseRegistrar,

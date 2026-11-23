@@ -6,7 +6,7 @@ const MAX_CHANGES = 10000;
 const MAX_ROWS = 50000;
 const STATUSES = new Set<string>(["pending", "valid", "invalid"]);
 
-// GET /status
+// GET /status (chain ids, commit kind, block time, sync position, commit counts)
 // GET /commits?status=valid&limit=2        newest first
 // GET /commits/:id
 // GET /changes?after=0&until=N&limit=M       registrar events, ordered, (after, until]

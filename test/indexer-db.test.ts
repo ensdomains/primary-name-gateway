@@ -53,3 +53,23 @@ test("one indexer per database: a second is refused, a stale lock is taken over"
 		rmSync(dir, { recursive: true });
 	}
 });
+
+test("a database from before commit kinds were recorded keeps its own source's state", () => {
+	const db = new IndexerDB(":memory:");
+	db.putCommit(commit(1, "op"));
+	db.putSkipped(7, "bad game");
+	db.setState("nextGameIndex", 42);
+	expect(db.useCommitKind("op")).toBe(0); // first run with kinds: nothing to switch from
+	expect(db.getCommits(undefined, 10)).toHaveLength(1);
+	expect(db.isSkipped(7)).toBeTrue();
+	expect(db.getState("nextGameIndex")).toBe("42");
+	expect(db.getState("commitKind")).toBe("op");
+
+	const old = new IndexerDB(":memory:");
+	old.putCommit(commit(1, "op"));
+	old.setState("nextGameIndex", 42);
+	expect(old.useCommitKind("inbox")).toBe(1); // it held another kind's commits: a switch
+	expect(old.getState("nextGameIndex")).toBeUndefined();
+	db.close();
+	old.close();
+});

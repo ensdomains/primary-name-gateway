@@ -14,7 +14,7 @@ import { serveIndexer } from "./server.js";
 
 export { chunkPage, chunkPatch, type NodeSource } from "./chunks.js";
 export { IndexerDB } from "./db.js";
-export { InboxCommitSource, type InboxSourceConfig } from "./inbox.js";
+export { InboxCommitSource, type InboxSourceConfig, spanBatchParent } from "./inbox.js";
 export { type CommitSource, type IndexerConfig, NotFinalizedError, RegistrarIndexer, SyncError } from "./indexer.js";
 export { KZG } from "./kzg.js";
 export {

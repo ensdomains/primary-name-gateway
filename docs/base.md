@@ -20,10 +20,20 @@ What this repo relies on is the standard `IDisputeGame` surface, which it keeps:
 
 - `rootClaim` is a standard (version 0) output root. Checked on mainnet: the latest game's root matched the output root recomputed from L2.
 - `extraData` is `l2BlockNumber (32) . parentGame (20) . intermediate roots (32 each)`. `decodeGameClaim` reads the first word as the L2 block, as for any output root game.
-- `l2SequenceNumber()` is the L2 block number, so `maxSequenceLag` is in **blocks** (2s each), not seconds as on OP Mainnet's super root games.
+- `l2SequenceNumber()` is the L2 block number, so `maxSequenceLag` is in **blocks**, not seconds as on OP Mainnet's super root games. Since Denim a block is 0.2 s ([below](#block-time)): 86,400 blocks is 4.8 hours, not 2 days.
 - `status()` uses the standard `GameStatus` (`CHALLENGER_WINS` = 1), and validity, blacklisting and retirement come from the `AnchorStateRegistry`.
 
-Games are created about every 20 minutes.
+Games are created about every 20 minutes (6,000 blocks).
+
+## Block time
+
+Base's [Denim](https://docs.base.org/upgrades/denim/200ms-blocks) upgrade cut the block time from 2 s to 200 ms at L2 block **53,556,127** (2026-11-05 18:00:01 UTC, the first header with `timestampMs`). Header timestamps stay in whole seconds, so five blocks share each one, and the millisecond part follows from the block number. `l2Blocks` in [chains.ts](../packages/shared/src/chains.ts) records both segments; `blocksAtTimestamp` gives the blocks of a timestamp. Checked against Base's headers at 21 blocks from genesis to the head.
+
+What depends on it:
+
+- **Batch inbox:** a span batch names its first block by timestamp, which now matches up to five blocks. `parent_check` picks one (`spanBatchParent` in [inbox.ts](../packages/registrar-indexer/src/inbox.ts)). Base posts singular batches, which name the parent by hash.
+- **Super root games** name a timestamp; `blockAtTimestamp` refuses one that matches several blocks. Base's games are output root games, which name a block.
+- **`maxSequenceLag`** counts blocks (above).
 
 ## Early acceptance
 
