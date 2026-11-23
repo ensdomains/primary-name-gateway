@@ -18,7 +18,9 @@ function reference(stream: Uint8Array): Uint8Array {
 }
 
 const fixture = async (name: string) =>
-	new Uint8Array(await Bun.file(`${import.meta.dir}/fixtures/op-batch/${name}-frame0.bin`).arrayBuffer());
+	new Uint8Array(
+		await Bun.file(`${import.meta.dir}/../packages/contracts/test/fixtures/op-batch/${name}-frame0.bin`).arrayBuffer(),
+	);
 
 describe("batcher frames (2026-11-23)", () => {
 	test("OP Mainnet: span batch", async () => {

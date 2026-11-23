@@ -1,12 +1,12 @@
 // What reading an OP Stack batch prefix out of a brotli channel takes: the numbers that size a
 // Solidity port of brotliDecodePrefix. Reads frame-0 files (channel version byte + brotli stream).
 //
-//   bun scripts/op-batch-cost.ts [files...]   (default: test/fixtures/op-batch/*.bin)
+//   bun scripts/op-batch-cost.ts [files...]   (default: packages/contracts/test/fixtures/op-batch/*.bin)
 
 import { readdirSync } from "node:fs";
 import { brotliDecodePrefix, decodeBatchPrefix } from "@primary-name-gateway/shared";
 
-const dir = `${import.meta.dir}/../test/fixtures/op-batch`;
+const dir = `${import.meta.dir}/../packages/contracts/test/fixtures/op-batch`;
 const files = process.argv.slice(2);
 if (!files.length) for (const f of readdirSync(dir).filter((x) => x.endsWith(".bin"))) files.push(`${dir}/${f}`);
 

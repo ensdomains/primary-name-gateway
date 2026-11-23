@@ -324,7 +324,7 @@ class Decoder {
 			if (!isLast && r.bit()) {
 				// uncompressed
 				r.align();
-				for (let i = 0; i < mlen; i++) out.push(r.bits(8));
+				for (let i = 0; i < mlen && out.length < need; i++) out.push(r.bits(8));
 				continue;
 			}
 			this.compressedMetaBlock(mlen, need, maxBackward);

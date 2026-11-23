@@ -7,7 +7,7 @@ Notes for coding agents working in this repo. Read [README.md](README.md) first 
 - `packages/shared`: chain config and deployments (`chains.ts`), registrar layouts and events (`registrar.ts`), OP game decoding and proof encoders (`op.ts`), Merkle-Patricia rows (`trie.ts`), Linea sparse Merkle rows and multiproofs (`linea.ts`), indexer ↔ gateway types.
 - `packages/registrar-indexer`: `RegistrarIndexer` (event replay, commits, tries of retained commits) with a `CommitSource` per chain family (`op.ts`: dispute games, `linea.ts`: finalizations), trie backends (`tries.ts`: `MPTIndexerTrie` = merkle-builder `EthRowStorage` over `SqlRowLog` in `sql-row-log.ts`, `LineaIndexerTrie` + in-memory `RowLog`), SQLite (`bun:sqlite`), HTTP API.
 - `packages/registrar-gateway`: `NodeStore` (versioned trie rows with `get` and `floor`), `RegistrarGateway` (sync + `proveName`, per commit kind), ezccip endpoint. `src/index.ts` must stay runtime-agnostic (no bun/node imports) so it can run in a Cloudflare Durable Object; bun-only code lives in `src/main.ts` and `src/sqlite.ts`.
-- `packages/contracts`: Foundry project. `L2ReverseResolver` (ENSIP-10 + CCIP-Read), `IL2StorageVerifier` implementations `op/OPFaultVerifier` and `linea/LineaVerifier` (+ `linea/LineaTrie` multiproofs). `src/lib/` is vendored; see `src/lib/README.md` before changing it.
+- `packages/contracts`: Foundry project. `L2ReverseResolver` (ENSIP-10 + CCIP-Read), `IL2StorageVerifier` implementations `op/OPFaultVerifier` and `linea/LineaVerifier` (+ `linea/LineaTrie` multiproofs). `brotli/BrotliPrefix` is research for an OP batch inbox verifier ([docs/op-batch-inbox.md](docs/op-batch-inbox.md)). `src/lib/` is vendored; see `src/lib/README.md` before changing it.
 - `test/`: bun tests, including the fake OP rollup and fake Linea used by the offline e2es.
 - `scripts/linea-fixture.ts`: refreshes the mainnet fixture used by the forge tests.
 
@@ -34,6 +34,7 @@ Run `bun run check`, `bun run lint` and `bun run test` before finishing a change
 - Linea: apply each L2 block's changes together (`LineaStorageTrie.commit()`), in `hkey` order, like Shomei. Leaf indices depend on it.
 - Linea account proofs must be fetched when the finalization is seen: Shomei forgets old blocks within about a day.
 - `LineaTrie.find` requires canonical `hKey` limbs for exclusion: Poseidon2 reduces inputs mod p. Don't remove it (`test_exclusionAliasedKey`).
+- `BrotliPrefix.sol` is a port of `shared/src/brotli.ts`: change them together; `test/brotli-sol.test.ts` compares them.
 - `NodeStore` methods are synchronous; `put` is atomic. Keep `MemoryNodeStore` and `SqlNodeStore` behaviour identical (`test/store.test.ts` compares them to a reference model).
 - `validAt` is wall-clock time; OP game age and lookback use L1 block time.
 

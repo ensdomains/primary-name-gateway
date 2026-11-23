@@ -1,6 +1,6 @@
 # OP Stack batch inbox (research)
 
-An alternative to dispute games for OP Stack chains: prove an L2 block from the batch data the batcher posts to L1, minutes after the block is made instead of days. Nothing here is deployed. This page records what a verifier would need and what we measured. The TypeScript reference for the hard part is [brotli.ts](../packages/shared/src/brotli.ts) (partial brotli decoder) and [op-batch.ts](../packages/shared/src/op-batch.ts) (batch prefix).
+An alternative to dispute games for OP Stack chains: prove an L2 block from the batch data the batcher posts to L1, minutes after the block is made instead of days. Nothing here is deployed. This page records what a verifier would need and what we measured. The hard part is a partial brotli decoder: [brotli.ts](../packages/shared/src/brotli.ts) (TypeScript reference) and [BrotliPrefix.sol](../packages/contracts/src/brotli/BrotliPrefix.sol) (its port; keep them in step). [op-batch.ts](../packages/shared/src/op-batch.ts) reads the batch prefix.
 
 ## Trust
 
@@ -28,7 +28,7 @@ Only frame 0 (the first blob of the channel's first transaction) is needed.
 
 ## Partial brotli
 
-The prefix can't be read without the meta-block header: literals are Huffman-coded with trees defined up front, and the header is most of what's read. `bun scripts/op-batch-cost.ts` on the fixtures in `test/fixtures/op-batch/`:
+The prefix can't be read without the meta-block header: literals are Huffman-coded with trees defined up front, and the header is most of what's read. `bun scripts/op-batch-cost.ts` on the fixtures in `packages/contracts/test/fixtures/op-batch/`:
 
 | | Base | OP Mainnet |
 |---|---|---|
@@ -45,7 +45,16 @@ So a Solidity port spends its gas on parsing code lengths. Only the few trees ac
 
 The static dictionary is not supported: a reference to it is refused (`BrotliUnsupported`), which costs liveness for that batch, never safety. The dictionary has binary words (`ffffffff00000000`, `0000000100020003`, ...), so binary data can hit it. It didn't in the real frames, whose first bytes are hashes. `test/brotli.test.ts` checks the decoder against node's brotli (google/brotli) on random, structured and text inputs at every quality, and checks that it never accepts a corrupted stream the reference decoder rejects.
 
-## Open
+## Solidity
 
-- Gas: the counts above suggest a few million gas for the header plus ~2–3M for the blob field elements, which fits an `eth_call`. A Solidity port is needed to know.
+`BrotliPrefix.decode(stream, need)` decodes the same prefix as `brotliDecodePrefix`. `test/brotli-sol.test.ts` runs both on the real frames, on compressed inputs at every quality, and on corrupted and truncated streams: outputs match, and failures match too (`BrotliUnsupported` for the dictionary, `BrotliInvalid` otherwise).
+
+| frame (bytes decoded) | gas |
+|---|---|
+| OP Mainnet (64) | 3.1M |
+| Base (112) | 5.5M |
+
+Almost all of it is the header, mostly reading code lengths (`forge test --match-contract BrotliPrefixTest --flamegraph` profiles it). A code's symbol table is only built when the code is first used. With ~2–3M for the blob field elements, a whole proof would be around 10M gas, which fits an `eth_call`. A word-buffered bit reader in assembly is the next step if it needs to be cheaper.
+
+## Open
 - Batcher transactions that put several channels' frames in one blob, or start a blob with the end of a previous channel.
