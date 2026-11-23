@@ -1,6 +1,6 @@
 # OP Mainnet
 
-| | |
+| chain | OP Mainnet |
 |---|---|
 | chain id / coin type | 10 / `0x8000000a` |
 | registrar | `0x0000000000D8e504002cC26E3Ec46D81971C1664` (plain layout, see [registrar.md](registrar.md)) |

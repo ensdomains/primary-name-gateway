@@ -2,7 +2,7 @@
 
 Base is an OP Stack chain, so it uses the OP path ([optimism.md](optimism.md)) end to end: `OPCommitSource`, Merkle-Patricia rows, and the same `OPFaultVerifier` contract deployed for Base. This page covers what differs.
 
-| | |
+| chain | Base |
 |---|---|
 | chain id / coin type | 8453 / `0x80002105` |
 | registrar | `0x0000000000D8e504002cC26E3Ec46D81971C1664`, **Ownable** layout: names at slot 0, owner at slot 1 (see [registrar.md](registrar.md)) |
