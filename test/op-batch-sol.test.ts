@@ -62,7 +62,7 @@ test("real batches", async () => {
 test("truncated and mutated prefixes", async () => {
 	let seed = 9;
 	const random = () => {
-		seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+		seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
 		return seed / 0x7fffffff;
 	};
 	let ok = 0;
