@@ -81,7 +81,7 @@ bun run indexer:base-inbox  # :8103 (research: docs/op-batch-inbox.md)
 bun run gateway:base-inbox  # :8203
 ```
 
-Indexer API: `GET /status`, `/commits?status=valid&limit=2`, `/commits/:id`, `/snapshot?commit=ID&after=PATH`, `/patch?from=A&to=B`, `/changes?after=&until=`.
+Indexer API: `GET /status`, `/commits?status=valid&limit=2`, `/commits/:id`, `/snapshot?commit=ID&after=PATH`, `/patch?from=A&to=B`, `/changes?after=&until=`. Responses are JSON, gzipped when the client accepts it: a 50,000-row Base `/snapshot` page is 10.1 MB, or 3.95 MB gzipped.
 
 Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
 
