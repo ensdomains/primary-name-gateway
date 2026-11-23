@@ -15,7 +15,13 @@ import { Foundry } from "@adraffy/blocksmith";
 import { serveEZCCIP } from "@adraffy/ezccip/serve";
 import { trieRows } from "@ensdomains/merkle-builder";
 import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
-import { coinTypeFromChainId, type OPDeployment, PLAIN_LAYOUT, type TrieRow } from "@primary-name-gateway/shared";
+import {
+	coinTypeFromChainId,
+	type Deployment,
+	type OPDeployment,
+	PLAIN_LAYOUT,
+	type TrieRow,
+} from "@primary-name-gateway/shared";
 import {
 	type Address,
 	createPublicClient,
@@ -414,5 +420,29 @@ describe("offline e2e", () => {
 		expect(db.getCommit(game.gameIndex)).toBeUndefined();
 		await indexer.tick();
 		expect(db.getCommit(game.gameIndex)?.status).toBe("pending");
+	}, 60_000);
+
+	// last: it leaves `indexer`'s kept tries behind what the database holds
+	test("another commit source on the same database sets these games aside; switching back serves them", async () => {
+		const [newest] = db.getCommits("valid", 1);
+		const rows = indexer.snapshot(newest.id, undefined, 1e6)?.rows;
+		expect(rows?.length).toBeGreaterThan(0);
+		const count = db.countCommits();
+
+		// the batch inbox source on the same database (it finds nothing here); its retain drops the games' tries
+		const other = new RegistrarIndexer({
+			...indexer.config,
+			deployment: { ...indexer.config.deployment, kind: "inbox" } as unknown as Deployment,
+			source: { tick: async () => {} },
+		});
+		expect(other.status().commits).toEqual({ pending: 0, valid: 0, invalid: 0 });
+		await other.tick();
+
+		const back = new RegistrarIndexer(indexer.config);
+		expect(back.status().commits).toEqual(count); // nothing lost
+		expect(back.trie.has(newest.id)).toBeFalse();
+		await back.tick();
+		expect(back.trie.has(newest.id)).toBeTrue(); // rebuilt from the newest trie
+		expect(back.snapshot(newest.id, undefined, 1e6)?.rows).toEqual(rows);
 	}, 60_000);
 });

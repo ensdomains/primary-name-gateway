@@ -40,6 +40,7 @@ type GameResult = "done" | "deferred" | "retry";
 export class OPCommitSource implements CommitSource {
 	private readonly attempts = new Map<number, number>();
 	private factory: Address | undefined;
+	private resumed = false;
 
 	constructor(readonly config: OPSourceConfig) {}
 
@@ -99,9 +100,15 @@ export class OPCommitSource implements CommitSource {
 			}),
 		]);
 		let next = Number(db.getState("nextGameIndex") ?? -1);
-		if (next < 0) {
-			next = await this.findLookbackIndex(indexer, factory, count);
-			db.setState("nextGameIndex", next);
+		// on first start, and when resuming far behind (downtime, or the other commit source used the
+		// database meanwhile): games older than the lookback can't be served, so skip them
+		if (next < 0 || !this.resumed) {
+			this.resumed = true;
+			const lookback = await this.findLookbackIndex(indexer, factory, count, next);
+			if (lookback > next) {
+				next = lookback;
+				db.setState("nextGameIndex", next);
+			}
 		}
 		// games waiting for their L2 block to be finalized
 		const deferred: number[] = JSON.parse(db.getState("deferredGames") ?? "[]");
@@ -157,9 +164,14 @@ export class OPCommitSource implements CommitSource {
 	}
 
 	// first game index created within the lookback window
-	private async findLookbackIndex(indexer: RegistrarIndexer, factory: Address, count: number): Promise<number> {
+	private async findLookbackIndex(
+		indexer: RegistrarIndexer,
+		factory: Address,
+		count: number,
+		next: number,
+	): Promise<number> {
 		const since = (await this.l1Time()) - this.config.lookbackSec;
-		let lo = 0;
+		let lo = Math.max(0, next);
 		let hi = count;
 		while (lo < hi) {
 			const mid = (lo + hi) >> 1;
@@ -173,7 +185,7 @@ export class OPCommitSource implements CommitSource {
 			if (Number(timestamp) < since) lo = mid + 1;
 			else hi = mid;
 		}
-		indexer.log(`starting at game ${lo} (${count - lo} games in lookback)`);
+		if (lo > next) indexer.log(`starting at game ${lo} (${count - lo} games in lookback)`);
 		return lo;
 	}
 
@@ -324,7 +336,5 @@ export class OPCommitSource implements CommitSource {
 				indexer.log(`game ${c.id}: invalid (${reason})`);
 			}
 		});
-		// a game valid again (minAgeSec changed) may have lost its trie
-		for (const c of db.getCommits("valid", retainValid)) indexer.keepTrie(c);
 	}
 }

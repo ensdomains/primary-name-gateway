@@ -1,5 +1,5 @@
-// An L2's commit sources share one indexer database, one at a time: switching keeps the events and
-// trie state, and drops the other source's commits and resume state. A lock keeps it to one indexer.
+// An L2's commit sources share one indexer database, one at a time: each source's commits stay in it,
+// and only the active source's are read. A lock keeps it to one indexer.
 
 import { expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -11,27 +11,43 @@ import type { Commit } from "@primary-name-gateway/shared";
 const commit = (id: number, kind: string) =>
 	({ id, kind, status: "valid", l2Block: id, changeSeq: 0, validAt: 0, createdAt: 0 }) as unknown as Commit;
 
-test("switching commit sources drops the other source's commits", () => {
+test("switching commit sources sets the other's commits aside, and back", () => {
 	const db = new IndexerDB(":memory:");
 	expect(db.useCommitKind("op")).toBe(0);
 	db.insertChanges([{ seq: 1, block: 5, logIndex: 0, kind: "owner", addr: `0x${"11".repeat(20)}`, name: "0x" }]);
 	db.setState("syncedBlock", 5);
 	db.setState("nextGameIndex", 42);
 	db.putCommit(commit(1, "op"));
-	db.putCommit(commit(2, "op"));
-	expect(db.useCommitKind("op")).toBe(0); // same source: nothing changes
-	expect(db.getCommits(undefined, 10)).toHaveLength(2);
+	db.putCommit({ ...commit(2, "op"), status: "pending" });
+	db.putSkipped(7, "bad game");
+	expect(db.countCommits()).toEqual({ pending: 1, valid: 1, invalid: 0 });
 
-	db.putSkipped(7, "bad blob");
-	expect(db.useCommitKind("inbox")).toBe(2);
+	expect(db.useCommitKind("inbox")).toBe(2); // set aside, not deleted
 	expect(db.getCommits(undefined, 10)).toEqual([]);
-	expect(db.isSkipped(7)).toBeFalse();
-	expect(db.getState("nextGameIndex")).toBeUndefined();
+	expect(db.getCommit(1)).toBeUndefined();
+	expect(db.countCommits()).toEqual({ pending: 0, valid: 0, invalid: 0 });
+	db.putCommit(commit(264000000000, "inbox"));
+	expect(db.getCommits("valid", 10).map((c) => c.id)).toEqual([264000000000]);
+	// shared: the events and the trie's position; each source's own state stays
 	expect(db.getState("syncedBlock")).toBe("5");
 	expect(db.lastChangeSeq()).toBe(1);
+	expect(db.getState("nextGameIndex")).toBe("42");
+	expect(db.isSkipped(7)).toBeTrue();
 
-	db.putCommit(commit(3, "inbox"));
 	expect(db.useCommitKind("op")).toBe(1);
+	expect(db.getCommits(undefined, 10).map((c) => c.id)).toEqual([2, 1]);
+	expect(db.getCommits("valid", 10).map((c) => c.id)).toEqual([1]);
+	expect(db.getCommit(264000000000)).toBeUndefined();
+	expect(db.getState("commitKind")).toBe("op");
+	db.close();
+});
+
+test("a commit id can't change kind", () => {
+	const db = new IndexerDB(":memory:");
+	db.putCommit(commit(1, "op"));
+	expect(() => db.putCommit(commit(1, "inbox"))).toThrow("belongs to the op commit source");
+	db.putCommit({ ...commit(1, "op"), status: "invalid" }); // same kind: replaced
+	expect(db.getCommit(1)?.status).toBe("invalid");
 	db.close();
 });
 
@@ -52,24 +68,4 @@ test("one indexer per database: a second is refused, a stale lock is taken over"
 	} finally {
 		rmSync(dir, { recursive: true });
 	}
-});
-
-test("a database from before commit kinds were recorded keeps its own source's state", () => {
-	const db = new IndexerDB(":memory:");
-	db.putCommit(commit(1, "op"));
-	db.putSkipped(7, "bad game");
-	db.setState("nextGameIndex", 42);
-	expect(db.useCommitKind("op")).toBe(0); // first run with kinds: nothing to switch from
-	expect(db.getCommits(undefined, 10)).toHaveLength(1);
-	expect(db.isSkipped(7)).toBeTrue();
-	expect(db.getState("nextGameIndex")).toBe("42");
-	expect(db.getState("commitKind")).toBe("op");
-
-	const old = new IndexerDB(":memory:");
-	old.putCommit(commit(1, "op"));
-	old.setState("nextGameIndex", 42);
-	expect(old.useCommitKind("inbox")).toBe(1); // it held another kind's commits: a switch
-	expect(old.getState("nextGameIndex")).toBeUndefined();
-	db.close();
-	old.close();
 });
