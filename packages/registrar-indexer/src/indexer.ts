@@ -22,6 +22,7 @@ export type IndexerConfig = {
 	source: CommitSource;
 	db: IndexerDB;
 	retainValid?: number; // keep tries of this many recent valid commits for /patch (default 24)
+	catchUpBlocks?: number; // catch up to this many blocks below the L2's finalized head (default 10,000)
 	log?: (...args: unknown[]) => void;
 };
 
@@ -37,6 +38,8 @@ export class RegistrarIndexer {
 		const { db, deployment } = config;
 		this.trie = createIndexerTrie(deployment.kind, deployment.layout, db);
 		this.syncedBlock = Number(db.getState("syncedBlock") ?? deployment.registrarCreatedAtBlock - 1);
+		const dropped = db.useCommitKind(deployment.kind);
+		if (dropped) this.log(`dropped ${dropped} commits from another commit source (${deployment.kind} now)`);
 		// replay the changes the trie doesn't have yet, capturing retained commits on the way
 		const retained = this.retainedCommits();
 		this.trie.retain(new Set(retained.map((c) => c.id)));
@@ -95,6 +98,7 @@ export class RegistrarIndexer {
 	}
 
 	async tick() {
+		await this.catchUp();
 		await this.config.source.tick(this);
 		this.trie.retain(new Set(this.retainedCommits().map((c) => c.id)));
 	}
@@ -141,6 +145,19 @@ export class RegistrarIndexer {
 		if (!this.trie.has(id)) this.trie.capture({ id, l2Block, changeSeq });
 		this.db.putCommit({ ...commit, changeSeq } as Commit);
 		this.log(`commit ${id}: L2 block ${l2Block}, ${changeSeq} changes, storageHash ${storageHash} (${commit.status})`);
+	}
+
+	// Sync events to near the L2's finalized head, so a new or stopped indexer replays them now instead
+	// of at its first commit. It stops short so new commits stay ahead of it: an older commit is rebuilt
+	// from the newest trie. Linea's trie takes commits only in order, so Linea syncs at each commit.
+	async catchUp() {
+		const { deployment, l2, catchUpBlocks = 10_000 } = this.config;
+		if (deployment.kind === "linea" || !l2.finalizedBlock) return;
+		const target = (await l2.finalizedBlock()).number - catchUpBlocks;
+		if (target <= this.syncedBlock) return;
+		this.log(`catching up: events from L2 block ${this.syncedBlock + 1} to ${target}`);
+		await this.syncChanges(target);
+		this.log(`caught up: ${this.changeSeq} changes through L2 block ${this.syncedBlock}`);
 	}
 
 	private async syncChanges(toBlock: number) {

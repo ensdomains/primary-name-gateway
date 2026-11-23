@@ -2,7 +2,7 @@
 // polynomial's value at the element's domain point (what OPBlob.verify checks with the point
 // evaluation precompile). About 0.25s per proof (a 4096-point MSM).
 
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
 import { bls12_381 } from "@noble/curves/bls12-381";
 import { bytesToHex, type Hex, sha256 } from "viem";
@@ -36,7 +36,8 @@ export class KZG {
 			const res = await fetch(SETUP_URL);
 			if (!res.ok) throw new Error(`trusted setup: ${res.status}`);
 			mkdirSync(dirname(path), { recursive: true });
-			await Bun.write(path, await res.text());
+			await Bun.write(`${path}.tmp`, await res.text());
+			renameSync(`${path}.tmp`, path); // a download cut short leaves no file
 		}
 		const text = await Bun.file(path).text();
 		if (sha256(new TextEncoder().encode(text)) !== SETUP_SHA256) throw new Error(`${path}: unexpected trusted setup`);

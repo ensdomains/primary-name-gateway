@@ -110,7 +110,8 @@ if (import.meta.main) {
 	if (!deployment) throw new Error(`unknown INDEXER_CHAIN: ${chain} (${Object.keys(DEPLOYMENTS).join(", ")})`);
 	const port = Number(env.INDEXER_PORT ?? 8100);
 	const pollMs = Number(env.INDEXER_POLL_MS ?? 30_000);
-	const dbPath = env.INDEXER_DB ?? `data/${chain}.sqlite`;
+	// one database per L2: base and base-inbox share their events and trie (run one at a time)
+	const dbPath = env.INDEXER_DB ?? `data/${deployment.l2.name}.sqlite`;
 
 	mkdirSync(dirname(dbPath), { recursive: true });
 	const db = new IndexerDB(dbPath);
@@ -119,19 +120,33 @@ if (import.meta.main) {
 	log(`${chain}: L2 ${redactURL(rpcURL(deployment.l2))}`);
 	log(`${chain}: L2 proofs ${redactURL(rpcURL(deployment.l2, "proof"))}`);
 	if (deployment.kind === "inbox") log(`${chain}: L1 beacon ${redactURL(beaconURL(deployment.l1))}`);
-	const config: IndexerConfig = { deployment, db, log, ...createSource(deployment, log) };
+	const config: IndexerConfig = {
+		deployment,
+		db,
+		log,
+		catchUpBlocks: Number(env.INDEXER_CATCHUP_BLOCKS ?? 10_000),
+		...createSource(deployment, log),
+	};
 	const indexer = new RegistrarIndexer(config);
-	log(`restored ${indexer.changeSeq} changes through L2 block ${indexer.syncedBlock}`);
+	log(
+		indexer.changeSeq
+			? `restored ${indexer.changeSeq} changes through L2 block ${indexer.syncedBlock}`
+			: `new database: events from L2 block ${indexer.syncedBlock + 1}`,
+	);
 	const server = serveIndexer(indexer, db, port);
 	log(`listening on ${server.url}`);
 
 	let stopped = false;
-	process.once("SIGINT", () => {
+	// Safe at any await: every write is a transaction, and a restart replays the change log from the
+	// last flushed trie.
+	const stop = () => {
 		stopped = true;
 		server.stop();
 		db.close();
 		process.exit(0);
-	});
+	};
+	process.once("SIGINT", stop);
+	process.once("SIGTERM", stop);
 	while (!stopped) {
 		try {
 			await indexer.tick();

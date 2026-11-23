@@ -100,7 +100,7 @@ The fixtures `packages/contracts/test/fixtures/op-batch/{op,base}-blob.json` hol
 - The parent L2 block must be at or below the L2's finalized head, and its storage hash must match the replayed events, as for every commit. Commits are valid when found and invalid once their L1 block is `INDEXER_INBOX_MAX_BLOCK_LAG` (7200) blocks old, below the verifier's limit (EIP-2935 keeps 8191).
 - The gateway serves inbox commits like OP ones (Merkle-Patricia rows): `bun run gateway:base-inbox`.
 
-Checked on mainnet (2026-11-23): with its database seeded from the Base indexer's change log, the inbox indexer made its first commit about 20 seconds after starting (L1 block 26,476,802 → L2 block 61,170,215), and `INDEXER_URL=http://localhost:8103 bun run test:mainnet` resolved Base names through CCIP-Read and `OPBatchInboxVerifier` on an L1 fork: 959 of 3,713,621 names verified (250 long).
+Checked on mainnet (2026-11-23): with its database seeded from the Base indexer's change log (`base` and `base-inbox` now share `data/base.sqlite`), the inbox indexer made its first commit about 20 seconds after starting (L1 block 26,476,802 → L2 block 61,170,215), and `INDEXER_URL=http://localhost:8103 bun run test:mainnet` resolved Base names through CCIP-Read and `OPBatchInboxVerifier` on an L1 fork: 959 of 3,713,621 names verified (250 long).
 
 ## Open
 

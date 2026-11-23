@@ -377,6 +377,23 @@ describe("offline e2e", () => {
 		expect(db.getState("deferredGames")).toBe("[]");
 	}, 60_000);
 
+	test("a new indexer catches up on events before its first commit, then rebuilds older games", async () => {
+		const fresh = new RegistrarIndexer({ ...indexer.config, db: new IndexerDB(":memory:"), catchUpBlocks: 1 });
+		const target = rollup.head.number - 1;
+		await fresh.catchUp();
+		expect(fresh.syncedBlock).toBe(target);
+		expect(fresh.changeSeq).toBe(db.changeSeqAtBlock(target));
+		expect(fresh.db.countCommits()).toEqual({ pending: 0, valid: 0, invalid: 0 });
+		// the same games: those for blocks at or below the synced head are rebuilt from the newest trie
+		await fresh.tick();
+		const skipped = (x: IndexerDB) => x.db.query("SELECT id FROM skipped ORDER BY id").all();
+		const commits = (x: IndexerDB) => x.getCommits(undefined, 1000).map((c) => [c.id, c.changeSeq]);
+		expect(commits(fresh.db).length).toBeGreaterThan(1);
+		expect(commits(fresh.db)).toEqual(commits(db));
+		expect(skipped(fresh.db)).toEqual(skipped(db));
+		fresh.db.close();
+	}, 60_000);
+
 	test("an event sync failure is retried without counting against the game", async () => {
 		rollup.setName(A.short, "after-sync-error.eth");
 		rollup.mine();

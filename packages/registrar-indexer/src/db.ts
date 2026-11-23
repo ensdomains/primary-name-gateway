@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import type { Change, Commit, CommitStatus } from "@primary-name-gateway/shared";
+import type { Change, Commit, CommitKind, CommitStatus } from "@primary-name-gateway/shared";
 import { type Address, bytesToHex, type Hex, hexToBytes, zeroAddress } from "viem";
 
 type ChangeRow = {
@@ -119,6 +119,20 @@ export class IndexerDB {
 			)
 			.all(after, until, limit)
 			.map(toChange);
+	}
+
+	// An L2's commit sources (op and inbox) replay the same events into the same trie, so they can
+	// share a database, one at a time. Commits, skipped batches and where a source resumes are its own:
+	// switching sources drops them. Returns the number of commits dropped.
+	useCommitKind(kind: CommitKind): number {
+		if (this.getState("commitKind") === kind) return 0;
+		return this.db.transaction(() => {
+			const { changes } = this.db.run("DELETE FROM commits WHERE json_extract(json, '$.kind') != ?", [kind]);
+			this.db.run("DELETE FROM skipped");
+			this.db.run("DELETE FROM state WHERE key IN ('nextGameIndex', 'deferredGames', 'nextL1Block')");
+			this.setState("commitKind", kind);
+			return changes;
+		})();
 	}
 
 	// -- commits
