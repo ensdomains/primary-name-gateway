@@ -11,13 +11,19 @@ export type ChainInfo = {
 	logStep?: number; // eth_getLogs block range
 };
 
-export const MAINNET: ChainInfo = {
+// an L1: also has a consensus layer, whose beacon API serves blobs (the batch inbox reads them)
+export type L1ChainInfo = ChainInfo & {
+	publicBeacon?: string;
+};
+
+export const MAINNET: L1ChainInfo = {
 	id: 1,
 	name: "mainnet",
 	drpcSlug: "ethereum",
 	alchemySlug: "eth-mainnet",
 	infuraSlug: "mainnet",
 	publicRPC: "https://ethereum-rpc.publicnode.com",
+	publicBeacon: "https://ethereum-beacon-api.publicnode.com",
 };
 
 export const OPTIMISM: ChainInfo = {
@@ -51,7 +57,7 @@ export const LINEA: ChainInfo = {
 };
 
 type DeploymentBase = {
-	l1: ChainInfo;
+	l1: L1ChainInfo;
 	l2: ChainInfo;
 	L2ReverseRegistrar: Address;
 	layout: RegistrarLayout; // see docs/registrar.md
@@ -197,6 +203,13 @@ export function rpcURL(chain: ChainInfo, purpose: RPCPurpose = "default"): strin
 	}
 	if (chain.publicRPC) return chain.publicRPC;
 	throw new Error(`no rpc for ${chain.name}: set RPC_URL_${chain.id}, DRPC_KEY, ALCHEMY_KEY or INFURA_KEY`);
+}
+
+// BEACON_URL_<chainId> > public
+export function beaconURL(chain: L1ChainInfo): string {
+	const url = process.env[`BEACON_URL_${chain.id}`] ?? chain.publicBeacon;
+	if (!url) throw new Error(`no beacon API for ${chain.name}: set BEACON_URL_${chain.id}`);
+	return url;
 }
 
 export function createClient(chain: ChainInfo, purpose?: RPCPurpose): PublicClient {

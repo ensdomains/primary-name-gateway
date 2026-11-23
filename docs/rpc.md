@@ -12,7 +12,7 @@ The limits below are what we observed with our own keys on 2026-11-22 (drpc paid
 | `proof` | `eth_getProof` (OP Stack), `linea_getProof` (Linea) at a commit's L2 block | the registrar's account proof, captured when a commit is seen. On OP / Base the first start looks back 6–8 days, which needs **archive** state. |
 | `default` | everything else: blocks, `eth_call`, L1 contract reads, L1 `getLogs` for Linea finalizations, and for the batch inbox L1 blocks and `eth_getRawTransactionByHash` | |
 
-The batch inbox indexer also reads blobs from a beacon API (`BEACON_URL`, [op-batch-inbox.md](op-batch-inbox.md)).
+The batch inbox indexer also reads blobs from L1's beacon API ([op-batch-inbox.md](op-batch-inbox.md)): `BEACON_URL_<id>` if set, otherwise the L1's public beacon (`beaconURL()` in [chains.ts](../packages/shared/src/chains.ts)).
 
 `createClient(chain, purpose)` ([chains.ts](../packages/shared/src/chains.ts)) picks the URL. Clients for `logs` retry once with a 30s timeout, because an oversized range fails the same way every time and the caller should shrink it instead. The others retry 5 times with a 60s timeout.
 
@@ -83,6 +83,7 @@ RPC:
 | `DRPC_KEY`, `ALCHEMY_KEY`, `INFURA_KEY` | provider keys (any subset) |
 | `RPC_URL_<id>` | explicit URL for a chain, every purpose |
 | `PROOF_RPC_URL_<id>` | explicit URL for a chain's proofs |
+| `BEACON_URL_<id>` | beacon API for an L1 (default for Ethereum: `https://ethereum-beacon-api.publicnode.com`); the batch inbox reads blobs from it |
 
 Indexer (`bun run indexer`, `indexer:base`, `indexer:linea`, `indexer:base-inbox`):
 
@@ -100,7 +101,6 @@ Indexer (`bun run indexer`, `indexer:base`, `indexer:linea`, `indexer:base-inbox
 | `INDEXER_INBOX_INTERVAL_SEC` | `600` | inbox: at most one commit per this much L1 time |
 | `INDEXER_INBOX_SCAN_BLOCKS` | `64` | inbox: L1 blocks to look back for a channel start |
 | `INDEXER_INBOX_MAX_BLOCK_LAG` | `7200` | inbox: commits older than this many L1 blocks become invalid (below the verifier's `maxBlockLag`) |
-| `BEACON_URL` | `https://ethereum-beacon-api.publicnode.com` | inbox: beacon API for blobs |
 | `KZG_TRUSTED_SETUP` | `data/kzg/trusted_setup.txt` | inbox: downloaded there if missing |
 | `INDEXER_FLUSH_CHANGES` | `50000` | OP / Base: changes applied in memory before the trie rows are written ([optimism.md](optimism.md#trie-rows)) |
 | `INDEXER_CACHE_MB` | `64` | SQLite page cache |

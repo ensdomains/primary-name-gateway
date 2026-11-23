@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { createClient, DEPLOYMENTS, type Deployment, redactURL, rpcURL } from "@primary-name-gateway/shared";
+import { beaconURL, createClient, DEPLOYMENTS, type Deployment, redactURL, rpcURL } from "@primary-name-gateway/shared";
 import { IndexerDB } from "./db.js";
 import { InboxCommitSource } from "./inbox.js";
 import { type CommitSource, type IndexerConfig, RegistrarIndexer } from "./indexer.js";
@@ -72,7 +72,7 @@ function createSource(deployment: Deployment, log: Log): { l2: ChangeReader; sou
 			deployment,
 			l1,
 			l2,
-			beaconURL: env.BEACON_URL ?? "https://ethereum-beacon-api.publicnode.com",
+			beaconURL: beaconURL(deployment.l1),
 			kzg: () => {
 				kzg ??= KZG.load(env.KZG_TRUSTED_SETUP);
 				return kzg;
@@ -117,6 +117,7 @@ if (import.meta.main) {
 	log(`${chain}: L1 ${redactURL(rpcURL(deployment.l1))}`);
 	log(`${chain}: L2 ${redactURL(rpcURL(deployment.l2))}`);
 	log(`${chain}: L2 proofs ${redactURL(rpcURL(deployment.l2, "proof"))}`);
+	if (deployment.kind === "inbox") log(`${chain}: L1 beacon ${redactURL(beaconURL(deployment.l1))}`);
 	const config: IndexerConfig = { deployment, db, log, ...createSource(deployment, log) };
 	const indexer = new RegistrarIndexer(config);
 	log(`restored ${indexer.changeSeq} changes through L2 block ${indexer.syncedBlock}`);

@@ -12,6 +12,7 @@
 
 import { bls12_381 } from "@noble/curves/bls12-381";
 import {
+	beaconURL,
 	blobDataPrefix,
 	brotliDecodePrefix,
 	channelStart,
@@ -25,7 +26,6 @@ import {
 } from "@primary-name-gateway/shared";
 import { bytesToHex, type Hex, hexToBytes, numberToHex, parseAbi, sha256 } from "viem";
 
-const BEACON = "https://ethereum-beacon-api.publicnode.com";
 const FIELD_ELEMENTS = 64; // enough for Base's batch prefix (OP needs 40)
 const N = 4096;
 const CHAINS = {
@@ -58,7 +58,7 @@ const tx = block.transactions.find(
 if (!tx?.blobVersionedHashes) throw new Error(`no batcher transaction in block ${blockArg}`);
 const versionedHash = tx.blobVersionedHashes[0];
 const slot = (block.timestamp - 1606824023n) / 12n;
-const res = await fetch(`${BEACON}/eth/v1/beacon/blobs/${slot}?versioned_hashes=${versionedHash}`);
+const res = await fetch(`${beaconURL(MAINNET)}/eth/v1/beacon/blobs/${slot}?versioned_hashes=${versionedHash}`);
 if (!res.ok) throw new Error(`beacon: ${res.status}`);
 const blob = hexToBytes(((await res.json()) as { data: Hex[] }).data[0]);
 

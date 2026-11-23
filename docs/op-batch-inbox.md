@@ -96,7 +96,7 @@ The fixtures `packages/contracts/test/fixtures/op-batch/{op,base}-blob.json` hol
 `bun run indexer:base-inbox` (`INDEXER_CHAIN=base-inbox` or `optimism-inbox`) runs [inbox.ts](../packages/registrar-indexer/src/inbox.ts):
 
 - Every tick it looks back from the finalized L1 head (`INDEXER_INBOX_SCAN_BLOCKS`, 64) for the newest batcher blob that starts a channel. It makes at most one commit per `INDEXER_INBOX_INTERVAL_SEC` (600) of L1 time.
-- It builds the whole commit proof. The blob comes from a beacon API (`BEACON_URL`). The KZG proofs come from [kzg.ts](../packages/registrar-indexer/src/kzg.ts) (`@noble/curves`, about 0.25s each; the trusted setup is downloaded to `data/kzg/` and checked against its hash). It proves only as many field elements as the batch prefix needs.
+- It builds the whole commit proof. The blob comes from L1's beacon API (`BEACON_URL_1`, default publicnode's). The KZG proofs come from [kzg.ts](../packages/registrar-indexer/src/kzg.ts) (`@noble/curves`, about 0.25s each; the trusted setup is downloaded to `data/kzg/` and checked against its hash). It proves only as many field elements as the batch prefix needs.
 - The parent L2 block must be at or below the L2's finalized head, and its storage hash must match the replayed events, as for every commit. Commits are valid when found and invalid once their L1 block is `INDEXER_INBOX_MAX_BLOCK_LAG` (7200) blocks old, below the verifier's limit (EIP-2935 keeps 8191).
 - The gateway serves inbox commits like OP ones (Merkle-Patricia rows): `bun run gateway:base-inbox`.
 
