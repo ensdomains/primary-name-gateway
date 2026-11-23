@@ -1,6 +1,6 @@
 # OP Stack batch inbox (research)
 
-An alternative to dispute games for OP Stack chains: prove an L2 block from the batch data the batcher posts to L1, minutes after the block is made instead of days. Nothing here is deployed. This page records what a verifier would need and what we measured. The hard part is a partial brotli decoder: [brotli.ts](../packages/shared/src/brotli.ts) (TypeScript reference) and [BrotliPrefix.sol](../packages/contracts/src/brotli/BrotliPrefix.sol) (its port; keep them in step). [op-batch.ts](../packages/shared/src/op-batch.ts) reads the batch prefix.
+An alternative to dispute games for OP Stack chains: prove an L2 block from the batch data the batcher posts to L1, minutes after the block is made instead of days. Nothing here is deployed. This page records what a verifier would need and what we measured. The hard part is a partial brotli decoder: [brotli.ts](../packages/shared/src/brotli.ts) (TypeScript reference) and [BrotliPrefix.sol](../packages/contracts/src/brotli/BrotliPrefix.sol) (its port). [op-batch.ts](../packages/shared/src/op-batch.ts) reads blob data, frame 0 and the batch prefix; [OPBlob.sol](../packages/contracts/src/op/OPBlob.sol), [OPBatchPrefix.sol](../packages/contracts/src/op/OPBatchPrefix.sol) and [OPBatchInbox.sol](../packages/contracts/src/op/OPBatchInbox.sol) are their ports. Keep each pair in step.
 
 ## Trust
 
@@ -56,5 +56,22 @@ The static dictionary is not supported: a reference to it is refused (`BrotliUns
 
 Almost all of it is the header, mostly reading code lengths (`forge test --match-contract BrotliPrefixTest --flamegraph` profiles it). A code's symbol table is only built when the code is first used. With ~2–3M for the blob field elements, a whole proof would be around 10M gas, which fits an `eth_call`. A word-buffered bit reader in assembly is the next step if it needs to be cheaper.
 
+## Blob to batch
+
+`OPBatchInbox.readBatch(versionedHash, commitment, fieldElements, proofs)` does steps 3 and 4:
+
+1. **Prove the field elements.** Element `i` is the blob polynomial at `ω^bitReverse12(i)`, where `ω = 7^((r-1)/4096)`. One point evaluation precompile call per element checks it against the versioned hash; the precompile also checks the commitment.
+2. **Decode the blob data** (op-service: 127 bytes per 4 elements, after a version and a 3-byte length), then frame 0 (derivation version 0, frame number 0, channel version 1 = brotli).
+3. **Decompress 112 bytes** and read the batch prefix.
+
+The fixtures `packages/contracts/test/fixtures/op-batch/{op,base}-blob.json` hold the first 64 field elements of each real blob, with KZG proofs (`scripts/op-batch-fixture.ts` computes them with `@noble/curves` and the c-kzg trusted setup, and checks the commitment against the transaction's versioned hash). `test/op-batch-sol.test.ts` runs them through the real precompile, rejects tampered proofs, elements and hashes, and matches the TypeScript reference end to end.
+
+| `readBatch` (64 field elements) | gas |
+|---|---|
+| OP Mainnet | 6.7M (3.4M KZG; 40 elements would do: ~5.4M) |
+| Base | 9.0M (3.4M KZG, 5.5M brotli) |
+
 ## Open
+
+- Steps 1, 2, 5 and 6: the L1 header and batcher transaction, the sequencing window, and the L2 header. Then a verifier contract and a commit source for the indexer.
 - Batcher transactions that put several channels' frames in one blob, or start a blob with the end of a previous channel.

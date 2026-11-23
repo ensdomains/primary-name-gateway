@@ -65,10 +65,15 @@ export function decodeBatchPrefix(data: Uint8Array): BatchPrefix {
 	const type = data[pos++];
 	if (type === 0) {
 		header(true);
+		const word = () => {
+			const v = bytes();
+			if (v.length > 32) throw new Error("batch prefix: number too long");
+			return bytesToBigInt(v);
+		};
 		const parentHash = bytes();
-		const epochNum = bytesToBigInt(bytes());
+		const epochNum = word();
 		const epochHash = bytes();
-		const timestamp = bytesToBigInt(bytes());
+		const timestamp = word();
 		if (parentHash.length !== 32 || epochHash.length !== 32) throw new Error("batch prefix: bad hash");
 		return {
 			type: "singular",
@@ -91,4 +96,43 @@ export function decodeBatchPrefix(data: Uint8Array): BatchPrefix {
 		};
 	}
 	throw new Error(`batch prefix: unknown batch type ${type}`);
+}
+
+// Blob data (op-service/eth/blob.go): every 4 field elements carry 127 bytes, 31 from each element
+// plus 6 bits of its top byte (the top 2 bits stay zero, so it's below the BLS modulus). The first
+// 4 bytes are a version (0) and the 3-byte data length. `fieldElements` holds whole rounds of 4,
+// and the result is as much of the data as they carry.
+export const BLOB_MAX_DATA = (4 * 31 + 3) * 1024 - 4;
+
+export function blobDataPrefix(fieldElements: Uint8Array): Uint8Array {
+	if (fieldElements.length % 128) throw new Error("blob: whole rounds of 4 field elements");
+	const raw = new Uint8Array((fieldElements.length / 128) * 127);
+	for (let round = 0; round < fieldElements.length / 128; round++) {
+		const f = fieldElements.subarray(round * 128, round * 128 + 128);
+		const o = raw.subarray(round * 127, round * 127 + 127);
+		const top = [0, 1, 2, 3].map((i) => {
+			if (f[32 * i] & 0xc0) throw new Error("blob: invalid field element");
+			o.set(f.subarray(32 * i + 1, 32 * i + 32), 32 * i);
+			return f[32 * i];
+		});
+		o[31] = (top[0] & 0x3f) | ((top[1] & 0x30) << 2);
+		o[63] = (top[1] & 0x0f) | ((top[3] & 0x0f) << 4);
+		o[95] = (top[2] & 0x3f) | ((top[3] & 0x30) << 2);
+	}
+	if (raw[0] !== 0) throw new Error(`blob: version ${raw[0]}`);
+	const length = (raw[1] << 16) | (raw[2] << 8) | raw[3];
+	if (length > BLOB_MAX_DATA) throw new Error("blob: too long");
+	return raw.subarray(4, 4 + Math.min(length, raw.length - 4));
+}
+
+// A batcher transaction's data that starts a channel: derivation version 0, then frame 0.
+// https://specs.optimism.io/protocol/derivation.html#batcher-transaction-format
+export function channelStart(data: Uint8Array): { channelId: Hex; compressed: Uint8Array } {
+	if (data.length < 24 || data[0] !== 0) throw new Error("channel: expected derivation version 0");
+	const channelId = bytesToHex(data.subarray(1, 17));
+	if (data[17] || data[18]) throw new Error("channel: not frame 0");
+	const length = ((data[19] << 24) | (data[20] << 16) | (data[21] << 8) | data[22]) >>> 0;
+	if (data[23] !== 1) throw new Error(`channel: version ${data[23]} (expected brotli)`);
+	// frame data = channel version . brotli stream (as much as `data` has)
+	return { channelId, compressed: data.subarray(24, Math.min(data.length, 23 + length)) };
 }
