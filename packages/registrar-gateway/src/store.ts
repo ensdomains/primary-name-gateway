@@ -105,6 +105,10 @@ export type SqlAdapter = {
 	transaction<T>(fn: () => T): T;
 };
 
+// set once the store has been pruned since it was last cleared: from then on, put() records the
+// paths it writes in trie_dirty so prune() only looks at those (see prune)
+const META_PRUNED = "trie:pruned";
+
 export class SqlNodeStore implements NodeStore {
 	constructor(readonly sql: SqlAdapter) {
 		sql.exec(`CREATE TABLE IF NOT EXISTS trie_nodes (
@@ -112,6 +116,11 @@ export class SqlNodeStore implements NodeStore {
 			version INTEGER NOT NULL,
 			node BLOB,
 			PRIMARY KEY (path, version)
+		) WITHOUT ROWID`);
+		sql.exec(`CREATE TABLE IF NOT EXISTS trie_dirty (
+			version INTEGER NOT NULL,
+			path TEXT NOT NULL,
+			PRIMARY KEY (version, path)
 		) WITHOUT ROWID`);
 		sql.exec(`CREATE TABLE IF NOT EXISTS gateway_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
 	}
@@ -141,6 +150,7 @@ export class SqlNodeStore implements NodeStore {
 	}
 	put(version: number, rows: TrieRow[]) {
 		this.sql.transaction(() => {
+			const dirty = this.getMeta(META_PRUNED) !== undefined;
 			for (const { path, node } of rows) {
 				this.sql.exec(
 					"INSERT OR REPLACE INTO trie_nodes (path, version, node) VALUES (?, ?, ?)",
@@ -148,27 +158,52 @@ export class SqlNodeStore implements NodeStore {
 					version,
 					node === null ? null : hexToBytes(node),
 				);
+				if (dirty) this.sql.exec("INSERT OR IGNORE INTO trie_dirty (version, path) VALUES (?, ?)", version, path);
 			}
 		});
 	}
+	// A row becomes unreachable once a newer row <= minVersion exists at its path, so after the first
+	// prune (a full pass, once per snapshot) only the paths put() recorded since need looking at: the
+	// work is proportional to what changed, not to the table. The gateway calls this on every sync.
 	prune(minVersion: number) {
+		const first = this.getMeta(META_PRUNED) === undefined;
+		if (!first && !this.sql.exec("SELECT 1 FROM trie_dirty WHERE version <= ? LIMIT 1", minVersion).length) return;
+		const only = first ? "" : "path IN (SELECT path FROM trie_dirty WHERE version <= ?) AND";
+		const scope = first ? [] : [minVersion];
 		this.sql.transaction(() => {
 			// rows older than the newest row <= minVersion at the same path
 			this.sql.exec(
-				`DELETE FROM trie_nodes WHERE version < (
+				`DELETE FROM trie_nodes WHERE ${only} version < (
 					SELECT MAX(t.version) FROM trie_nodes t WHERE t.path = trie_nodes.path AND t.version <= ?
 				)`,
+				...scope,
 				minVersion,
 			);
 			// what's left <= minVersion is the only row there: drop it if it is a deletion marker
-			this.sql.exec("DELETE FROM trie_nodes WHERE node IS NULL AND version <= ?", minVersion);
+			this.sql.exec(`DELETE FROM trie_nodes WHERE ${only} node IS NULL AND version <= ?`, ...scope, minVersion);
+			this.sql.exec("DELETE FROM trie_dirty WHERE version <= ?", minVersion);
+			// rows above minVersion written before the first prune weren't recorded (none right after a snapshot)
+			if (first) {
+				this.sql.exec(
+					"INSERT OR IGNORE INTO trie_dirty (version, path) SELECT version, path FROM trie_nodes WHERE version > ?",
+					minVersion,
+				);
+			}
+			this.setMeta(META_PRUNED, "1");
 		});
 	}
 	truncate(maxVersion: number) {
-		this.sql.exec("DELETE FROM trie_nodes WHERE version > ?", maxVersion);
+		this.sql.transaction(() => {
+			this.sql.exec("DELETE FROM trie_nodes WHERE version > ?", maxVersion);
+			this.sql.exec("DELETE FROM trie_dirty WHERE version > ?", maxVersion);
+		});
 	}
 	clear() {
-		this.sql.exec("DELETE FROM trie_nodes");
+		this.sql.transaction(() => {
+			this.sql.exec("DELETE FROM trie_nodes");
+			this.sql.exec("DELETE FROM trie_dirty");
+			this.setMeta(META_PRUNED, undefined);
+		});
 	}
 	getMeta(key: string): string | undefined {
 		const [row] = this.sql.exec("SELECT value FROM gateway_meta WHERE key = ?", key);
