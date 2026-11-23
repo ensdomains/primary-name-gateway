@@ -33,7 +33,7 @@ export const OPTIMISM: ChainInfo = {
 	alchemySlug: "opt-mainnet",
 	infuraSlug: "optimism-mainnet",
 	publicRPC: "https://mainnet.optimism.io",
-	logStep: 500000, // shrinks automatically if the provider refuses
+	logStep: 500000, // the widest range; each range is sized from the last one's log density
 };
 
 export const BASE: ChainInfo = {
@@ -173,7 +173,7 @@ export function coinTypeFromChainId(chainId: number): bigint {
 }
 
 // "default": general calls
-// "logs": eth_getLogs over large ranges; retried once, the caller shrinks the range
+// "logs": eth_getLogs over large ranges; not retried, the caller shrinks the range
 // "proof": eth_getProof / linea_getProof at historical blocks (OP Stack lookback needs archive state)
 export type RPCPurpose = "default" | "logs" | "proof";
 
@@ -213,8 +213,8 @@ export function beaconURL(chain: L1ChainInfo): string {
 }
 
 export function createClient(chain: ChainInfo, purpose?: RPCPurpose): PublicClient {
-	// an oversized log range fails the same way every time: let the caller shrink it instead of retrying
-	const retry = purpose === "logs" ? { retryCount: 1, timeout: 30_000 } : { retryCount: 5, timeout: 60_000 };
+	// an oversized log range fails the same way every time, slowly: the caller shrinks it instead
+	const retry = purpose === "logs" ? { retryCount: 0, timeout: 30_000 } : { retryCount: 5, timeout: 60_000 };
 	return createPublicClient({
 		transport: http(rpcURL(chain, purpose), { batch: true, retryDelay: 500, ...retry }),
 	});

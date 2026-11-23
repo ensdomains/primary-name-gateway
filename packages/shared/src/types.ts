@@ -72,6 +72,7 @@ export type IndexerStatus = {
 	registrar: Address;
 	syncedBlock: number; // changes are complete through this L2 block
 	changeSeq: number; // latest change
+	syncingTo?: number; // while it syncs events: the L2 block it's syncing to
 	commits: { pending: number; valid: number; invalid: number };
 	latestValid?: Pick<Commit, "id" | "l2Block" | "changeSeq" | "validAt">;
 };

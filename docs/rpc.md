@@ -14,7 +14,7 @@ The limits below are what we observed with our own keys on 2026-11-22 (drpc paid
 
 The batch inbox indexer also reads blobs from L1's beacon API ([op-batch-inbox.md](op-batch-inbox.md)): `BEACON_URL_<id>` if set, otherwise the L1's public beacon (`beaconURL()` in [chains.ts](../packages/shared/src/chains.ts)).
 
-`createClient(chain, purpose)` ([chains.ts](../packages/shared/src/chains.ts)) picks the URL. Clients for `logs` retry once with a 30s timeout, because an oversized range fails the same way every time and the caller should shrink it instead. The others retry 5 times with a 60s timeout.
+`createClient(chain, purpose)` ([chains.ts](../packages/shared/src/chains.ts)) picks the URL. Clients for `logs` don't retry and time out after 30s, because an oversized range fails the same way every time, slowly, and the caller should shrink it instead. The others retry 5 times with a 60s timeout.
 
 ## Choosing a URL
 
@@ -40,7 +40,7 @@ Chain ids: Ethereum `1`, OP Mainnet `10`, Base `8453`, Linea `59144`. Logs show 
 |---|---|---|---|
 | URL | `https://lb.drpc.live/<slug>/<key>` | `https://<slug>.g.alchemy.com/v2/<key>` | `https://<slug>.infura.io/v3/<key>` |
 | `getLogs` range | wide (we use up to 500,000 blocks) | **10 blocks** on the free plan | **10,000 blocks** |
-| `getLogs` results | at most **20,000** per request; large responses also fail | — | — |
+| `getLogs` results | at most **20,000** per request; responses over about 15,000 registrar logs fail too ("HTTP response body exceeded the size limit", after 5–30 s) | — | — |
 | archive `eth_getProof` | only ~100k blocks back on OP ("Can't route") | yes | only within **10,000 blocks** of the head |
 | `linea_getProof` | yes | yes | yes |
 | docs | [rate limiting](https://drpc.org/docs/howitworks/ratelimiting), [archive nodes](https://drpc.org/docs/howitworks/archive-nodes), [`eth_getLogs`](https://drpc.org/docs/base-api/eventlogs/eth_getLogs), [plans](https://drpc.org/docs/pricing/plans) | [`eth_getLogs`](https://www.alchemy.com/docs/reference/eth-getlogs), [compute units](https://www.alchemy.com/docs/reference/compute-unit-costs), [pricing](https://www.alchemy.com/pricing) | [docs](https://docs.infura.io/), [pricing](https://www.infura.io/pricing) |
@@ -91,8 +91,9 @@ Indexer (`bun run indexer`, `indexer:base`, `indexer:linea`, `indexer:base-inbox
 |---|---|---|
 | `INDEXER_CHAIN` | `optimism` | `optimism`, `base`, `linea`, or `base-inbox` / `optimism-inbox` ([op-batch-inbox.md](op-batch-inbox.md)) |
 | `INDEXER_PORT` | `8100` | the `:linea` / `:base` / `:base-inbox` scripts use 8101 / 8102 / 8103 |
-| `INDEXER_DB` | `data/<chain>.sqlite` | |
+| `INDEXER_DB` | `data/<L2>.sqlite` | One per L2: `base` and `base-inbox` share `data/base.sqlite` (events and trie), one at a time (a second indexer on the same database refuses to start). Switching drops the other source's commits. |
 | `INDEXER_POLL_MS` | `30000` | |
+| `INDEXER_CATCHUP_BLOCKS` | `10000` | OP Stack: each tick first syncs events to this many blocks below the L2's finalized head, so a new or stopped indexer replays them at once. Commits for older blocks are rebuilt from the newest trie. |
 | `INDEXER_MAX_ATTEMPTS` | `5` | failures before a commit is skipped (sync failures don't count) |
 | `INDEXER_LOOKBACK_SEC` | game finality + 1 day | OP / Base: how far back the first start looks |
 | `INDEXER_MIN_FINAL_AGE_SEC` | game finality − 1 day | OP / Base: start checking validity at this age |
