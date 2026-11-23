@@ -29,7 +29,9 @@
 		"lint": "biome check",
 		"lint:fix": "biome check --write",
 		"indexer:base-inbox": "INDEXER_CHAIN=base-inbox INDEXER_PORT=8103 bun packages/registrar-indexer/src/index.ts",
-		"gateway:base-inbox": "GATEWAY_CHAIN=base-inbox GATEWAY_PORT=8203 INDEXER_URL=http://localhost:8103 bun packages/registrar-gateway/src/main.ts"
+		"gateway:base-inbox": "GATEWAY_CHAIN=base-inbox GATEWAY_PORT=8203 INDEXER_URL=http://localhost:8103 bun packages/registrar-gateway/src/main.ts",
+		"indexer:arbitrum": "INDEXER_CHAIN=arbitrum INDEXER_PORT=8104 bun packages/registrar-indexer/src/index.ts",
+		"gateway:arbitrum": "GATEWAY_CHAIN=arbitrum GATEWAY_PORT=8204 INDEXER_URL=http://localhost:8104 bun packages/registrar-gateway/src/main.ts"
 	},
 	"devDependencies": {
 		"@adraffy/blocksmith": "^0.1.60",

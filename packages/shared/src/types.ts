@@ -9,7 +9,7 @@ import type { TrieRow } from "./trie.js";
 // invalid: OP game lost, was blacklisted, or its claim doesn't match L2
 export type CommitStatus = "pending" | "valid" | "invalid";
 
-export type CommitKind = "op" | "linea" | "inbox";
+export type CommitKind = "op" | "linea" | "inbox" | "arbitrum";
 
 type CommitBase = {
 	id: number; // OP: dispute game index, Linea: finalized L2 block, inbox: see InboxCommit
@@ -52,7 +52,17 @@ export type InboxCommit = CommitBase & {
 	batch: "singular" | "span";
 };
 
-export type Commit = OPCommit | LineaCommit | InboxCommit;
+// an Arbitrum assertion; id = L1 block * 10000 + log index of its AssertionCreated
+export type ArbitrumCommit = CommitBase & {
+	kind: "arbitrum";
+	assertionHash: Hex;
+	parentAssertionHash: Hex;
+	afterStateHash: Hex;
+	afterInboxBatchAcc: Hex;
+	l1Block: number; // createdAtBlock
+};
+
+export type Commit = OPCommit | LineaCommit | InboxCommit | ArbitrumCommit;
 
 // one registrar event, in chain order (see docs/registrar.md)
 //   name:  NameForAddrChanged(addr, name)
@@ -72,6 +82,7 @@ export type IndexerStatus = {
 	kind: CommitKind;
 	l2BlockMs?: number; // the L2's current block time (OP Stack: Base is 200 ms since Denim)
 	minAgeSec?: number; // OP: unchallenged games this old are accepted before finality; the verifier must match
+	minAgeBlocks?: number; // Arbitrum: unchallenged assertions this many L1 blocks old, likewise
 	registrar: Address;
 	syncedBlock: number; // changes are complete through this L2 block
 	changeSeq: number; // latest change

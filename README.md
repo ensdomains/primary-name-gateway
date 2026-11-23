@@ -11,6 +11,7 @@ Each L2 has a reverse registrar holding its [ENSIP-19](https://docs.ens.domains/
 | OP Mainnet | `0x8000000a` | dispute games (super root) | [docs/optimism.md](docs/optimism.md) |
 | Base | `0x80002105` | dispute games (output root, `AggregateVerifier`) | [docs/base.md](docs/base.md) |
 | Linea | `0x8000e708` | ZK finalizations | [docs/linea.md](docs/linea.md) |
+| Arbitrum One | `0x8000a4b1` | BoLD assertions (confirmed, or unchallenged after `minAgeBlocks`) | [docs/arbitrum.md](docs/arbitrum.md) |
 
 [docs/registrar.md](docs/registrar.md) covers the registrar contract, its storage layouts, and why its storage can be rebuilt from events.
 
@@ -37,14 +38,14 @@ flowchart TD
    1. `verifyStorageRoot(commitProof, registrar, accountProof)`: the commit is valid and fresh on L1, and the account proof gives the registrar's storage root.
    2. `verifyStorageValues(storageRoot, slots, proof)`: the name's header slot and its `NameProof.dataSlots` data slots, which must agree with the header's length. Unset slots are proven absent. All slots share one proof, so a verifier can share work between them.
 
-The serving rules are the same on every chain: the gateway serves the newest valid commit that has been valid for at least `GATEWAY_MARGIN_SEC` (so an L1 node that lags slightly still accepts it), and verifiers reject commits that are too stale (`maxSequenceLag` behind the anchor on OP, `maxBlockLag` L2 blocks on Linea, `maxBlockLag` L1 blocks for the batch inbox): otherwise a gateway could prove a name from before it was changed. If the gateway's newest commit becomes invalid, it truncates back to its newest valid commit and patches from there. If the indexer no longer has the commit a gateway asks to patch from, the gateway falls back to a snapshot.
+The serving rules are the same on every chain: the gateway serves the newest valid commit that has been valid for at least `GATEWAY_MARGIN_SEC` (so an L1 node that lags slightly still accepts it), and verifiers reject commits that are too stale (`maxSequenceLag` behind the anchor on OP, `maxBlockLag` L2 blocks on Linea, `maxBlockLag` L1 blocks for the batch inbox, `maxAgeBlocks` L1 blocks on Arbitrum): otherwise a gateway could prove a name from before it was changed. If the gateway's newest commit becomes invalid, it truncates back to its newest valid commit and patches from there. If the indexer no longer has the commit a gateway asks to patch from, the gateway falls back to a snapshot.
 
 ## Packages
 
 | package | what |
 |---|---|
-| [`shared`](packages/shared) | Chain config and deployments, registrar layouts and events, row formats and provers for each trie kind ([trie.ts](packages/shared/src/trie.ts): Merkle-Patricia, [linea.ts](packages/shared/src/linea.ts): Linea), the indexer ↔ gateway JSON types, and the batch inbox references ([brotli.ts](packages/shared/src/brotli.ts), [op-batch.ts](packages/shared/src/op-batch.ts)). |
-| [`registrar-indexer`](packages/registrar-indexer) | `RegistrarIndexer` (event replay, commits, tries of retained commits, kept as versioned rows in SQLite for OP Stack chains), a `CommitSource` per chain family (dispute games, Linea finalizations, batcher blobs), HTTP API. |
+| [`shared`](packages/shared) | Chain config and deployments, registrar layouts and events, row formats and provers for each trie kind ([trie.ts](packages/shared/src/trie.ts): Merkle-Patricia, [linea.ts](packages/shared/src/linea.ts): Linea), the indexer ↔ gateway JSON types, the batch inbox references ([brotli.ts](packages/shared/src/brotli.ts), [op-batch.ts](packages/shared/src/op-batch.ts)), and Arbitrum assertions ([arbitrum.ts](packages/shared/src/arbitrum.ts)). |
+| [`registrar-indexer`](packages/registrar-indexer) | `RegistrarIndexer` (event replay, commits, tries of retained commits, kept as versioned rows in SQLite for OP Stack chains), a `CommitSource` per chain family (dispute games, Linea finalizations, batcher blobs, Arbitrum assertions), HTTP API. |
 | [`registrar-gateway`](packages/registrar-gateway) | `NodeStore`, `RegistrarGateway` (sync + `proveName`), the [ezccip](https://github.com/adraffy/ezccip.js) endpoint. The library (`src/index.ts`) is runtime-agnostic; `src/main.ts` is the bun server. |
 | [`contracts`](packages/contracts) | `L2ReverseResolver`, `IL2StorageVerifier`, and one verifier per chain family (`OPFaultVerifier`, `LineaVerifier`; research: `OPBatchInboxVerifier`), deployed per chain and shareable by other resolvers. |
 

@@ -9,6 +9,8 @@ export function deploymentOf(status: IndexerStatus): [string, Deployment] | unde
 	);
 }
 
+// minAge: the verifier's early acceptance, as the indexer's (OP: seconds, INDEXER_MIN_AGE_SEC;
+// Arbitrum: L1 blocks, INDEXER_MIN_AGE_BLOCKS)
 export function verifierContract(d: Deployment, minAgeSec = 0): { contract: string; args: unknown[] } {
 	switch (d.kind) {
 		case "op":
@@ -29,6 +31,15 @@ export function verifierContract(d: Deployment, minAgeSec = 0): { contract: stri
 					d.BatchInbox,
 					3000, // maxOriginLag: L1 blocks (sequencing window 3600)
 					8191, // maxBlockLag: what EIP-2935 keeps
+				],
+			};
+		case "arbitrum":
+			return {
+				contract: "ArbitrumVerifier",
+				args: [
+					d.Rollup,
+					minAgeSec, // minAgeBlocks: L1 blocks (0: confirmed assertions only)
+					7200, // maxAgeBlocks: a day of L1 blocks behind the newest acceptable assertion
 				],
 			};
 		case "linea":

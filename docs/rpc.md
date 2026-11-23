@@ -90,7 +90,7 @@ Indexer (`bun run indexer`, `indexer:base`, `indexer:linea`, `indexer:base-inbox
 | variable | default | |
 |---|---|---|
 | `INDEXER_CHAIN` | `optimism` | `optimism`, `base`, `linea`, or `base-inbox` / `optimism-inbox` ([op-batch-inbox.md](op-batch-inbox.md)) |
-| `INDEXER_PORT` | `8100` | the `:linea` / `:base` / `:base-inbox` scripts use 8101 / 8102 / 8103 |
+| `INDEXER_PORT` | `8100` | the `:linea` / `:base` / `:base-inbox` / `:arbitrum` scripts use 8101 / 8102 / 8103 / 8104 |
 | `INDEXER_DB` | `data/<L2>.sqlite` | One per L2: `base` and `base-inbox` share `data/base.sqlite` (events and trie), one at a time (a second indexer on the same database refuses to start). Each source's commits stay; switching back resumes where it left off, rebuilding the newest valid commits' tries. |
 | `INDEXER_POLL_MS` | `30000` | |
 | `INDEXER_CATCHUP_BLOCKS` | `10000` | OP Stack: each tick first syncs events to this many blocks below the L2's finalized head, so a new or stopped indexer replays them at once. Commits for older blocks are rebuilt from the newest trie. |
@@ -98,7 +98,8 @@ Indexer (`bun run indexer`, `indexer:base`, `indexer:linea`, `indexer:base-inbox
 | `INDEXER_LOOKBACK_SEC` | game finality + 1 day | OP / Base: how far back the first start looks |
 | `INDEXER_MIN_FINAL_AGE_SEC` | game finality − 1 day | OP / Base: start checking validity at this age |
 | `INDEXER_MIN_AGE_SEC` | `0` | OP / Base: accept unchallenged games this old; must equal the verifier's `minAgeSec` ([optimism.md](optimism.md#early-acceptance-minagesec)). Changing it re-checks the valid games. |
-| `INDEXER_LOOKBACK_L1_BLOCKS` | `3600` | Linea: L1 blocks to scan on first start |
+| `INDEXER_LOOKBACK_L1_BLOCKS` | `3600` | Linea: L1 blocks to scan on first start. Arbitrum: the same, default the confirm period and a day (about 53,000) |
+| `INDEXER_MIN_AGE_BLOCKS` | `0` | Arbitrum: accept unchallenged assertions this many L1 blocks old; must equal the verifier's `minAgeBlocks` ([arbitrum.md](arbitrum.md)) |
 | `INDEXER_INBOX_INTERVAL_SEC` | `600` | inbox: at most one commit per this much L1 time |
 | `INDEXER_INBOX_SCAN_BLOCKS` | `64` | inbox: L1 blocks to look back for a channel start whose parent is final |
 | `INDEXER_INBOX_FIRST_SCAN_BLOCKS` | `300` | inbox: the same with no commits yet (about an hour) |
