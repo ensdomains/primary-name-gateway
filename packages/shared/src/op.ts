@@ -1,4 +1,14 @@
-import { type Address, encodeAbiParameters, type Hex, hexToBigInt, keccak256, parseAbi, size, slice } from "viem";
+import {
+	type Address,
+	decodeAbiParameters,
+	encodeAbiParameters,
+	type Hex,
+	hexToBigInt,
+	keccak256,
+	parseAbi,
+	size,
+	slice,
+} from "viem";
 
 export const ASR_ABI = parseAbi([
 	"function disputeGameFactory() view returns (address)",
@@ -76,29 +86,31 @@ export function decodeGameClaim(rootClaim: Hex, extraData: Hex, chainId: number)
 }
 
 // OPFaultCommitProof (see OPFaultVerifier.sol)
-export function encodeOPFaultCommitProof(p: { game: Address; superRoot: Hex; outputRootProof: OutputRootProof }): Hex {
-	return encodeAbiParameters(
-		[
+const OP_FAULT_COMMIT_PROOF = [
+	{
+		type: "tuple",
+		components: [
+			{ name: "game", type: "address" },
+			{ name: "superRoot", type: "bytes" },
 			{
+				name: "outputRootProof",
 				type: "tuple",
 				components: [
-					{ name: "game", type: "address" },
-					{ name: "superRoot", type: "bytes" },
-					{
-						name: "outputRootProof",
-						type: "tuple",
-						components: [
-							{ name: "version", type: "bytes32" },
-							{ name: "stateRoot", type: "bytes32" },
-							{ name: "messagePasserStorageRoot", type: "bytes32" },
-							{ name: "latestBlockhash", type: "bytes32" },
-						],
-					},
+					{ name: "version", type: "bytes32" },
+					{ name: "stateRoot", type: "bytes32" },
+					{ name: "messagePasserStorageRoot", type: "bytes32" },
+					{ name: "latestBlockhash", type: "bytes32" },
 				],
 			},
 		],
-		[p],
-	);
+	},
+] as const;
+export function encodeOPFaultCommitProof(p: { game: Address; superRoot: Hex; outputRootProof: OutputRootProof }): Hex {
+	return encodeAbiParameters(OP_FAULT_COMMIT_PROOF, [p]);
+}
+// outputRootProof.latestBlockhash is the committed L2 block's hash
+export function decodeOPFaultCommitProof(proof: Hex) {
+	return decodeAbiParameters(OP_FAULT_COMMIT_PROOF, proof)[0];
 }
 
 // OPFaultVerifier accountProof: abi.encode(bytes[]) of eth_getProof's accountProof

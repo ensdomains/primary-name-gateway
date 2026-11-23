@@ -106,16 +106,18 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
   - forge: unit tests, [LineaVerifier.t.sol](packages/contracts/test/LineaVerifier.t.sol) on real `linea_getProof` output, and [BrotliPrefix.t.sol](packages/contracts/test/BrotliPrefix.t.sol) (gas).
 - `bun run test:mainnet` needs a running indexer (any chain) with a valid commit and RPC keys. It deploys the chain's verifier and the resolver on an anvil fork of L1 mainnet, resolves names through CCIP-Read, and checks every indexed name (or a sample of `MAINNET_SAMPLE`, with every long name) against the registrar.
 - `bun run test:fork` runs `OPBatchInboxVerifier` on L1 mainnet forks (archive RPC).
-- `bun run prove <address> [chain]` proves one address's primary name through a running indexer and gateway (the ports of `indexer:<chain>` / `gateway:<chain>`, or `--indexer URL --gateway URL`). It reads the chain and commit kind from the indexer's `/status`, deploys the verifier and a resolver pointing at the gateway on a blocksmith fork of L1, resolves the name through CCIP-Read, and prints:
+- `bun run prove <address> <chain>` proves one address's primary name through a gateway (the port of `gateway:<chain>`, or `--gateway URL`). It only talks to the gateway, as a client would, so it works against any gateway, including one whose indexer is stopped or out of reach. It deploys the chain's verifier and a resolver pointing at the gateway on a blocksmith fork of L1, resolves the name through CCIP-Read, reads the L2 block from the proof's commit proof, and prints:
 
   ```
   name      "quelburr.base.eth"
-  gateway   13 ms, 23,904-byte response
-  verify    12,216,685 gas (verifyName on the L1 fork)
-  proof     L2 block 61,392,830 (inbox commit 264805010390)
-  finalized L2 block 61,395,018: the proof is 2,188 blocks (7m) behind
-  L2        matches L2ReverseRegistrar.nameForAddr at L2 block 61,392,830
+  gateway   23 ms, 25,088-byte response
+  verify    12,975,804 gas (verifyName on the L1 fork)
+  proof     L2 block 61,419,983 (inbox: batch in L1 block 26,480,951)
+  finalized L2 block 61,421,724: the proof is 1,741 blocks (6m) behind
+  L2        matches L2ReverseRegistrar.nameForAddr at L2 block 61,419,983
   ```
+
+  For OP Stack fault proofs, pass `--min-age SEC` when the indexer accepts games early (its `INDEXER_MIN_AGE_SEC`).
 
 ## References
 
