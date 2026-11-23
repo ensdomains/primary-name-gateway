@@ -76,6 +76,7 @@ export class RPCChangeReader implements ChangeReader {
 			this.deployment.layout.ownerSlot === undefined ? [NAME_CHANGED] : [NAME_CHANGED, OWNERSHIP_TRANSFERRED];
 		for (;;) {
 			const end = Math.min(toBlock, fromBlock + this.logStep - 1);
+			const t0 = Date.now();
 			try {
 				const logs = await this.logsClient.getLogs({
 					address: this.registrar,
@@ -105,7 +106,11 @@ export class RPCChangeReader implements ChangeReader {
 				const limit = /limit of (\d+)/.exec(String(err instanceof Error ? err.message : err))?.[1];
 				if (limit) this.maxLogStep = Math.max(1, Math.min(this.maxLogStep, Number(limit)));
 				this.logStep = Math.min(this.logStep >> 1, this.maxLogStep);
-				this.log?.(`getLogs failed, step = ${this.logStep}`);
+				const why = String(err instanceof Error ? err.message : err)
+					.split("\n")[0]
+					.replace(/https?:\/\/\S+/g, "<rpc>");
+				const sec = Math.round((Date.now() - t0) / 1000);
+				this.log?.(`getLogs over ${end - fromBlock + 1} blocks failed after ${sec}s (${why}): step = ${this.logStep}`);
 			}
 		}
 	}

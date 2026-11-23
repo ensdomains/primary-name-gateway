@@ -2,6 +2,7 @@ import type { Change, Commit, Deployment, IndexerStatus, TrieRow } from "@primar
 import type { Hex } from "viem";
 import type { IndexerDB } from "./db.js";
 import type { ChangeReader } from "./l2.js";
+import { n, Progress } from "./progress.js";
 import { createIndexerTrie, type IndexerTrie, type RowPage } from "./tries.js";
 
 // Finds commits on L1 and captures what the verifier will need from the L2 at that moment.
@@ -33,6 +34,7 @@ export class RegistrarIndexer {
 	readonly trie: IndexerTrie;
 	syncedBlock: number;
 	changeSeq = 0;
+	syncingTo?: number; // the L2 block a sync in progress is headed for
 
 	constructor(readonly config: IndexerConfig) {
 		const { db, deployment } = config;
@@ -55,11 +57,16 @@ export class RegistrarIndexer {
 			for (const c of wanted.get(this.changeSeq) ?? []) this.trie.capture(c);
 		};
 		capture();
+		const first = this.changeSeq;
+		const last = db.lastChangeSeq();
+		const rebuild = new Progress("rebuilding the trie: change", first, last, (...a) => this.log(...a), "changes");
 		for (const c of db.iterateChanges(this.changeSeq)) {
 			this.trie.apply(c);
 			this.changeSeq = c.seq;
 			capture();
+			rebuild.update(c.seq);
 		}
+		if (last > first) this.log(`rebuilt the trie: ${n(last - first)} changes from the change log (${rebuild.elapsed})`);
 		const missing = retained.filter((c) => !this.trie.has(c.id)).length;
 		if (missing) this.log(`${missing} retained commits are older than the stored trie (not served)`);
 	}
@@ -86,6 +93,7 @@ export class RegistrarIndexer {
 			kind: deployment.kind,
 			registrar: deployment.L2ReverseRegistrar,
 			syncedBlock: this.syncedBlock,
+			syncingTo: this.syncingTo,
 			changeSeq: this.changeSeq,
 			commits: db.countCommits(),
 			latestValid: latest && {
@@ -155,12 +163,27 @@ export class RegistrarIndexer {
 		if (deployment.kind === "linea" || !l2.finalizedBlock) return;
 		const target = (await l2.finalizedBlock()).number - catchUpBlocks;
 		if (target <= this.syncedBlock) return;
-		this.log(`catching up: events from L2 block ${this.syncedBlock + 1} to ${target}`);
+		this.log(`catching up: events from L2 block ${n(this.syncedBlock + 1)} to ${n(target)}`);
 		await this.syncChanges(target);
-		this.log(`caught up: ${this.changeSeq} changes through L2 block ${this.syncedBlock}`);
+		this.log(`caught up: ${n(this.changeSeq)} changes through L2 block ${n(this.syncedBlock)}`);
 	}
 
 	private async syncChanges(toBlock: number) {
+		const first = this.changeSeq;
+		const progress = new Progress("syncing events: L2 block", this.syncedBlock, toBlock, (...a) => this.log(...a));
+		this.syncingTo = toBlock;
+		const stop = progress.heartbeat(() => progress.update(this.syncedBlock, `${n(this.changeSeq - first)} changes`));
+		try {
+			await this.syncTo(toBlock, progress, first);
+		} finally {
+			stop();
+			this.syncingTo = undefined;
+		}
+		const count = this.changeSeq - first;
+		if (count) this.log(`synced ${n(count)} changes through L2 block ${n(this.syncedBlock)} (${progress.elapsed})`);
+	}
+
+	private async syncTo(toBlock: number, progress: Progress, first: number) {
 		const { db, l2 } = this.config;
 		while (this.syncedBlock < toBlock) {
 			const result = await l2.getChanges(this.syncedBlock + 1, toBlock);
@@ -172,7 +195,7 @@ export class RegistrarIndexer {
 			for (const c of changes) this.trie.apply(c);
 			if (changes.length) this.changeSeq = changes[changes.length - 1].seq;
 			this.syncedBlock = result.toBlock;
-			if (changes.length) this.log(`synced ${changes.length} changes through L2 block ${result.toBlock}`);
+			progress.update(this.syncedBlock, `${n(this.changeSeq - first)} changes`);
 		}
 	}
 }
