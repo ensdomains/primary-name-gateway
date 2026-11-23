@@ -69,7 +69,7 @@ The trie is mutable, so the indexer logs its rows per L2 block in a `RowLog` and
 
 ## Contracts and licensing
 
-`Poseidon2.sol` is vendored from Linea (Apache-2.0, [license](../packages/contracts/src/lib/linea/LICENSE)), made `internal` and memory-based. Linea's `SparseMerkleProof.sol` is AGPL-3.0, so `LineaTrie.sol` is an independent MIT implementation. Contracts build with solc 0.8.33 and via-IR (Poseidon2 is ~16% cheaper with it).
+`Poseidon2.sol` is vendored from Linea ([lib/README.md](../packages/contracts/src/lib/README.md)), made `internal` and memory-based. Linea's `SparseMerkleProof.sol` is AGPL-3.0, so `LineaTrie.sol` is an independent implementation. Contracts build with solc 0.8.33 and via-IR (Poseidon2 is ~16% cheaper with it).
 
 ## Operating
 

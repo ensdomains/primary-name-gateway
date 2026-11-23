@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {SecureMerkleTrie} from "./unruggable/SecureMerkleTrie.sol";
+import {SecureMerkleTrie} from "./optimism/SecureMerkleTrie.sol";
 import {RLPReader} from "./optimism/RLPReader.sol";
 
 /// @notice Ethereum Merkle-Patricia account and storage proofs (eth_getProof).

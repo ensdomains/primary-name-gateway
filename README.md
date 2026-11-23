@@ -80,4 +80,4 @@ Env: `INDEXER_CHAIN`, `INDEXER_PORT`, `INDEXER_DB`, `INDEXER_POLL_MS`, `INDEXER_
 
 ## License
 
-MIT, except [`packages/contracts/src/lib/linea/Poseidon2.sol`](packages/contracts/src/lib/linea) (Apache-2.0, from Linea). See [`packages/contracts/src/lib/README.md`](packages/contracts/src/lib/README.md).
+MIT. Vendored contract libraries are listed in [`packages/contracts/src/lib/README.md`](packages/contracts/src/lib/README.md).

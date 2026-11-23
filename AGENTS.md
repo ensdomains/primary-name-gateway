@@ -39,7 +39,7 @@ Run `bun run check` and `bun run test` before finishing a change.
 
 - TypeScript: ESM, tabs, viem for encoding/RPC, explicit `.js` extensions on relative imports.
 - Solidity 0.8.33 with via-IR, 4-space indent, custom errors.
-- Don't vendor AGPL code (Linea's `SparseMerkleProof.sol` is AGPL; `LineaTrie.sol` is an independent implementation).
+- Don't vendor AGPL code (Linea's `SparseMerkleProof.sol` is AGPL; `LineaTrie.sol` is an independent implementation). Vendored files keep their header and get an entry in `packages/contracts/src/lib/README.md`.
 - Keep comments short and about why, not what.
 
 ## Secrets

@@ -6,8 +6,8 @@
 
 pragma solidity ^0.8.0;
 
-import { Bytes } from "../optimism/Bytes.sol";
-import { RLPReader } from "../optimism/RLPReader.sol";
+import { Bytes } from "./Bytes.sol";
+import { RLPReader } from "./RLPReader.sol";
 
 
 /**
