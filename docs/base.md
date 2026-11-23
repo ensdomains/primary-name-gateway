@@ -1,6 +1,6 @@
 # Base
 
-Base is an OP Stack chain, so it uses the OP path ([optimism.md](optimism.md)) end to end: `OPCommitSource`, Merkle-Patricia rows, and the same `OPFaultVerifier` contract deployed for Base. This page covers what differs.
+Base is an OP Stack chain, so it uses the OP path ([optimism.md](optimism.md)) end to end: `OPCommitSource`, Merkle-Patricia rows, and the same `OPFaultVerifier` contract deployed for Base. This page covers what differs. The batch inbox research ([op-batch-inbox.md](op-batch-inbox.md)) also runs on Base (`base-inbox`).
 
 | chain | Base |
 |---|---|
@@ -56,3 +56,8 @@ bun run gateway:base   # :8202
 - **Commits.** The indexer replayed 3,775,126 registrar events. Every game's storage hash matched Base's `eth_getProof`, including 16 games for blocks older than the synced head, which were rebuilt from the newest trie in under a second each. It ended with 84 valid commits and 359 pending, and none skipped.
 - **Names.** `test:mainnet` resolved names through `L2ReverseResolver` on an L1 fork at game 26698 (L2 block 58,956,360, 3,711,020 addresses). It verified 959 names against the registrar, 250 of them long (32 bytes or more).
 - **Memory.** The indexer ran at 63 MB RSS in steady state.
+
+## References
+
+- [Base contract addresses](https://docs.base.org/base-chain/network-information/base-contracts)
+- [`AggregateVerifier`](https://github.com/base/contracts/blob/main/src/L1/proofs/AggregateVerifier.sol) (game type 621)

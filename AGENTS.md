@@ -1,15 +1,16 @@
 # AGENTS.md
 
-Notes for coding agents working in this repo. Read [README.md](README.md) first for the architecture, [docs/registrar.md](docs/registrar.md) for the registrar contract, [docs/optimism.md](docs/optimism.md) / [docs/base.md](docs/base.md) / [docs/linea.md](docs/linea.md) for the chain-specific parts, and [docs/rpc.md](docs/rpc.md) for RPC providers and environment variables.
+Notes for coding agents working in this repo. Read [README.md](README.md) first for the architecture, [docs/registrar.md](docs/registrar.md) for the registrar contract, [docs/optimism.md](docs/optimism.md) / [docs/base.md](docs/base.md) / [docs/linea.md](docs/linea.md) for the chain-specific parts, [docs/op-batch-inbox.md](docs/op-batch-inbox.md) for the batch inbox research, and [docs/rpc.md](docs/rpc.md) for RPC providers and environment variables.
 
 ## Layout
 
-- `packages/shared`: chain config and deployments (`chains.ts`), registrar layouts and events (`registrar.ts`), OP game decoding and proof encoders (`op.ts`), Merkle-Patricia rows (`trie.ts`), Linea sparse Merkle rows and multiproofs (`linea.ts`), indexer ↔ gateway types.
+- `packages/shared`: chain config and deployments (`chains.ts`), registrar layouts and events (`registrar.ts`), OP game decoding and proof encoders (`op.ts`), Merkle-Patricia rows (`trie.ts`), Linea sparse Merkle rows and multiproofs (`linea.ts`), indexer ↔ gateway types, block headers (`header.ts`), and the batch inbox references: partial brotli (`brotli.ts`), blob data, frames, batch prefixes and commit proofs (`op-batch.ts`).
 - `packages/registrar-indexer`: `RegistrarIndexer` (event replay, commits, tries of retained commits) with a `CommitSource` per chain family (`op.ts`: dispute games, `linea.ts`: finalizations, `inbox.ts`: batcher blobs, with `kzg.ts`), trie backends (`tries.ts`: `MPTIndexerTrie` = merkle-builder `EthRowStorage` over `SqlRowLog` in `sql-row-log.ts`, `LineaIndexerTrie` + in-memory `RowLog`), SQLite (`bun:sqlite`), HTTP API.
 - `packages/registrar-gateway`: `NodeStore` (versioned trie rows with `get` and `floor`), `RegistrarGateway` (sync + `proveName`, per commit kind), ezccip endpoint. `src/index.ts` must stay runtime-agnostic (no bun/node imports) so it can run in a Cloudflare Durable Object; bun-only code lives in `src/main.ts` and `src/sqlite.ts`.
 - `packages/contracts`: Foundry project. `L2ReverseResolver` (ENSIP-10 + CCIP-Read), `IL2StorageVerifier` implementations `op/OPFaultVerifier` and `linea/LineaVerifier` (+ `linea/LineaTrie` multiproofs). `op/OPBatchInboxVerifier` (+ `brotli/BrotliPrefix`, `op/OPBlob`, `op/OPBatchPrefix`, `op/OPBatchInbox`) is research for a verifier from batcher posts ([docs/op-batch-inbox.md](docs/op-batch-inbox.md)). `src/lib/` is vendored; see `src/lib/README.md` before changing it.
-- `test/`: bun tests, including the fake OP rollup and fake Linea used by the offline e2es.
-- `scripts/linea-fixture.ts`: refreshes the mainnet fixture used by the forge tests.
+- `test/`: bun tests, including the fake OP rollup and fake Linea used by the offline e2es. Mainnet fixtures live in `packages/contracts/test/fixtures/` (forge reads them too).
+- `scripts/`: `linea-fixture.ts` and `op-batch-fixture.ts` refresh the mainnet fixtures; `op-batch-cost.ts` sizes the brotli decoding.
+- `.github/workflows/main.yml`: CI. Offline only (no RPC keys), one job per test group so a failed group can be re-run alone. A test that needs RPC access belongs in `test:mainnet` / `test:fork`, not in `bun run test`.
 
 ## Commands
 
@@ -17,8 +18,8 @@ Notes for coding agents working in this repo. Read [README.md](README.md) first 
 bun i                      # bunfig.toml uses the hoisted linker; don't change it
 bun run check              # tsc
 bun run lint               # biome (lint:fix applies fixes and formatting)
-bun run test               # forge build + property tests + both offline e2es + forge tests
-bun run test:mainnet       # needs a running indexer (either chain) with a valid commit, and .env keys
+bun run test               # every offline group: test:unit, test:contracts, test:e2e, test:inbox, test:kzg (CI runs each as a job)
+bun run test:mainnet       # needs a running indexer (any chain) with a valid commit, and .env keys
 bun run test:fork          # OPBatchInboxVerifier on L1 mainnet forks (archive RPC, fixtures < 8191 blocks old)
 bun run indexer:linea      # / gateway:linea: Linea on :8101 / :8201 (indexer:base / gateway:base: Base on :8102 / :8202, :base-inbox on :8103 / :8203)
 ```

@@ -85,3 +85,8 @@ bun run gateway:linea   # :8201
 ```
 
 Checked on mainnet (2026-11-22): replaying all 111 registrar events reproduced `linea_getProof`'s storage root at two finalizations, and `test:mainnet` verified all 99 names on an L1 fork against the real `LineaRollup`.
+
+## References
+
+- [Linea contract addresses](https://docs.linea.build/get-started/build/contracts), [`linea_getProof`](https://docs.linea.build/api/reference/linea-getproof)
+- [Shomei `ZKTrie`](https://github.com/Consensys/shomei/blob/main/trie/src/main/java/net/consensys/shomei/trie/ZKTrie.java) (the state trie)

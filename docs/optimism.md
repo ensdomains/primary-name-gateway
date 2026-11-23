@@ -12,6 +12,8 @@
 | verifier | [`OPFaultVerifier`](../packages/contracts/src/op/OPFaultVerifier.sol), one per OP Stack chain |
 | `verifyName` gas | ~0.2M |
 
+A faster alternative that trusts the batcher instead of waiting for games is researched in [op-batch-inbox.md](op-batch-inbox.md).
+
 ## Commits
 
 The indexer's `OPCommitSource` ([op.ts](../packages/registrar-indexer/src/op.ts)) scans `DisputeGameFactory.gameAtIndex` for games of the respected type. For each game it:
@@ -82,3 +84,8 @@ The indexer keeps the trie in its SQLite database as versioned rows ([sql-row-lo
 bun run indexer   # :8100
 bun run gateway   # :8200
 ```
+
+## References
+
+- OP Stack specs: [fault dispute game](https://specs.optimism.io/fault-proof/stage-one/fault-dispute-game.html), [`AnchorStateRegistry`](https://specs.optimism.io/fault-proof/stage-one/anchor-state-registry.html), [output roots](https://specs.optimism.io/protocol/proposals.html)
+- [Contract addresses](https://docs.optimism.io/superchain/addresses)

@@ -83,7 +83,7 @@ export type InboxDeployment = DeploymentBase & {
 
 export type Deployment = OPDeployment | LineaDeployment | InboxDeployment;
 
-// https://docs.optimism.io/chain/addresses
+// https://docs.optimism.io/superchain/addresses
 // https://docs.ens.domains/ensip/19/#annex-supported-chains
 export const OP_MAINNET: OPDeployment = {
 	kind: "op",
@@ -99,6 +99,7 @@ export const OP_MAINNET: OPDeployment = {
 
 // Base: output root games of type 621 (AggregateVerifier: TEE + ZK multiproofs), valid after ~5 days.
 // https://github.com/base/contracts/blob/main/src/L1/proofs/AggregateVerifier.sol
+// https://docs.base.org/base-chain/network-information/base-contracts
 export const BASE_MAINNET: OPDeployment = {
 	kind: "op",
 	l1: MAINNET,

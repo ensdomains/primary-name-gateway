@@ -10,7 +10,9 @@ The limits below are what we observed with our own keys on 2026-11-22 (drpc paid
 |---|---|---|
 | `logs` | `eth_getLogs` over wide block ranges | replaying the registrar's events from its creation block ([registrar.md](registrar.md)) |
 | `proof` | `eth_getProof` (OP Stack), `linea_getProof` (Linea) at a commit's L2 block | the registrar's account proof, captured when a commit is seen. On OP / Base the first start looks back 6–8 days, which needs **archive** state. |
-| `default` | everything else: blocks, `eth_call`, L1 contract reads, L1 `getLogs` for Linea finalizations | |
+| `default` | everything else: blocks, `eth_call`, L1 contract reads, L1 `getLogs` for Linea finalizations, and for the batch inbox L1 blocks and `eth_getRawTransactionByHash` | |
+
+The batch inbox indexer also reads blobs from a beacon API (`BEACON_URL`, [op-batch-inbox.md](op-batch-inbox.md)).
 
 `createClient(chain, purpose)` ([chains.ts](../packages/shared/src/chains.ts)) picks the URL. Clients for `logs` retry once with a 30s timeout, because an oversized range fails the same way every time and the caller should shrink it instead. The others retry 5 times with a 60s timeout.
 
@@ -87,7 +89,7 @@ Indexer (`bun run indexer`, `indexer:base`, `indexer:linea`, `indexer:base-inbox
 | variable | default | |
 |---|---|---|
 | `INDEXER_CHAIN` | `optimism` | `optimism`, `base`, `linea`, or `base-inbox` / `optimism-inbox` ([op-batch-inbox.md](op-batch-inbox.md)) |
-| `INDEXER_PORT` | `8100` | the `:base` / `:linea` scripts use 8102 / 8101 |
+| `INDEXER_PORT` | `8100` | the `:linea` / `:base` / `:base-inbox` scripts use 8101 / 8102 / 8103 |
 | `INDEXER_DB` | `data/<chain>.sqlite` | |
 | `INDEXER_POLL_MS` | `30000` | |
 | `INDEXER_MAX_ATTEMPTS` | `5` | failures before a commit is skipped (sync failures don't count) |
