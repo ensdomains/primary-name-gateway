@@ -30,13 +30,13 @@ of the contract, and they differ in what else is in storage:
 
 Deployed (checked 2026-11-22 with `eth_getStorageAt` and `owner()`):
 
-| chain | coin type | variant |
-|---|---|---|
-| OP Mainnet (10) | `0x8000000a` | plain |
-| Linea (59144) | `0x8000e708` | plain |
-| Arbitrum One (42161) | `0x8000a4b1` | plain |
-| Scroll (534352) | `0x80082750` | plain |
-| Base (8453) | `0x80002105` | Ownable: slot 1 = `owner()` = `0xf9Bb…63e9` |
+| chain | chain id | coin type | variant |
+|---|---|---|---|
+| OP Mainnet | 10 | `0x8000000a` | plain |
+| Linea | 59144 | `0x8000e708` | plain |
+| Arbitrum One | 42161 | `0x8000a4b1` | plain |
+| Scroll | 534352 | `0x80082750` | plain |
+| Base | 8453 | `0x80002105` | Ownable: slot 1 = `owner()` = `0xf9Bb…63e9` |
 
 In code the layout is a parameter, not an assumption: `RegistrarLayout { namesSlot, ownerSlot? }`
 (`packages/shared/src/registrar.ts`, per deployment in `chains.ts`), `L2ReverseResolver(namesSlot)` and
