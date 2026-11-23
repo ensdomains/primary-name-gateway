@@ -29,7 +29,7 @@ Run `bun run check`, `bun run lint` and `bun run test` before finishing a change
 ## Invariants
 
 - The gateway never builds a trie or hashes nodes: it only hashes slot keys (keccak / Poseidon2) and the root row of each commit it loads. Anything else that needs hashing belongs in the indexer.
-- OP rows are `(absolute nibble path, RLP node)`; Linea rows are described at the top of `shared/src/linea.ts`. `null` marks a removed row. OP rows are merkle-builder's row format (`EthRowStorage`, `getProofFromRows`): every node has a row, inlined ones included.
+- OP rows are `(absolute nibble path, RLP node)`; Linea rows are described at the top of `shared/src/linea.ts`. `null` marks a removed row. OP rows are merkle-builder's row format (`EthRowStorage`, `getProofFromRows`): every node has a row, inlined ones included. The indexer serves them, and the gateway stores them, as chunks (`chunkId`, limbs in `shared/src/trie.ts`, built by `registrar-indexer/src/chunks.ts`); `test/chunks.test.ts` checks them against merkle-builder.
 - The OP trie is persistent (`trie_head` / `trie_history`, `state.trieSeq` = last change applied). Versions are change seqs; only the versions of retained commits stay readable, so don't read a version that isn't kept.
 - The indexer refuses a commit whose replayed storage root differs from the L2's account proof (`addCommit`). Keep that check.
 - The registrar's storage is a fold over its events; the layout (`namesSlot`, `ownerSlot`) is a parameter everywhere, never hard-coded.

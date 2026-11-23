@@ -113,10 +113,10 @@ Wrangler config (see [get started](https://developers.cloudflare.com/durable-obj
 
 | limit (Cloudflare docs) | what it means here |
 |---|---|
-| 30 s CPU per invocation by default, configurable up to 5 minutes (`limits.cpu_ms`); alarm handlers have 15 minutes of wall time | A steady-state sync takes milliseconds. A first snapshot does not: Base's trie is about 5M rows, about 100 pages of 50,000, followed by one full prune (about 2 s on an M-series Mac). That spans many alarms (see Open). |
-| 10 GB storage per object | Base's rows take about 0.7 GB in SQLite, and the gateway holds one copy plus the rows that changed since its oldest held commit. |
-| rows written: Free 100,000/day; Paid 50 million/month included, then $1.00/million | Every trie row put or pruned is a row written, and after the first prune each patch row is also recorded once in `trie_dirty`. A Base snapshot is about 5M rows, so it needs the Paid plan. After that, patches are tens to hundreds of rows per commit. Linea's and OP Mainnet's registrars are tiny. |
-| rows read: Paid 25 billion/month included | A proof reads a few dozen rows. |
+| 30 s CPU per invocation by default, configurable up to 5 minutes (`limits.cpu_ms`); alarm handlers have 15 minutes of wall time | A steady-state sync takes milliseconds. A first snapshot does not: Base's is 102 pages (about 70,000 chunk rows, 393 MB gzipped); a bun gateway loads it in about 30 s. That spans many alarms (see Open). |
+| 10 GB storage per object | Base's chunks take about 0.6 GB in SQLite, and the gateway holds one copy plus the chunks that changed since its oldest held commit. |
+| rows written: Free 100,000/day; Paid 50 million/month included, then $1.00/million | Every trie row put or pruned is a row written, and after the first prune each patch row is also recorded once in `trie_dirty`. Rows are chunks (see [optimism.md](optimism.md#trie-rows)): a Base snapshot is about 70,000 rows, which fits a day of the Free plan. After that, a patch is a few hundred rows per commit. Linea's and OP Mainnet's registrars are tiny. |
+| rows read: Paid 25 billion/month included | A proof reads 5 rows per slot (4 trunk nodes and 1 limb). |
 | about 1,000 requests per second per object (soft) | One object serves one chain's requests one at a time. To serve more, run more objects (each a full copy that syncs on its own), for example one per region. |
 | SQL: 100 bound parameters, 100 KB per statement, 8 MB per row | `SqlNodeStore` binds at most 3 parameters per statement and stores single trie nodes (at most a few hundred bytes). |
 

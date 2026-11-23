@@ -64,13 +64,28 @@ Encodings: `commitProof = abi.encode(OPFaultCommitProof { game, superRoot, outpu
 
 ## Trie rows
 
-Rows are `(absolute nibble path, RLP node)`, merkle-builder's row format ([`EthRowStorage`](https://github.com/ensdomains/merkle-builder#row-storage)): every node, including nodes under 32 bytes that are inlined in their parent. The gateway proves a slot by walking rows along its key.
+Rows are `(absolute nibble path, RLP node)`, merkle-builder's row format ([`EthRowStorage`](https://github.com/ensdomains/merkle-builder#row-storage)): every node, including nodes under 32 bytes that are inlined in their parent. A slot's proof is the rows along its key.
+
+The indexer keeps one row per node. What it serves, and what the gateway stores, are **chunks** ([trie.ts](../packages/shared/src/trie.ts)), so there are far fewer, larger rows:
+
+- A node less than 4 nibbles deep is its own row (the trunk). Every deeper node is in the row of its 4-nibble prefix (a limb): a compact list of `(path suffix, node)` entries.
+- `/snapshot` pages are whole chunks, and `/patch` sends every chunk that holds a changed node. Both say `x-row-format: mpt-chunks-4`, and the gateway refuses rows in a layout it doesn't expect.
+- A proof reads 4 trunk rows and 1 limb (`chunkReader` reads each chunk once per proof). The rows still hold encoded nodes, so the gateway still hashes nothing.
+
+| Base (2026-11-23) | one row per node | chunks |
+|---|---|---|
+| rows | 5,076,577 | 69,905 (65,536 limbs, at most 11 KB) |
+| a proof reads | 7 rows | 5 rows (0.11 ms) |
+| a 100-leaf patch | 517 rows, 183 KB | 299 rows, 814 KB |
+| full snapshot | | 102 pages, 393 MB gzipped |
+
+A depth of 3 makes 100 KB rows and 11 MB patches; a depth of 5 still leaves 1.1M rows.
 
 The indexer keeps the trie in its SQLite database as versioned rows ([sql-row-log.ts](../packages/registrar-indexer/src/sql-row-log.ts)), with the change seq as the version:
 
 - Events are applied to an `EthRowStorage`, which reads only the nodes along the touched paths. The changed rows are written every `INDEXER_FLUSH_CHANGES` changes (default 50,000) and at each commit. Rows sit at hashed paths, so each write touches pages all over the table; larger batches share pages and cost memory.
 - `trie_head` holds the newest node of every path. `trie_history` holds older nodes for as long as a retained commit (pending, or one of the newest valid) still reads them.
-- A snapshot is the rows at a commit's version. A patch is the rows written between two versions.
+- A snapshot is the chunks at a commit's version. A patch is the chunks holding the nodes written between two versions.
 - Memory doesn't grow with the registrar, and a restart resumes from the stored trie instead of replaying every event. On first start with an existing change log, the indexer builds the rows from it.
 - A game for an older L2 block than the indexer has synced (out of order) is rebuilt from the newest trie. Every key written since is set back to its value then, from the change log; that gives the storage hash to check. The rows that differ are written into history at the game's version.
 

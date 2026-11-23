@@ -77,6 +77,10 @@ export class SqlRowLog {
 			rowsAt: db.prepare(`SELECT path, node FROM (
 				SELECT h.path AS path, ${at} AS node FROM trie_head h WHERE h.path >= :from ORDER BY h.path
 			) WHERE node IS NOT NULL AND (:after IS NULL OR path != :after) LIMIT :limit`),
+			range: db.prepare(`SELECT path, node FROM (
+				SELECT h.path AS path, ${at} AS node FROM trie_head h
+				WHERE h.path >= :from AND (:to IS NULL OR h.path < :to) ORDER BY h.path
+			) WHERE node IS NOT NULL LIMIT :limit`),
 			changed: db.prepare(`SELECT h.path AS path, ${at} AS node FROM trie_head h WHERE h.path IN (
 				SELECT path FROM trie_head WHERE v > :from AND v <= :v
 				UNION SELECT path FROM trie_history WHERE v > :from AND v <= :v
@@ -186,6 +190,13 @@ export class SqlRowLog {
 	rowsAt(v: number, after: string | undefined, limit: number): TrieRow[] {
 		const from = after ?? "";
 		return (this.q.rowsAt.all({ v, from, after: after ?? null, limit }) as { path: string; node: Uint8Array }[]).map(
+			({ path, node }) => ({ path, node: bytesToHex(node) }),
+		);
+	}
+
+	// live rows of version v with from <= path < to, in path order
+	range(v: number, from: string, to: string | undefined, limit: number): TrieRow[] {
+		return (this.q.range.all({ v, from, to: to ?? null, limit }) as { path: string; node: Uint8Array }[]).map(
 			({ path, node }) => ({ path, node: bytesToHex(node) }),
 		);
 	}

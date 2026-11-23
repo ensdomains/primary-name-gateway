@@ -9,6 +9,7 @@ import {
 	type TrieRow,
 } from "@primary-name-gateway/shared";
 import type { Hex } from "viem";
+import { chunkPage, chunkPatch, type NodeSource } from "./chunks.js";
 import type { IndexerDB } from "./db.js";
 import { KeptVersions, SqlRowLog } from "./sql-row-log.js";
 
@@ -130,17 +131,28 @@ export class MPTIndexerTrie implements IndexerTrie {
 	has(id: number) {
 		return this.versions.has(id);
 	}
+	// chunk rows (shared/trie.ts): whole chunks after chunk `after`, until at least `limit` nodes
 	snapshot(id: number, after: string | undefined, limit: number): RowPage | undefined {
 		const v = this.versions.get(id);
 		if (v === undefined) return;
-		return page(this.log.rowsAt(v, after, limit), limit);
+		return chunkPage(this.source(v), after, limit);
 	}
+	// the chunks holding the nodes that changed, as they are at `to`
 	patch(from: number, to: number): TrieRow[] | undefined {
 		const a = this.versions.get(from);
 		const b = this.versions.get(to);
 		if (a === undefined || b === undefined) return;
 		if (a > b) throw new Error(`patch ${from} => ${to}: backwards`);
-		return this.log.changed(a, b);
+		return chunkPatch(
+			this.log.changed(a, b).map((r) => r.path),
+			this.source(b),
+		);
+	}
+	private source(v: number): NodeSource {
+		return {
+			range: (from, to, limit) => this.log.range(v, from, to, limit),
+			get: (path) => this.log.get(path, v),
+		};
 	}
 }
 

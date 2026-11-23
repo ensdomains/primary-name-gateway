@@ -1,5 +1,6 @@
 import {
 	type Commit,
+	chunkReader,
 	dataSlots,
 	encodeLineaMultiProof,
 	encodeMPTStorageProofs,
@@ -10,6 +11,8 @@ import {
 	proveLineaSlots,
 	proveSlot,
 	type RegistrarLayout,
+	ROW_FORMAT_LINEA,
+	ROW_FORMAT_MPT,
 	rootHash,
 	type SnapshotPage,
 	type TrieRow,
@@ -33,6 +36,9 @@ type Bootstrap = { commit: Commit; after: string | null };
 const META_HELD = "held"; // commits we serve
 const META_HEAD = "head"; // newest commit whose rows are in the store (patches start here)
 const META_BOOTSTRAP = "bootstrap";
+const META_FORMAT = "format"; // how the store's rows are laid out
+// OP Stack rows are chunks (shared/trie.ts); a store from before that starts over with a snapshot
+const STORE_FORMAT = "chunks-4";
 
 // Mirrors the latest valid commits of a registrar-indexer as versioned trie rows in a NodeStore
 // and proves names[addr] by walking rows. It never builds a trie and never hashes nodes: only
@@ -73,6 +79,14 @@ export class RegistrarGateway {
 
 	async sync() {
 		const { keep } = this.config;
+		if (this.store.getMeta(META_FORMAT) !== STORE_FORMAT) {
+			if (this.store.getMeta(META_HEAD)) this.log("the store's rows are in an older layout: starting over");
+			this.store.clear();
+			this.setHeld([]);
+			this.setHead(undefined);
+			this.store.setMeta(META_BOOTSTRAP, undefined);
+			this.store.setMeta(META_FORMAT, STORE_FORMAT);
+		}
 		const resume = this.store.getMeta(META_BOOTSTRAP);
 		if (resume) await this.bootstrap(JSON.parse(resume));
 
@@ -113,6 +127,7 @@ export class RegistrarGateway {
 		const res = await this.fetchRaw(`/patch?from=${from.id}&to=${to.id}`);
 		if (res.status === 404) return false; // indexer no longer has `from`: start over
 		if (!res.ok) throw new Error(`patch ${from.id} => ${to.id}: ${res.status}`);
+		this.checkFormat(res, to);
 		const rows = (await res.json()) as TrieRow[];
 		this.store.put(to.l2Block, rows);
 		this.setHead(to);
@@ -137,7 +152,10 @@ export class RegistrarGateway {
 		let rows = 0;
 		for (;;) {
 			const query = after === null ? "" : `&after=${after}`;
-			const page: SnapshotPage = await this.fetchJSON(`/snapshot?commit=${commit.id}${query}`);
+			const res = await this.fetchRaw(`/snapshot?commit=${commit.id}${query}`);
+			if (!res.ok) throw new Error(`snapshot ${commit.id}: ${res.status} ${await res.text()}`);
+			this.checkFormat(res, commit);
+			const page = (await res.json()) as SnapshotPage;
 			this.store.put(commit.l2Block, page.rows);
 			rows += page.rows.length;
 			if (page.next === null) break;
@@ -158,6 +176,13 @@ export class RegistrarGateway {
 		if (res.status === 404) return true;
 		if (!res.ok) throw new Error(`commit ${commit.id}: ${res.status}`);
 		return ((await res.json()) as Commit).status === "invalid";
+	}
+
+	// rows in another layout would load fine and then fail every proof
+	private checkFormat(res: Response, commit: Commit) {
+		const want = commit.kind === "linea" ? ROW_FORMAT_LINEA : ROW_FORMAT_MPT;
+		const got = res.headers.get("x-row-format");
+		if (got !== want) throw new Error(`the indexer serves ${got ?? "unlabelled"} rows, expected ${want}`);
 	}
 
 	private checkRoot(commit: Commit): boolean {
@@ -195,8 +220,9 @@ export class RegistrarGateway {
 			storageProof = encodeLineaMultiProof(proveLineaSlots(get, floor, slots).proof); // one multiproof
 			count = slots.length - 1;
 		} else {
-			const header = proveSlot(get, slot);
-			const data = dataSlots(slot, header.value).map((s) => proveSlot(get, s).proof);
+			const read = chunkReader(get); // reads each chunk once for all the slots
+			const header = proveSlot(read, slot);
+			const data = dataSlots(slot, header.value).map((s) => proveSlot(read, s).proof);
 			storageProof = encodeMPTStorageProofs([header.proof, ...data]);
 			count = data.length;
 		}
