@@ -10,7 +10,7 @@ The limits below are what we observed with our own keys on 2026-11-22 (drpc paid
 |---|---|---|
 | `logs` | `eth_getLogs` over wide block ranges | replaying the registrar's events from its creation block ([registrar.md](registrar.md)) |
 | `proof` | `eth_getProof` (OP Stack), `linea_getProof` (Linea) at a commit's L2 block | the registrar's account proof, captured when a commit is seen. On OP / Base the first start looks back 6–8 days, which needs **archive** state. |
-| `default` | everything else: blocks, `eth_call`, L1 contract reads, L1 `getLogs` for Linea finalizations, and for the batch inbox L1 blocks and `eth_getRawTransactionByHash` | |
+| `default` | everything else: blocks, `eth_call`, L1 contract reads, L1 `getLogs` for Linea finalizations, and for the batch inbox L1 blocks with their transactions (re-encoded to prove one, so any provider works; `eth_getRawTransactionByHash`, which Infura lacks, only as a fallback) | |
 
 The batch inbox indexer also reads blobs from L1's beacon API ([op-batch-inbox.md](op-batch-inbox.md)): `BEACON_URL_<id>` if set, otherwise the L1's public beacon (`beaconURL()` in [chains.ts](../packages/shared/src/chains.ts)).
 
@@ -100,7 +100,8 @@ Indexer (`bun run indexer`, `indexer:base`, `indexer:linea`, `indexer:base-inbox
 | `INDEXER_MIN_AGE_SEC` | `0` | OP / Base: accept unchallenged games this old; must equal the verifier's `minAgeSec` ([optimism.md](optimism.md#early-acceptance-minagesec)). Changing it re-checks the valid games. |
 | `INDEXER_LOOKBACK_L1_BLOCKS` | `3600` | Linea: L1 blocks to scan on first start |
 | `INDEXER_INBOX_INTERVAL_SEC` | `600` | inbox: at most one commit per this much L1 time |
-| `INDEXER_INBOX_SCAN_BLOCKS` | `64` | inbox: L1 blocks to look back for a channel start |
+| `INDEXER_INBOX_SCAN_BLOCKS` | `64` | inbox: L1 blocks to look back for a channel start whose parent is final |
+| `INDEXER_INBOX_FIRST_SCAN_BLOCKS` | `300` | inbox: the same with no commits yet (about an hour) |
 | `INDEXER_INBOX_MAX_BLOCK_LAG` | `7200` | inbox: commits older than this many L1 blocks become invalid (below the verifier's `maxBlockLag`) |
 | `KZG_TRUSTED_SETUP` | `data/kzg/trusted_setup.txt` | inbox: downloaded there if missing |
 | `INDEXER_FLUSH_CHANGES` | `50000` | OP / Base: changes applied in memory before the trie rows are written ([optimism.md](optimism.md#trie-rows)) |
