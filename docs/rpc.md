@@ -110,6 +110,8 @@ Gateway (`bun run gateway`, `gateway:base`, `gateway:linea`):
 | `GATEWAY_MARGIN_SEC` | `120` | serve a commit once it has been valid this long |
 | `GATEWAY_POLL_MS` | `30000` | |
 
+Fork test (`bun run test:fork`, [op-batch-inbox.md](op-batch-inbox.md)): needs an archive L1 RPC (`ALCHEMY_KEY`, or `PROOF_RPC_URL_1` / `RPC_URL_1`).
+
 Mainnet test (`bun run test:mainnet`):
 
 | variable | default | |

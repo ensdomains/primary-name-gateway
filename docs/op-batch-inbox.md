@@ -19,6 +19,8 @@ Only frame 0 (the first blob of the channel's first transaction) is needed.
 
 ## Verifier steps
 
+[OPBatchInboxVerifier.sol](../packages/contracts/src/op/OPBatchInboxVerifier.sol) implements `IL2StorageVerifier` with these steps. Its commit proof is `abi.encode(OPBatchInboxCommitProof)` (`encodeOPBatchInboxCommitProof` in [op-batch.ts](../packages/shared/src/op-batch.ts)); the account and storage proofs are the same as `OPFaultVerifier`'s. Parameters: the chain's `SystemConfig` (for `batcherHash()`), its batch inbox, `maxOriginLag` (below the sequencing window, 3600 L1 blocks on OP Mainnet and Base) and `maxBlockLag`.
+
 1. L1 block header against `blockhash` / EIP-2935 (8,191 blocks, about 27 hours).
 2. The batcher transaction: MPT proof in the block's transaction trie, `to` = the batch inbox, sender recovered from the type-3 signature = `SystemConfig.batcherHash()`.
 3. The blob's first field elements against its versioned hash: one KZG point-evaluation call per field element (50k gas), or the whole blob evaluated at a Fiat-Shamir point plus one call.
@@ -71,7 +73,21 @@ The fixtures `packages/contracts/test/fixtures/op-batch/{op,base}-blob.json` hol
 | OP Mainnet | 6.7M (3.4M KZG; 40 elements would do: ~5.4M) |
 | Base | 9.0M (3.4M KZG, 5.5M brotli) |
 
+## End to end
+
+`scripts/op-batch-fixture.ts` also stores the L1 header, the batcher transaction's proof in the transactions trie, the batch's parent L2 header and the registrar's account proof. With them:
+
+- `test/op-batch-verifier.test.ts` (offline, L1 block hash set by the test) gets the registrar's real storage root at the parent block on both chains. It refuses an unknown L1 block, another transaction or blob, another batcher or inbox, an origin outside the window, and a header that isn't the parent.
+- `bun run test:fork` deploys the verifier unchanged on anvil forks of L1 mainnet after each batch: the L1 block hash from `BLOCKHASH` (100 blocks later) and from EIP-2935 (2,000 later, or as late as exists), and the batcher from the real `SystemConfig`. It needs an archive RPC, and fixtures less than 8,191 blocks old.
+
+| `verifyStorageRoot` | gas |
+|---|---|
+| OP Mainnet (64 field elements) | 7.6M |
+| Base | 10.0M |
+
 ## Open
 
-- Steps 1, 2, 5 and 6: the L1 header and batcher transaction, the sequencing window, and the L2 header. Then a verifier contract and a commit source for the indexer.
+- A commit source for the indexer (each new batcher transaction that starts a channel is a commit) and the gateway's proof assembly (blob field elements and KZG proofs from a beacon API).
+- OP Mainnet only needs 40 field elements: size them to the batch.
+- The batcher key is trusted. A batch whose channel never completes, or an unsafe-head reorg on the sequencer, would name a parent that never became safe. That's rare with an honest batcher, but `maxBlockLag` limits how long such a commit is accepted.
 - Batcher transactions that put several channels' frames in one blob, or start a blob with the end of a previous channel.

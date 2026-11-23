@@ -1,5 +1,7 @@
-// Fixture for the batch inbox tests: the first field elements of a batcher's blob, with a KZG proof
-// for each (EIP-4844 point evaluation at the element's domain point).
+// Fixture for the batch inbox tests, from a real batcher transaction: the first field elements of its
+// blob with a KZG proof for each (EIP-4844 point evaluation at the element's domain point), the L1
+// header and the transaction's trie proof, the batch's parent L2 header, and the registrar's account
+// proof at that L2 block.
 //
 //   gh api -H "Accept: application/vnd.github.raw" repos/ethereum/c-kzg-4844/contents/src/trusted_setup.txt > data/kzg/trusted_setup.txt
 //   bun scripts/op-batch-fixture.ts <base|op> <L1 block>   (blobs are kept ~18 days)
@@ -9,8 +11,18 @@
 // with the point evaluation precompile.
 
 import { bls12_381 } from "@noble/curves/bls12-381";
-import { createClient, MAINNET } from "@primary-name-gateway/shared";
-import { bytesToHex, type Hex, hexToBytes, parseAbi, sha256 } from "viem";
+import {
+	blobDataPrefix,
+	brotliDecodePrefix,
+	channelStart,
+	createClient,
+	DEPLOYMENTS,
+	decodeBatchPrefix,
+	encodeBlockHeader,
+	MAINNET,
+	type RpcBlockHeader,
+} from "@primary-name-gateway/shared";
+import { bytesToHex, type Hex, hexToBytes, keccak256, numberToHex, parseAbi, sha256, toRlp } from "viem";
 
 const BEACON = "https://ethereum-beacon-api.publicnode.com";
 const FIELD_ELEMENTS = 64; // enough for Base's batch prefix (OP needs 40)
@@ -98,15 +110,136 @@ function prove(m: number): Hex {
 
 const proofs: Hex[] = [];
 for (let i = 0; i < FIELD_ELEMENTS; i++) proofs.push(prove(i));
+// -- the L1 header and the transaction's proof in the block's transactions trie
+const getBlock = (client: typeof l1, tag: Hex, byHash = false) =>
+	client.request({
+		method: byHash ? "eth_getBlockByHash" : "eth_getBlockByNumber",
+		params: [tag, false],
+	} as never) as Promise<RpcBlockHeader & { transactions: Hex[] }>;
+const l1Raw = await getBlock(l1, numberToHex(block.number));
+const l1Header = encodeBlockHeader(l1Raw);
+const raws: Hex[] = [];
+for (let i = 0; i < l1Raw.transactions.length; i += 25) {
+	const batch = l1Raw.transactions.slice(i, i + 25);
+	raws.push(
+		...(await Promise.all(
+			batch.map((h) => l1.request({ method: "eth_getRawTransactionByHash", params: [h] } as never) as Promise<Hex>),
+		)),
+	);
+}
+const txIndex = tx.transactionIndex;
+const { root: txRoot, proof: txProof } = trieProof(
+	raws.map((value, i) => ({ key: nibbles(hexToBytes(toRlp(i ? numberToHex(i) : "0x"))), value })),
+	txIndex,
+);
+if (txRoot !== l1Raw.transactionsRoot) throw new Error("transactions root mismatch");
+
+// -- the batch's parent L2 block, and the registrar's account proof there
+const deployment = DEPLOYMENTS[chain === "op" ? "optimism" : "base"];
+const l2 = createClient(deployment.l2, "proof");
+const { compressed } = channelStart(blobDataPrefix(blob.subarray(0, 32 * FIELD_ELEMENTS)));
+const batch = decodeBatchPrefix(brotliDecodePrefix(compressed, 112).output);
+let l2Raw: RpcBlockHeader;
+if (batch.type === "singular") {
+	l2Raw = await getBlock(l2, batch.parentHash, true);
+} else {
+	// OP Mainnet: L2 genesis 105235063 at 1686068903, 2s blocks
+	const first = 105235063n + batch.relTimestamp / 2n;
+	l2Raw = await getBlock(l2, numberToHex(first - 1n));
+	if (!l2Raw.hash.startsWith(batch.parentCheck)) throw new Error("parent check mismatch");
+}
+const l2Header = encodeBlockHeader(l2Raw);
+const account = await l2.getProof({
+	address: deployment.L2ReverseRegistrar,
+	storageKeys: [],
+	blockNumber: BigInt(l2Raw.number),
+});
+
 const out = {
 	chain,
+	systemConfig,
+	inbox,
+	batcher,
 	l1Block: Number(block.number),
+	l1Hash: block.hash,
 	tx: tx.hash,
+	txIndex,
+	l1Header,
+	txProof,
+	blobIndex: 0,
 	versionedHash,
 	commitment: bytesToHex(commitment),
 	fieldElements: bytesToHex(blob.subarray(0, 32 * FIELD_ELEMENTS)),
 	proofs,
+	l2Block: Number(BigInt(l2Raw.number)),
+	l2Hash: l2Raw.hash,
+	l2Header,
+	l2StateRoot: l2Raw.stateRoot,
+	registrar: deployment.L2ReverseRegistrar,
+	accountProof: account.accountProof,
+	storageHash: account.storageHash,
 };
 const file = `${import.meta.dir}/../packages/contracts/test/fixtures/op-batch/${chain}-blob.json`;
 await Bun.write(file, `${JSON.stringify(out, null, "\t")}\n`);
 console.log(`wrote ${file}`);
+
+// -- a minimal Merkle-Patricia trie over raw keys (the transactions trie; merkle-builder's are storage tries)
+function nibbles(b: Uint8Array): number[] {
+	return [...b].flatMap((x) => [x >> 4, x & 15]);
+}
+
+type Rlp = Hex | Rlp[];
+
+function compact(path: number[], leaf: boolean): Hex {
+	// hex-prefix encoding: flag nibble (leaf 2, odd length 1), then the path
+	const odd = path.length & 1;
+	const flag = ((leaf ? 2 : 0) + odd) << 4;
+	const bytes = odd ? [flag | path[0], ...pairs(path.slice(1))] : [flag, ...pairs(path)];
+	return bytesToHex(Uint8Array.from(bytes));
+}
+
+function pairs(path: number[]): number[] {
+	const out: number[] = [];
+	for (let i = 0; i < path.length; i += 2) out.push((path[i] << 4) | path[i + 1]);
+	return out;
+}
+
+// returns the node and, for `target`, the encoded nodes from this one down
+function build(
+	items: { key: number[]; value: Hex }[],
+	depth: number,
+	target: number[] | undefined,
+): { node: Rlp; enc: Hex; path: Hex[] } {
+	const done = (node: Rlp, below: Hex[] = []) => {
+		const enc = toRlp(node as never) as Hex;
+		return { node, enc, path: target ? [enc, ...below] : [] };
+	};
+	if (items.length === 1) return done([compact(items[0].key.slice(depth), true), items[0].value]);
+	let n = 0;
+	while (items.every((x) => x.key.length > depth + n && x.key[depth + n] === items[0].key[depth + n])) n++;
+	const ref = (c: { node: Rlp; enc: Hex }) => ((c.enc.length - 2) / 2 < 32 ? c.node : keccak256(c.enc));
+	if (n > 0) {
+		const child = build(items, depth + n, target);
+		return done([compact(items[0].key.slice(depth, depth + n), false), ref(child)], child.path);
+	}
+	const branch: Rlp[] = [];
+	let below: Hex[] = [];
+	for (let i = 0; i < 16; i++) {
+		const group = items.filter((x) => x.key[depth] === i);
+		if (!group.length) {
+			branch.push("0x");
+			continue;
+		}
+		const t = target && target[depth] === i ? target : undefined;
+		const child = build(group, depth + 1, t);
+		if (t) below = child.path;
+		branch.push(ref(child));
+	}
+	branch.push("0x");
+	return done(branch, below);
+}
+
+function trieProof(items: { key: number[]; value: Hex }[], index: number): { root: Hex; proof: Hex[] } {
+	const { enc, path } = build(items, 0, items[index].key);
+	return { root: keccak256(enc), proof: path };
+}

@@ -12,7 +12,7 @@
 		"indexer": "bun packages/registrar-indexer/src/index.ts",
 		"gateway": "bun packages/registrar-gateway/src/main.ts",
 		"forge": "cd packages/contracts && forge build",
-		"test": "bun run forge && bun test test/trie.test.ts test/brotli.test.ts test/brotli-sol.test.ts test/op-batch-sol.test.ts test/inline-node.test.ts test/store.test.ts test/l2.test.ts test/linea.test.ts test/offline.test.ts test/offline-base.test.ts test/offline-minage.test.ts test/offline-linea.test.ts && cd packages/contracts && forge test",
+		"test": "bun run forge && bun test test/trie.test.ts test/brotli.test.ts test/brotli-sol.test.ts test/op-batch-sol.test.ts test/op-batch-verifier.test.ts test/inline-node.test.ts test/store.test.ts test/l2.test.ts test/linea.test.ts test/offline.test.ts test/offline-base.test.ts test/offline-minage.test.ts test/offline-linea.test.ts && cd packages/contracts && forge test",
 		"test:mainnet": "bun run forge && bun test test/mainnet.test.ts",
 		"indexer:linea": "INDEXER_CHAIN=linea INDEXER_PORT=8101 bun packages/registrar-indexer/src/index.ts",
 		"gateway:linea": "GATEWAY_CHAIN=linea INDEXER_URL=http://localhost:8101 GATEWAY_PORT=8201 bun packages/registrar-gateway/src/main.ts",
@@ -20,7 +20,8 @@
 		"indexer:base": "INDEXER_CHAIN=base INDEXER_PORT=8102 bun packages/registrar-indexer/src/index.ts",
 		"gateway:base": "GATEWAY_CHAIN=base INDEXER_URL=http://localhost:8102 GATEWAY_PORT=8202 bun packages/registrar-gateway/src/main.ts",
 		"lint": "biome check",
-		"lint:fix": "biome check --write"
+		"lint:fix": "biome check --write",
+		"test:fork": "bun run forge && bun test test/op-batch-fork.test.ts"
 	},
 	"devDependencies": {
 		"@adraffy/blocksmith": "^0.1.60",

@@ -3,7 +3,7 @@
 // https://specs.optimism.io/protocol/derivation.html#batch-format
 // https://specs.optimism.io/protocol/delta/span-batches.html
 
-import { bytesToBigInt, bytesToHex, type Hex } from "viem";
+import { bytesToBigInt, bytesToHex, encodeAbiParameters, type Hex } from "viem";
 
 export type BatchPrefix =
 	| {
@@ -135,4 +135,37 @@ export function channelStart(data: Uint8Array): { channelId: Hex; compressed: Ui
 	if (data[23] !== 1) throw new Error(`channel: version ${data[23]} (expected brotli)`);
 	// frame data = channel version . brotli stream (as much as `data` has)
 	return { channelId, compressed: data.subarray(24, Math.min(data.length, 23 + length)) };
+}
+
+// OPBatchInboxVerifier's commit proof
+export type OPBatchInboxCommitProof = {
+	l1Header: Hex;
+	txIndex: number;
+	txProof: Hex[];
+	blobIndex: number;
+	commitment: Hex;
+	fieldElements: Hex;
+	blobProofs: Hex[];
+	l2Header: Hex;
+};
+
+export function encodeOPBatchInboxCommitProof(p: OPBatchInboxCommitProof): Hex {
+	return encodeAbiParameters(
+		[
+			{
+				type: "tuple",
+				components: [
+					{ name: "l1Header", type: "bytes" },
+					{ name: "txIndex", type: "uint256" },
+					{ name: "txProof", type: "bytes[]" },
+					{ name: "blobIndex", type: "uint256" },
+					{ name: "commitment", type: "bytes" },
+					{ name: "fieldElements", type: "bytes" },
+					{ name: "blobProofs", type: "bytes[]" },
+					{ name: "l2Header", type: "bytes" },
+				],
+			},
+		],
+		[{ ...p, txIndex: BigInt(p.txIndex), blobIndex: BigInt(p.blobIndex) }],
+	);
 }
