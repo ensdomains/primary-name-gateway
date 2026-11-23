@@ -17,13 +17,14 @@ Each L2 has a reverse registrar holding its [ENSIP-19](https://docs.ens.domains/
 Research: [docs/op-batch-inbox.md](docs/op-batch-inbox.md) proves OP Stack blocks from the batcher's posts instead of dispute games (minutes instead of days, trusting the batcher key). It works end to end on Base and OP Mainnet (`base-inbox`, `optimism-inbox`); nothing is deployed.
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 400}}}%%
 flowchart TD
     L1c["L1: commits"] --> indexer
-    L2["L2: registrar events<br/>+ account proof"] --> indexer
-    indexer["registrar-indexer<br/>SQLite: events, commits, trie rows"] -->|"snapshot / patch<br/>(trie rows)"| gateway
-    gateway["registrar-gateway (ezccip)<br/>versioned trie rows,<br/>latest 2 valid commits"] -->|"NameProof"| resolver
+    L2["L2: registrar events + account proof"] --> indexer
+    indexer["registrar-indexer — SQLite: events, commits, trie rows"] -->|"snapshot / patch"| gateway
+    gateway["registrar-gateway (ezccip) — latest 2 valid commits"] -->|"NameProof"| resolver
     client["resolve(name, name())"] --> resolver
-    resolver["L2ReverseResolver (L1)"] -.->|"OffchainLookup:<br/>proveName(addr)"| gateway
+    resolver["L2ReverseResolver (L1)"] -.->|"OffchainLookup: proveName(addr)"| gateway
     resolver -->|"verify proofs"| verifier["IL2StorageVerifier (L1)"]
     verifier -.->|"commit is valid"| L1c
 ```
