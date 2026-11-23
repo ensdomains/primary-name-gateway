@@ -5,6 +5,8 @@ export const ASR_ABI = parseAbi([
 	"function respectedGameType() view returns (uint32)",
 	"function isGameClaimValid(address) view returns (bool)",
 	"function isGameBlacklisted(address) view returns (bool)",
+	"function isGameProper(address) view returns (bool)",
+	"function isGameRespected(address) view returns (bool)",
 	"function getAnchorRoot() view returns (bytes32, uint256)",
 ]);
 
@@ -20,9 +22,16 @@ export const GAME_ABI = parseAbi([
 	"function status() view returns (uint8)",
 	"function createdAt() view returns (uint64)",
 	"function resolvedAt() view returns (uint64)",
+	"function gameType() view returns (uint32)",
+	// FaultDisputeGame: 1 until someone challenges
+	"function claimDataLen() view returns (uint256)",
+	// Base's AggregateVerifier: nonzero once the TEE proof is challenged with a ZK proof
+	"function counteredByIntermediateRootIndexPlusOne() view returns (uint256)",
 ]);
 
 export const GAME_STATUS_CHALLENGER_WINS = 1;
+export const GAME_STATUS_DEFENDER_WINS = 2;
+export const GAME_TYPE_AGGREGATE_VERIFIER = 621; // Base
 
 export const L2_TO_L1_MESSAGE_PASSER = "0x4200000000000000000000000000000000000016";
 

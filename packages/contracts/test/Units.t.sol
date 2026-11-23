@@ -11,7 +11,7 @@ contract UnitsTest is Test {
     OPFaultVerifier verifier;
 
     function setUp() public {
-        verifier = new OPFaultVerifier(IAnchorStateRegistry(address(0)), 10, 0);
+        verifier = new OPFaultVerifier(IAnchorStateRegistry(address(0)), 10, 0, 0);
         resolver = new L2ReverseResolver(IL2StorageVerifier(address(verifier)), address(1), 0, 0x8000000a, new string[](0));
     }
 
@@ -60,7 +60,7 @@ contract UnitsTest is Test {
     }
 
     function test_findOutputRoot_missingChain() public {
-        OPFaultVerifier base = new OPFaultVerifier(IAnchorStateRegistry(address(0)), 8453, 0);
+        OPFaultVerifier base = new OPFaultVerifier(IAnchorStateRegistry(address(0)), 8453, 0, 0);
         vm.expectRevert(abi.encodeWithSelector(OPFaultVerifier.ChainNotInSuperRoot.selector, 8453));
         base.findOutputRoot(SUPER_ROOT, ROOT_CLAIM);
     }

@@ -22,6 +22,20 @@ The indexer's `OPCommitSource` ([op.ts](../packages/registrar-indexer/src/op.ts)
 4. Replays the registrar's events up to that block and checks the storage root against the account proof.
 5. Stores the commit as `pending`. Once it's old enough (`INDEXER_MIN_FINAL_AGE_SEC`), it polls `isGameClaimValid` and marks it `valid`. Recent valid games are re-checked, and a game that is blacklisted, retired, or lost (`CHALLENGER_WINS`) becomes `invalid`. The gateway then rewinds past it.
 
+## Early acceptance (`minAgeSec`)
+
+A game takes about 7 days to become a valid claim. `OPFaultVerifier` can optionally accept games sooner: with `minAgeSec > 0` (constructor argument), `isGameAcceptable(game)` is true for a finalized game (`isGameClaimValid`, as with `minAgeSec = 0`), or for a game that is
+
+1. proper and respected according to the `AnchorStateRegistry` (registered, not blacklisted, not retired, not paused, of the respected type when created),
+2. not lost (`status != CHALLENGER_WINS`), and
+3. either resolved for the defender (waiting for the airgap), or at least `minAgeSec` old and **unchallenged**: `claimDataLen() == 1` for OP's fault dispute games, `counteredByIntermediateRootIndexPlusOne() == 0` for Base's `AggregateVerifier` (type 621). Unknown game types are never accepted early.
+
+**Trust:** this assumes honest challengers respond within `minAgeSec`. A fraudulent proposal that nobody challenges in time is accepted until it is challenged, loses, or is blacklisted; from then on the verifier rejects it, the indexer marks it `invalid`, and gateways rewind to their newest acceptable commit. For calibration, 2 of OP Mainnet's last 200 games (as of 2026-11-22) had been challenged.
+
+The indexer has to apply the same rule as the deployed verifier, or a gateway serves commits the verifier rejects: set `INDEXER_MIN_AGE_SEC` to the verifier's `minAgeSec`. It then polls pending games from that age on, and keeps re-checking the valid games a gateway may hold (the newest `retainValid`).
+
+Freshness doesn't get weaker: `maxSequenceLag` still bounds a game's lag behind the anchor (the newest finalized state), so the oldest acceptable state is the same as without `minAgeSec`. An honest gateway just serves much newer state.
+
 ## Reorgs
 
 The indexer's change log is append-only, so it must only ever contain final state:

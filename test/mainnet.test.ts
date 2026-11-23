@@ -117,6 +117,7 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 						d.AnchorStateRegistry,
 						d.l2.id,
 						86400, // maxSequenceLag: 1 day (super root games: seconds)
+						Number(process.env.INDEXER_MIN_AGE_SEC ?? 0), // minAgeSec: as the indexer
 					])
 				: await deploy(artifact("LineaVerifier.sol", "LineaVerifier"), [
 						d.LineaRollup,

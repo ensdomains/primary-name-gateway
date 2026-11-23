@@ -131,7 +131,7 @@ describe("offline e2e", () => {
 
 		const verifier = await foundry.deploy({
 			file: "OPFaultVerifier",
-			args: [asr.target, CHAIN_ID, MAX_SEQUENCE_LAG],
+			args: [asr.target, CHAIN_ID, MAX_SEQUENCE_LAG, 0],
 		});
 		const r = await foundry.deploy({
 			file: "L2ReverseResolver",

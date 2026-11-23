@@ -25,6 +25,10 @@ What this repo relies on is the standard `IDisputeGame` surface, which it keeps:
 
 Games are created about every 20 minutes.
 
+## Early acceptance
+
+`OPFaultVerifier`'s `minAgeSec` option ([optimism.md](optimism.md#early-acceptance-minagesec)) works for type 621: a game counts as unchallenged while `counteredByIntermediateRootIndexPlusOne() == 0`. Every game starts with a TEE proof; a challenge is a ZK proof against it. None of Base's last 200 games (as of 2026-11-22) had been challenged.
+
 ## Registrar
 
 Base's registrar is `L2ReverseRegistrarWithMigration` (Ownable), so its storage includes the owner at slot 1 and the indexer replays `OwnershipTransferred` as well as `NameForAddrChanged`. The migration's `batchSetName` writes names in bulk, and it also emits `NameForAddrChanged`, so the storage is still a fold over events.

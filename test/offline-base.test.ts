@@ -116,7 +116,7 @@ describe("offline e2e (base: output root games, Ownable layout)", () => {
 		});
 		ccip = await serve(createEZCCIP(gateway), { protocol: "raw", log: false });
 
-		const verifier = await foundry.deploy({ file: "OPFaultVerifier", args: [asr.target, CHAIN_ID, MAX_SEQUENCE_LAG] });
+		const verifier = await foundry.deploy({ file: "OPFaultVerifier", args: [asr.target, CHAIN_ID, MAX_SEQUENCE_LAG, 0] });
 		const r = await foundry.deploy({
 			file: "L2ReverseResolver",
 			args: [verifier.target, REGISTRAR, OWNABLE_LAYOUT.namesSlot, COIN_TYPE, [ccip.endpoint]],

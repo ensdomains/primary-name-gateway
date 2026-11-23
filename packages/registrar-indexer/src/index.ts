@@ -43,6 +43,8 @@ function createSource(deployment: Deployment, log: Log): { l2: ChangeReader; sou
 			lookbackSec: Number(env.INDEXER_LOOKBACK_SEC ?? deployment.gameFinalitySec + 86400),
 			minFinalAgeSec: Number(env.INDEXER_MIN_FINAL_AGE_SEC ?? deployment.gameFinalitySec - 86400),
 			maxAttempts,
+			// accept unchallenged games this old before finality; must match the deployed OPFaultVerifier's minAgeSec
+			minAgeSec: Number(env.INDEXER_MIN_AGE_SEC ?? 0),
 		});
 		return { l2, source };
 	}
