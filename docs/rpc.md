@@ -82,11 +82,11 @@ RPC:
 | `RPC_URL_<id>` | explicit URL for a chain, every purpose |
 | `PROOF_RPC_URL_<id>` | explicit URL for a chain's proofs |
 
-Indexer (`bun run indexer`, `indexer:base`, `indexer:linea`):
+Indexer (`bun run indexer`, `indexer:base`, `indexer:linea`, `indexer:base-inbox`):
 
 | variable | default | |
 |---|---|---|
-| `INDEXER_CHAIN` | `optimism` | `optimism`, `base` or `linea` |
+| `INDEXER_CHAIN` | `optimism` | `optimism`, `base`, `linea`, or `base-inbox` / `optimism-inbox` ([op-batch-inbox.md](op-batch-inbox.md)) |
 | `INDEXER_PORT` | `8100` | the `:base` / `:linea` scripts use 8102 / 8101 |
 | `INDEXER_DB` | `data/<chain>.sqlite` | |
 | `INDEXER_POLL_MS` | `30000` | |
@@ -95,10 +95,15 @@ Indexer (`bun run indexer`, `indexer:base`, `indexer:linea`):
 | `INDEXER_MIN_FINAL_AGE_SEC` | game finality − 1 day | OP / Base: start checking validity at this age |
 | `INDEXER_MIN_AGE_SEC` | `0` | OP / Base: accept unchallenged games this old; must equal the verifier's `minAgeSec` ([optimism.md](optimism.md#early-acceptance-minagesec)) |
 | `INDEXER_LOOKBACK_L1_BLOCKS` | `3600` | Linea: L1 blocks to scan on first start |
+| `INDEXER_INBOX_INTERVAL_SEC` | `600` | inbox: at most one commit per this much L1 time |
+| `INDEXER_INBOX_SCAN_BLOCKS` | `64` | inbox: L1 blocks to look back for a channel start |
+| `INDEXER_INBOX_MAX_BLOCK_LAG` | `7200` | inbox: commits older than this many L1 blocks become invalid (below the verifier's `maxBlockLag`) |
+| `BEACON_URL` | `https://ethereum-beacon-api.publicnode.com` | inbox: beacon API for blobs |
+| `KZG_TRUSTED_SETUP` | `data/kzg/trusted_setup.txt` | inbox: downloaded there if missing |
 | `INDEXER_FLUSH_CHANGES` | `50000` | OP / Base: changes applied in memory before the trie rows are written ([optimism.md](optimism.md#trie-rows)) |
 | `INDEXER_CACHE_MB` | `64` | SQLite page cache |
 
-Gateway (`bun run gateway`, `gateway:base`, `gateway:linea`):
+Gateway (`bun run gateway`, `gateway:base`, `gateway:linea`, `gateway:base-inbox`):
 
 | variable | default | |
 |---|---|---|
@@ -109,6 +114,8 @@ Gateway (`bun run gateway`, `gateway:base`, `gateway:linea`):
 | `GATEWAY_KEEP` | `2` | valid commits held |
 | `GATEWAY_MARGIN_SEC` | `120` | serve a commit once it has been valid this long |
 | `GATEWAY_POLL_MS` | `30000` | |
+
+Fork test (`bun run test:fork`, [op-batch-inbox.md](op-batch-inbox.md)): needs an archive L1 RPC (`ALCHEMY_KEY`, or `PROOF_RPC_URL_1` / `RPC_URL_1`).
 
 Mainnet test (`bun run test:mainnet`):
 

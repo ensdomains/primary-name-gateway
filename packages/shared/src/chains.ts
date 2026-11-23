@@ -72,7 +72,16 @@ export type LineaDeployment = DeploymentBase & {
 	LineaRollup: Address;
 };
 
-export type Deployment = OPDeployment | LineaDeployment;
+// an OP Stack L2 proven from its batcher's posts (OPBatchInboxVerifier, research: docs/op-batch-inbox.md)
+export type InboxDeployment = DeploymentBase & {
+	kind: "inbox";
+	SystemConfig: Address; // batcherHash()
+	BatchInbox: Address;
+	l2BlockTime: number; // seconds
+	l2Genesis: { block: number; timestamp: number }; // span batches give timestamps relative to it
+};
+
+export type Deployment = OPDeployment | LineaDeployment | InboxDeployment;
 
 // https://docs.optimism.io/chain/addresses
 // https://docs.ens.domains/ensip/19/#annex-supported-chains
@@ -113,10 +122,38 @@ export const LINEA_MAINNET: LineaDeployment = {
 	registrarCreatedAtBlock: 20173340,
 };
 
+export const OP_MAINNET_INBOX: InboxDeployment = {
+	kind: "inbox",
+	l1: MAINNET,
+	l2: OPTIMISM,
+	SystemConfig: "0x229047fed2591dbec1eF1118d64F7aF3dB9EB290",
+	BatchInbox: "0xFF00000000000000000000000000000000000010",
+	L2ReverseRegistrar: OP_MAINNET.L2ReverseRegistrar,
+	layout: OP_MAINNET.layout,
+	registrarCreatedAtBlock: OP_MAINNET.registrarCreatedAtBlock,
+	l2BlockTime: 2,
+	l2Genesis: { block: 105235063, timestamp: 1686068903 }, // Bedrock
+};
+
+export const BASE_MAINNET_INBOX: InboxDeployment = {
+	kind: "inbox",
+	l1: MAINNET,
+	l2: BASE,
+	SystemConfig: "0x73a79Fab69143498Ed3712e519A88a918e1f4072",
+	BatchInbox: "0xFf00000000000000000000000000000000008453",
+	L2ReverseRegistrar: BASE_MAINNET.L2ReverseRegistrar,
+	layout: BASE_MAINNET.layout,
+	registrarCreatedAtBlock: BASE_MAINNET.registrarCreatedAtBlock,
+	l2BlockTime: 2,
+	l2Genesis: { block: 0, timestamp: 1686789347 },
+};
+
 export const DEPLOYMENTS: Record<string, Deployment> = {
 	optimism: OP_MAINNET,
 	base: BASE_MAINNET,
 	linea: LINEA_MAINNET,
+	"optimism-inbox": OP_MAINNET_INBOX,
+	"base-inbox": BASE_MAINNET_INBOX,
 };
 
 // ENSIP-19 coin type of an EVM chain: 0x80000000 | chainId (Ethereum mainnet keeps 60)

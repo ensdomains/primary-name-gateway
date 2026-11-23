@@ -9,10 +9,10 @@ import type { TrieRow } from "./trie.js";
 // invalid: OP game lost, was blacklisted, or its claim doesn't match L2
 export type CommitStatus = "pending" | "valid" | "invalid";
 
-export type CommitKind = "op" | "linea";
+export type CommitKind = "op" | "linea" | "inbox";
 
 type CommitBase = {
-	id: number; // OP: dispute game index, Linea: finalized L2 block
+	id: number; // OP: dispute game index, Linea: finalized L2 block, inbox: see InboxCommit
 	kind: CommitKind;
 	createdAt: number; // L1 timestamp
 	l2Block: number;
@@ -41,7 +41,18 @@ export type LineaCommit = CommitBase & {
 	l1Block: number; // where DataFinalizedV3 was emitted
 };
 
-export type Commit = OPCommit | LineaCommit;
+// a batcher blob that starts a channel; the L2 block is the batch's parent
+// id = l1Block * 10000 + txIndex * 10 + blobIndex
+export type InboxCommit = CommitBase & {
+	kind: "inbox";
+	l1Block: number;
+	tx: Hex;
+	blobIndex: number;
+	l2Hash: Hex;
+	batch: "singular" | "span";
+};
+
+export type Commit = OPCommit | LineaCommit | InboxCommit;
 
 // one registrar event, in chain order (see docs/registrar.md)
 //   name:  NameForAddrChanged(addr, name)

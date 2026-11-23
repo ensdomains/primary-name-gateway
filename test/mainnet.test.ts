@@ -1,7 +1,8 @@
 // End-to-end: anvil fork of L1 mainnet + live registrar-indexer + in-process registrar-gateway.
 //
-// 1. `bun run indexer` (INDEXER_CHAIN=optimism|linea) with at least one valid commit
-//    (OP: ~7 days of lookback and an archive proof RPC, Linea: the next finalization)
+// 1. `bun run indexer` (INDEXER_CHAIN=optimism|base|linea|base-inbox|optimism-inbox) with at least one
+//    valid commit (OP: ~7 days of lookback and an archive proof RPC, Linea: the next finalization,
+//    inbox: the next channel start)
 // 2. `bun run test:mainnet`
 //
 // Deploys the chain's verifier + L2ReverseResolver on the fork, then resolves every known primary name
@@ -59,7 +60,7 @@ async function indexedDeployment(): Promise<Deployment | undefined> {
 	try {
 		const status = (await fetch(`${INDEXER_URL}/status`).then((r) => r.json())) as IndexerStatus;
 		if (!status.latestValid) return;
-		return Object.values(DEPLOYMENTS).find((d) => d.l2.id === status.chainId);
+		return Object.values(DEPLOYMENTS).find((d) => d.l2.id === status.chainId && d.kind === status.kind);
 	} catch {
 		return;
 	}
@@ -119,10 +120,17 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 						86400, // maxSequenceLag: 1 day (super root games: seconds)
 						Number(process.env.INDEXER_MIN_AGE_SEC ?? 0), // minAgeSec: as the indexer
 					])
-				: await deploy(artifact("LineaVerifier.sol", "LineaVerifier"), [
-						d.LineaRollup,
-						100000, // maxBlockLag: L2 blocks (a few days)
-					]);
+				: d.kind === "inbox"
+					? await deploy(artifact("OPBatchInboxVerifier.sol", "OPBatchInboxVerifier"), [
+							d.SystemConfig,
+							d.BatchInbox,
+							3000, // maxOriginLag: L1 blocks (sequencing window 3600)
+							8191, // maxBlockLag: what EIP-2935 keeps
+						])
+					: await deploy(artifact("LineaVerifier.sol", "LineaVerifier"), [
+							d.LineaRollup,
+							100000, // maxBlockLag: L2 blocks (a few days)
+						]);
 		resolver = await deploy(artifact("L2ReverseResolver.sol", "L2ReverseResolver"), [
 			verifier,
 			d.L2ReverseRegistrar,
