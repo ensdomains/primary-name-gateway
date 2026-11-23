@@ -48,8 +48,8 @@ The design already makes the gateway a good fit:
   `put` runs in one transaction, so each patch or snapshot page is applied whole or not at all.
 - **No in-memory state.** The gateway keeps everything in its store, including held commits, the head, and a snapshot cursor. Eviction and hibernation cost nothing: a new instance reads the same SQLite database and carries on with patches.
 - **Snapshots are resumable.** The cursor is saved after each page, so an alarm that's cut short resumes on the next run.
-- **Requests are cheap.** A proof copies a few dozen rows along a slot's key path, and the gateway hashes nothing but slot keys and one root per loaded commit. That fits the single-threaded model easily.
-- **Steady-state syncs are cheap.** Apart from the first snapshot, a sync is one `/commits` request and, when a commit arrives, a patch of tens to hundreds of rows. `SqlNodeStore.prune` is incremental: `put` records the paths it writes in `trie_dirty`, and a prune only looks at those. Only the first prune after a snapshot is a full pass. On a store the size of Base's (5M rows), a prune takes under a millisecond after a patch and nothing when there's nothing new. A full pass on every sync took about 1.6 s.
+- **Requests are cheap.** A proof reads 5 rows per slot (4 trunk nodes and the limb on its key path), and the gateway hashes nothing but slot keys and one root per loaded commit. That fits the single-threaded model easily.
+- **Steady-state syncs are cheap.** Apart from the first snapshot, a sync is one `/commits` request and, when a commit arrives, a patch of tens to hundreds of rows. `SqlNodeStore.prune` is incremental: `put` records the paths it writes in `trie_dirty`, and a prune only looks at those. Only the first prune after a snapshot is a full pass. Even with one row per node (Base's 5M), a prune took under a millisecond after a patch and nothing when there's nothing new, where a full pass on every sync took about 1.6 s.
 - **`src/index.ts` is runtime-agnostic:** no bun or node imports. Bun-only code lives in `src/main.ts` and `src/sqlite.ts`.
 
 ## Sketch
@@ -115,10 +115,10 @@ Wrangler config (see [get started](https://developers.cloudflare.com/durable-obj
 |---|---|
 | 30 s CPU per invocation by default, configurable up to 5 minutes (`limits.cpu_ms`); alarm handlers have 15 minutes of wall time | A steady-state sync takes milliseconds. A first snapshot does not: Base's is 102 pages (about 70,000 chunk rows, 393 MB gzipped); a bun gateway loads it in about 30 s. That spans many alarms (see Open). |
 | 10 GB storage per object | Base's chunks take about 0.6 GB in SQLite, and the gateway holds one copy plus the chunks that changed since its oldest held commit. |
-| rows written: Free 100,000/day; Paid 50 million/month included, then $1.00/million | Every trie row put or pruned is a row written, and after the first prune each patch row is also recorded once in `trie_dirty`. Rows are chunks (see [optimism.md](optimism.md#trie-rows)): a Base snapshot is about 70,000 rows, which fits a day of the Free plan. After that, a patch is a few hundred rows per commit. Linea's and OP Mainnet's registrars are tiny. |
+| rows written: Free 100,000/day; Paid 50 million/month included, then $1.00/million | Every trie row put or pruned is a row written, and after the first prune each patch row is also recorded once in `trie_dirty`. Rows are chunks (see [optimism.md](optimism.md#chunks)): a Base snapshot is about 70,000 rows, which fits a day of the Free plan. After that, a patch is a few hundred rows per commit. Linea's and OP Mainnet's registrars are tiny. |
 | rows read: Paid 25 billion/month included | A proof reads 5 rows per slot (4 trunk nodes and 1 limb). |
 | about 1,000 requests per second per object (soft) | One object serves one chain's requests one at a time. To serve more, run more objects (each a full copy that syncs on its own), for example one per region. |
-| SQL: 100 bound parameters, 100 KB per statement, 8 MB per row | `SqlNodeStore` binds at most 3 parameters per statement and stores single trie nodes (at most a few hundred bytes). |
+| SQL: 100 bound parameters, 100 KB per statement, 8 MB per row | `SqlNodeStore` binds at most 3 parameters per statement. Its largest rows are Base limbs, at most about 11 KB. |
 
 ## What stays outside
 

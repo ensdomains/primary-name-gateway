@@ -64,22 +64,29 @@ Encodings: `commitProof = abi.encode(OPFaultCommitProof { game, superRoot, outpu
 
 ## Trie rows
 
-Rows are `(absolute nibble path, RLP node)`, merkle-builder's row format ([`EthRowStorage`](https://github.com/ensdomains/merkle-builder#row-storage)): every node, including nodes under 32 bytes that are inlined in their parent. A slot's proof is the rows along its key.
+A node row is `(absolute nibble path, RLP node)`, merkle-builder's row format ([`EthRowStorage`](https://github.com/ensdomains/merkle-builder#row-storage)): every node, including nodes under 32 bytes that are inlined in their parent. A slot's proof is the rows along its key. Every encoding already contains its children's hashes, so proofs are copied, not computed.
 
-The indexer keeps one row per node. What it serves, and what the gateway stores, are **chunks** ([trie.ts](../packages/shared/src/trie.ts)), so there are far fewer, larger rows:
+### Chunks
 
-- A node less than 4 nibbles deep is its own row (the trunk). Every deeper node is in the row of its 4-nibble prefix (a limb): a compact list of `(path suffix, node)` entries.
-- `/snapshot` pages are whole chunks, and `/patch` sends every chunk that holds a changed node. Both say `x-row-format: mpt-chunks-4`, and the gateway refuses rows in a layout it doesn't expect.
-- A proof reads 4 trunk rows and 1 limb (`chunkReader` reads each chunk once per proof). The rows still hold encoded nodes, so the gateway still hashes nothing.
+The indexer keeps one row per node. What it serves, and what the gateway stores, are **chunks**: far fewer, larger rows ([trie.ts](../packages/shared/src/trie.ts), [chunks.ts](../packages/registrar-indexer/src/chunks.ts)). Base's trie is 5M nodes, and in a [Durable Object](durable-objects.md) storage is billed per row written and read, and inserting rows is most of the CPU of a first sync.
+
+- **Trunk:** a node less than 4 nibbles deep is its own row, keyed by its path (`""`, `"3"`, `"3a"`, `"3a7"`): 4,369 rows at most.
+- **Limb:** every deeper node is in the row of its 4-nibble prefix. The node at `3a7f0c` is in limb `3a7f`, as the entry with suffix `0c`. A limb lists its nodes in path order, each as `u8 suffix length (nibbles) . suffix (packed, high nibble first, odd lengths padded with 0) . u16 node length . node`. An empty limb is a removed row.
+- **Proofs** read 4 trunk rows and one limb per slot. `chunkReader` turns chunks back into a node reader for merkle-builder's `getProofFromRows`, reading each chunk once per proof. The rows still hold encoded nodes, so the gateway still hashes nothing. `checkRoot` reads row `""`, the root, as before.
+- **`/snapshot?commit=ID&after=CHUNK`** pages are whole chunks in key order, until at least `limit` nodes (default 50,000). `next` is the last chunk's key. **`/patch`** sends every chunk that holds a node written between the two commits, as it is at the newer one (`null`: removed).
+- Both say **`x-row-format: mpt-chunks-4`** (Linea's rows say `linea`), and the gateway refuses rows in a layout it doesn't expect. A gateway store from before chunks starts over with a snapshot.
+- The indexer's database is unchanged: it builds chunks on request from its per-node rows (`SqlRowLog.range` reads a path range at a version).
 
 | Base (2026-11-23) | one row per node | chunks |
 |---|---|---|
 | rows | 5,076,577 | 69,905 (65,536 limbs, at most 11 KB) |
 | a proof reads | 7 rows | 5 rows (0.11 ms) |
 | a 100-leaf patch | 517 rows, 183 KB | 299 rows, 814 KB |
-| full snapshot | | 102 pages, 393 MB gzipped |
+| full snapshot | 102 pages, about 1 GB of JSON | 102 pages, 393 MB gzipped |
 
-A depth of 3 makes 100 KB rows and 11 MB patches; a depth of 5 still leaves 1.1M rows.
+Why depth 4: measured on Base, depth 3 makes 100 KB rows and 11 MB patches, and depth 5 still leaves 1.1M rows. `test/chunks.test.ts` checks paged snapshots, patches and proofs against merkle-builder on a trie deep enough for thousands of limbs.
+
+### In the indexer
 
 The indexer keeps the trie in its SQLite database as versioned rows ([sql-row-log.ts](../packages/registrar-indexer/src/sql-row-log.ts)), with the change seq as the version:
 
