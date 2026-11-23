@@ -1,0 +1,104 @@
+name: CI
+
+# Offline only: every job runs against local anvil or nothing. test:mainnet and test:fork need RPC
+# keys and archive state, so they aren't run here. Each group is its own job, so a failed one can be
+# re-run alone (`bun run test` runs them all locally).
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  BUN_VERSION: 1.4.4
+  FOUNDRY_VERSION: v1.10.0
+
+jobs:
+  check:
+    name: check + lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - run: bun run lint
+
+  unit:
+    name: unit (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - run: bun run test:unit
+
+  contracts:
+    name: contracts (forge)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive # packages/contracts/lib/forge-std
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - run: forge test # = bun run test:contracts
+        working-directory: packages/contracts
+
+  e2e:
+    name: e2e (offline indexer, gateway, resolver)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - run: bun install --frozen-lockfile
+      - run: bun run test:e2e
+
+  inbox:
+    name: batch inbox (Solidity vs TypeScript, verifier)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - run: bun install --frozen-lockfile
+      - run: bun run test:inbox
+
+  # the one test that downloads something: the KZG trusted setup (from GitHub, checked against its hash)
+  kzg:
+    name: kzg (downloads the trusted setup)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - run: bun install --frozen-lockfile
+      - uses: actions/cache@v4
+        with:
+          path: data/kzg
+          key: kzg-trusted-setup-d39b9f2d
+      - run: bun run test:kzg

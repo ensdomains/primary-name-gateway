@@ -29,8 +29,8 @@ Only frame 0 (the first blob of the channel's first transaction) is needed.
 
 1. L1 block header against `blockhash` / EIP-2935 (8,191 blocks, about 27 hours).
 2. The batcher transaction: MPT proof in the block's transaction trie, `to` = the batch inbox, sender recovered from the type-3 signature = `SystemConfig.batcherHash()`.
-3. The blob's first field elements against its versioned hash: one KZG point-evaluation call per field element (50k gas), or the whole blob evaluated at a Fiat-Shamir point plus one call.
-4. Decompress the start of frame 0 ([brotli.ts](../packages/shared/src/brotli.ts)) and read the batch prefix ([op-batch.ts](../packages/shared/src/op-batch.ts)).
+3. The blob's first field elements against its versioned hash: one KZG point evaluation call per field element (about 54k gas each). Passing the whole blob and evaluating it at a Fiat-Shamir point would need only one call; that's not done.
+4. Decompress the start of frame 0 (`BrotliPrefix`) and read the batch prefix (`OPBatchPrefix`).
 5. Inclusion block − L1 origin < sequencing window (a late batch is dropped even from an honest batcher).
 6. The L2 header: `keccak256(header)` matches the parent hash (or its first 20 bytes); its state root then works as in `OPFaultVerifier`.
 
@@ -105,3 +105,11 @@ Checked on mainnet (2026-11-23): with its database seeded from the Base indexer'
 ## Open
 
 - Batcher transactions that put several channels' frames in one blob, or start a blob with the end of a previous channel.
+
+## References
+
+- OP Stack specs: [derivation](https://specs.optimism.io/protocol/derivation.html) (batcher transactions, frames, channels, batches, the sequencing window), [span batches](https://specs.optimism.io/protocol/delta/span-batches.html), [Fjord](https://specs.optimism.io/protocol/fjord/derivation.html) (brotli channels), [configurability](https://specs.optimism.io/protocol/configurability.html) (batch inbox, `batcherHash`)
+- [op-service `blob.go`](https://github.com/ethereum-optimism/optimism/blob/develop/op-service/eth/blob.go): how batcher data is packed into blob field elements
+- [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844) (blobs, the point evaluation precompile), [EIP-2935](https://eips.ethereum.org/EIPS/eip-2935) (historical block hashes), the [beacon API](https://ethereum.github.io/beacon-APIs/) (blobs)
+- [RFC 7932](https://www.rfc-editor.org/rfc/rfc7932) (brotli) and [google/brotli](https://github.com/google/brotli) (the reference decoder the constants come from)
+- [c-kzg-4844](https://github.com/ethereum/c-kzg-4844) (trusted setup) and [noble-curves](https://github.com/paulmillr/noble-curves) (BLS12-381)
