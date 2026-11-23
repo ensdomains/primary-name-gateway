@@ -7,6 +7,7 @@ import { type CommitSource, type IndexerConfig, RegistrarIndexer } from "./index
 import { KZG } from "./kzg.js";
 import { type ChangeReader, RPCInboxReader, RPCLineaReader, RPCOPReader } from "./l2.js";
 import { LineaCommitSource } from "./linea.js";
+import { lockDatabase } from "./lock.js";
 import { OPCommitSource } from "./op.js";
 import { serveIndexer } from "./server.js";
 
@@ -29,6 +30,7 @@ export {
 	RPCOPReader,
 } from "./l2.js";
 export { LINEA_ROLLUP_ABI, LineaCommitSource, type LineaSourceConfig } from "./linea.js";
+export { lockDatabase } from "./lock.js";
 export { OPCommitSource, type OPSourceConfig } from "./op.js";
 export { serveIndexer } from "./server.js";
 export { KeptVersions, SqlRowLog } from "./sql-row-log.js";
@@ -110,10 +112,11 @@ if (import.meta.main) {
 	if (!deployment) throw new Error(`unknown INDEXER_CHAIN: ${chain} (${Object.keys(DEPLOYMENTS).join(", ")})`);
 	const port = Number(env.INDEXER_PORT ?? 8100);
 	const pollMs = Number(env.INDEXER_POLL_MS ?? 30_000);
-	// one database per L2: base and base-inbox share their events and trie (run one at a time)
+	// one database per L2: base and base-inbox share their events and trie, one indexer at a time
 	const dbPath = env.INDEXER_DB ?? `data/${deployment.l2.name}.sqlite`;
 
 	mkdirSync(dirname(dbPath), { recursive: true });
+	process.once("exit", lockDatabase(dbPath));
 	const db = new IndexerDB(dbPath);
 	const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
 	log(`${chain}: L1 ${redactURL(rpcURL(deployment.l1))}`);
