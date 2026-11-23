@@ -105,7 +105,7 @@ describe("offline e2e", () => {
 			AnchorStateRegistry: asr.target as Address,
 			L2ReverseRegistrar: REGISTRAR,
 			registrarCreatedAtBlock: 0,
-			l2BlockTime: rollup.blockTime,
+			l2Blocks: [{ block: 0, timestamp: rollup.genesisTimestamp, ms: rollup.blockTime * 1000 }],
 			gameFinalitySec: 0,
 		};
 		db = new IndexerDB(":memory:");
@@ -376,6 +376,10 @@ describe("offline e2e", () => {
 		expect(db.getCommit(early.gameIndex)?.status).toBe("pending");
 		expect(db.getState("deferredGames")).toBe("[]");
 	}, 60_000);
+
+	test("status names both chains, the commit kind and the block time", () => {
+		expect(indexer.status()).toMatchObject({ chainId: CHAIN_ID, l1ChainId: 31337, kind: "op", l2BlockMs: 2000 });
+	});
 
 	test("a new indexer catches up on events before its first commit, then rebuilds older games", async () => {
 		const fresh = new RegistrarIndexer({ ...indexer.config, db: new IndexerDB(":memory:"), catchUpBlocks: 1 });

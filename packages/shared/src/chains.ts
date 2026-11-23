@@ -64,11 +64,37 @@ type DeploymentBase = {
 	registrarCreatedAtBlock: number; // first L2 block to scan for events
 };
 
+// An OP Stack L2's block times, as segments: from `block` (whose timestamp is `timestamp`, in whole
+// seconds) one block every `ms`, up to the next segment. Header timestamps stay in whole seconds, so
+// with blocks under a second apart several blocks share one (Base since Denim: 5 per second).
+export type BlockSchedule = readonly { block: number; timestamp: number; ms: number }[];
+
+// the blocks whose header timestamp is `timestamp`: [first, last], or undefined if none
+export function blocksAtTimestamp(schedule: BlockSchedule, timestamp: number): [number, number] | undefined {
+	for (let i = schedule.length - 1; i >= 0; i--) {
+		const s = schedule[i];
+		if (timestamp < s.timestamp) continue;
+		const end = schedule[i + 1]?.block ?? Number.POSITIVE_INFINITY;
+		const first = s.block + Math.ceil(((timestamp - s.timestamp) * 1000) / s.ms);
+		const last = Math.min(end, s.block + Math.ceil(((timestamp + 1 - s.timestamp) * 1000) / s.ms)) - 1;
+		return first <= last ? [first, last] : undefined;
+	}
+}
+
+// Bedrock: https://specs.optimism.io/protocol/rollup-node.html
+const OP_MAINNET_BLOCKS: BlockSchedule = [{ block: 105235063, timestamp: 1686068903, ms: 2000 }];
+// Denim (200 ms blocks): first block 53,556,127 at 2026-11-05 18:00:01 UTC, checked against Base's headers
+// (`timestampMs`). https://docs.base.org/upgrades/denim/200ms-blocks
+const BASE_BLOCKS: BlockSchedule = [
+	{ block: 0, timestamp: 1686789347, ms: 2000 },
+	{ block: 53556127, timestamp: 1793901601, ms: 200 },
+];
+
 // an L2 whose state is committed to L1 via OP dispute games (Merkle-Patricia tries)
 export type OPDeployment = DeploymentBase & {
 	kind: "op";
 	AnchorStateRegistry: Address;
-	l2BlockTime: number; // seconds
+	l2Blocks: BlockSchedule; // super root games name a timestamp
 	gameFinalitySec: number; // typical time from game creation to isGameClaimValid (sets indexer defaults)
 };
 
@@ -83,8 +109,7 @@ export type InboxDeployment = DeploymentBase & {
 	kind: "inbox";
 	SystemConfig: Address; // batcherHash()
 	BatchInbox: Address;
-	l2BlockTime: number; // seconds
-	l2Genesis: { block: number; timestamp: number }; // span batches give timestamps relative to it
+	l2Blocks: BlockSchedule; // starts at the rollup genesis: span batches' timestamps are relative to it
 };
 
 export type Deployment = OPDeployment | LineaDeployment | InboxDeployment;
@@ -99,7 +124,7 @@ export const OP_MAINNET: OPDeployment = {
 	L2ReverseRegistrar: "0x0000000000D8e504002cC26E3Ec46D81971C1664",
 	layout: PLAIN_LAYOUT,
 	registrarCreatedAtBlock: 137403854,
-	l2BlockTime: 2,
+	l2Blocks: OP_MAINNET_BLOCKS,
 	gameFinalitySec: 7 * 86400, // 3.5d clock + 3.5d airgap
 };
 
@@ -114,7 +139,7 @@ export const BASE_MAINNET: OPDeployment = {
 	L2ReverseRegistrar: "0x0000000000D8e504002cC26E3Ec46D81971C1664",
 	layout: OWNABLE_LAYOUT, // L2ReverseRegistrarWithMigration
 	registrarCreatedAtBlock: 31808582,
-	l2BlockTime: 2,
+	l2Blocks: BASE_BLOCKS,
 	gameFinalitySec: 5 * 86400,
 };
 
@@ -138,8 +163,7 @@ export const OP_MAINNET_INBOX: InboxDeployment = {
 	L2ReverseRegistrar: OP_MAINNET.L2ReverseRegistrar,
 	layout: OP_MAINNET.layout,
 	registrarCreatedAtBlock: OP_MAINNET.registrarCreatedAtBlock,
-	l2BlockTime: 2,
-	l2Genesis: { block: 105235063, timestamp: 1686068903 }, // Bedrock
+	l2Blocks: OP_MAINNET_BLOCKS,
 };
 
 export const BASE_MAINNET_INBOX: InboxDeployment = {
@@ -151,8 +175,7 @@ export const BASE_MAINNET_INBOX: InboxDeployment = {
 	L2ReverseRegistrar: BASE_MAINNET.L2ReverseRegistrar,
 	layout: BASE_MAINNET.layout,
 	registrarCreatedAtBlock: BASE_MAINNET.registrarCreatedAtBlock,
-	l2BlockTime: 2,
-	l2Genesis: { block: 0, timestamp: 1686789347 },
+	l2Blocks: BASE_BLOCKS,
 };
 
 export const DEPLOYMENTS: Record<string, Deployment> = {

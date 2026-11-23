@@ -9,7 +9,7 @@ Notes for coding agents working in this repo. Read [README.md](README.md) first 
 - `packages/registrar-gateway`: `NodeStore` (versioned trie rows with `get` and `floor`), `RegistrarGateway` (sync + `proveName`, per commit kind), ezccip endpoint. `src/index.ts` must stay runtime-agnostic (no bun/node imports) so it can run in a Cloudflare Durable Object ([docs/durable-objects.md](docs/durable-objects.md)); bun-only code lives in `src/main.ts` and `src/sqlite.ts`.
 - `packages/contracts`: Foundry project. `L2ReverseResolver` (ENSIP-10 + CCIP-Read), `IL2StorageVerifier` implementations `op/OPFaultVerifier` and `linea/LineaVerifier` (+ `linea/LineaTrie` multiproofs). `op/OPBatchInboxVerifier` (+ `brotli/BrotliPrefix`, `op/OPBlob`, `op/OPBatchPrefix`, `op/OPBatchInbox`) is research for a verifier from batcher posts ([docs/op-batch-inbox.md](docs/op-batch-inbox.md)). `src/lib/` is vendored; see `src/lib/README.md` before changing it.
 - `test/`: bun tests, including the fake OP rollup and fake Linea used by the offline e2es. Mainnet fixtures live in `packages/contracts/test/fixtures/` (forge reads them too).
-- `scripts/`: `linea-fixture.ts` and `op-batch-fixture.ts` refresh the mainnet fixtures; `op-batch-cost.ts` sizes the brotli decoding.
+- `scripts/`: `prove.ts` proves one name through a running indexer and gateway on an L1 fork (`verifiers.ts`: the verifier deploy arguments, shared with `test:mainnet`); `linea-fixture.ts` and `op-batch-fixture.ts` refresh the mainnet fixtures; `op-batch-cost.ts` sizes the brotli decoding.
 - `.github/workflows/main.yml`: CI. Offline only (no RPC keys), one job per test group so a failed group can be re-run alone. A test that needs RPC access belongs in `test:mainnet` / `test:fork`, not in `bun run test`.
 
 ## Commands
@@ -21,6 +21,7 @@ bun run lint               # biome (lint:fix applies fixes and formatting)
 bun run test               # every offline group: test:unit, test:contracts, test:e2e, test:inbox, test:kzg (CI runs each as a job)
 bun run test:mainnet       # needs a running indexer (any chain) with a valid commit, and .env keys
 bun run test:fork          # OPBatchInboxVerifier on L1 mainnet forks (archive RPC, fixtures < 8191 blocks old)
+bun run prove <addr> base  # one name through a running indexer + gateway, verified on an L1 fork (scripts/prove.ts)
 bun run indexer:linea      # / gateway:linea: Linea on :8101 / :8201 (indexer:base / gateway:base: Base on :8102 / :8202, :base-inbox on :8103 / :8203)
 ```
 

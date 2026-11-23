@@ -1,4 +1,5 @@
 import {
+	blocksAtTimestamp,
 	type Change,
 	type Deployment,
 	type InboxDeployment,
@@ -140,10 +141,13 @@ export class RPCOPReader extends RPCChangeReader implements OPL2Reader {
 	}
 
 	async blockAtTimestamp(timestamp: bigint): Promise<number> {
-		const head = await this.logsClient.getBlock({ blockTag: "latest" });
 		const ts = Number(timestamp);
-		const n = Number(head.number) - Math.floor((Number(head.timestamp) - ts) / this.deployment.l2BlockTime);
-		const block = await this.logsClient.getBlock({ blockNumber: BigInt(n) });
+		const range = blocksAtTimestamp(this.deployment.l2Blocks, ts);
+		if (!range) throw new Error(`no L2 block at timestamp ${ts}`);
+		// a super root names one block per timestamp: several (blocks under a second apart) is ambiguous
+		if (range[0] !== range[1]) throw new Error(`L2 blocks ${range[0]} to ${range[1]} all have timestamp ${ts}`);
+		const n = range[0];
+		const block = await this.logsClient.getBlock({ blockNumber: BigInt(n) }); // checks the schedule
 		if (Number(block.timestamp) !== ts) {
 			throw new Error(`no L2 block at timestamp ${ts} (block ${n} has ${block.timestamp})`);
 		}

@@ -67,8 +67,10 @@ export type Change = {
 };
 
 export type IndexerStatus = {
-	chainId: number;
+	chainId: number; // the L2
+	l1ChainId: number; // where its commits are
 	kind: CommitKind;
+	l2BlockMs?: number; // the L2's current block time (OP Stack: Base is 200 ms since Denim)
 	registrar: Address;
 	syncedBlock: number; // changes are complete through this L2 block
 	changeSeq: number; // latest change

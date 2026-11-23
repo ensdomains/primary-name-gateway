@@ -69,7 +69,7 @@ describe.each([
 			L2ReverseRegistrar: REGISTRAR,
 			layout: PLAIN_LAYOUT,
 			registrarCreatedAtBlock: 0,
-			l2BlockTime: rollup.blockTime,
+			l2Blocks: [{ block: 0, timestamp: rollup.genesisTimestamp, ms: rollup.blockTime * 1000 }],
 			gameFinalitySec: 0,
 		};
 		db = new IndexerDB(":memory:");

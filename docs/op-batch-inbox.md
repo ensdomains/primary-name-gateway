@@ -23,6 +23,8 @@ Channel data is `rlp(batch) ...` compressed, after a 1-byte channel version (`0x
 
 Only frame 0 (the first blob of the channel's first transaction) is needed.
 
+A span batch's first block is the one at `l2 genesis time + rel_timestamp` whose parent hash starts with `parent_check`. On a chain with blocks under a second apart (Base since [Denim](base.md#block-time)) up to five blocks share that timestamp, so the indexer tries each (`spanBatchParent`). The verifier only compares the L2 header's hash with the batch's parent, so it doesn't depend on the block time.
+
 ## Verifier steps
 
 [OPBatchInboxVerifier.sol](../packages/contracts/src/op/OPBatchInboxVerifier.sol) implements `IL2StorageVerifier` with these steps. Its commit proof is `abi.encode(OPBatchInboxCommitProof)` (`encodeOPBatchInboxCommitProof` in [op-batch.ts](../packages/shared/src/op-batch.ts)); the account and storage proofs are the same as `OPFaultVerifier`'s. Parameters: the chain's `SystemConfig` (for `batcherHash()`), its batch inbox, `maxOriginLag` (below the sequencing window, 3600 L1 blocks on OP Mainnet and Base) and `maxBlockLag`.

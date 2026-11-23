@@ -90,7 +90,9 @@ export class RegistrarIndexer {
 		const [latest] = db.getCommits("valid", 1);
 		return {
 			chainId: deployment.l2.id,
+			l1ChainId: deployment.l1.id,
 			kind: deployment.kind,
+			l2BlockMs: "l2Blocks" in deployment ? deployment.l2Blocks[deployment.l2Blocks.length - 1].ms : undefined,
 			registrar: deployment.L2ReverseRegistrar,
 			syncedBlock: this.syncedBlock,
 			syncingTo: this.syncingTo,

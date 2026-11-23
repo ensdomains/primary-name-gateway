@@ -1,5 +1,7 @@
 import {
+	type BlockSchedule,
 	blobDataPrefix,
+	blocksAtTimestamp,
 	brotliDecodePrefix,
 	channelStart,
 	decodeBatchPrefix,
@@ -39,6 +41,25 @@ const SYSTEM_CONFIG_ABI = parseAbi(["function batcherHash() view returns (bytes3
 // Only finalized L1 blocks are used, and the parent must be at or below the L2's finalized head, so
 // nothing stored can reorg. Commits are valid when found (the verifier trusts the batcher) until
 // they're too old for the verifier.
+// The parent of a span batch's first block. The batch gives that block's timestamp (relative to the
+// rollup genesis) and the first 20 bytes of its parent's hash. With blocks under a second apart (Base
+// since Denim) several blocks share the timestamp, and the parent check picks one.
+export async function spanBatchParent(
+	schedule: BlockSchedule,
+	relTimestamp: bigint,
+	parentCheck: string,
+	header: (block: number) => Promise<RpcBlockHeader>,
+): Promise<RpcBlockHeader> {
+	const timestamp = schedule[0].timestamp + Number(relTimestamp);
+	const range = blocksAtTimestamp(schedule, timestamp);
+	if (!range) throw new Error(`no L2 block at timestamp ${timestamp}`);
+	for (let first = range[0]; first <= range[1]; first++) {
+		const parent = await header(first - 1);
+		if (parent.hash.startsWith(parentCheck)) return parent;
+	}
+	throw new Error(`no L2 block at timestamp ${timestamp} has the parent ${parentCheck}`);
+}
+
 export class InboxCommitSource implements CommitSource {
 	private readonly attempts = new Map<number, number>();
 	private beaconGenesis: bigint | undefined;
@@ -123,9 +144,7 @@ export class InboxCommitSource implements CommitSource {
 		if (batch.type === "singular") {
 			l2Raw = await l2.header(batch.parentHash);
 		} else {
-			const first = deployment.l2Genesis.block + Number(batch.relTimestamp) / deployment.l2BlockTime;
-			l2Raw = await l2.header(first - 1);
-			if (!l2Raw.hash.startsWith(batch.parentCheck)) throw new Error(`L2 block ${first - 1} isn't the parent`);
+			l2Raw = await spanBatchParent(deployment.l2Blocks, batch.relTimestamp, batch.parentCheck, (n) => l2.header(n));
 		}
 		const l2Block = Number(BigInt(l2Raw.number));
 		const finalized = await l2.finalizedBlock();

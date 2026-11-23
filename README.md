@@ -81,7 +81,7 @@ bun run indexer:base-inbox  # :8103 (research: docs/op-batch-inbox.md)
 bun run gateway:base-inbox  # :8203
 ```
 
-Indexer API: `GET /status`, `/commits?status=valid&limit=2`, `/commits/:id`, `/snapshot?commit=ID&after=KEY`, `/patch?from=A&to=B`, `/changes?after=&until=`. `/snapshot` and `/patch` serve rows in the layout their `x-row-format` header names (OP Stack: [chunks](docs/optimism.md#chunks)). Responses are JSON, gzipped when the client accepts it: a Base `/snapshot` page (50,000 nodes in about 700 chunks) is about 9 MB, or 3.9 MB gzipped.
+Indexer API: `GET /status` (L2 and L1 chain ids, commit kind, L2 block time, sync position, commit counts), `/commits?status=valid&limit=2`, `/commits/:id`, `/snapshot?commit=ID&after=KEY`, `/patch?from=A&to=B`, `/changes?after=&until=`. `/snapshot` and `/patch` serve rows in the layout their `x-row-format` header names (OP Stack: [chunks](docs/optimism.md#chunks)). Responses are JSON, gzipped when the client accepts it: a Base `/snapshot` page (50,000 nodes in about 700 chunks) is about 9 MB, or 3.9 MB gzipped.
 
 Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
 
@@ -106,6 +106,16 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
   - forge: unit tests, [LineaVerifier.t.sol](packages/contracts/test/LineaVerifier.t.sol) on real `linea_getProof` output, and [BrotliPrefix.t.sol](packages/contracts/test/BrotliPrefix.t.sol) (gas).
 - `bun run test:mainnet` needs a running indexer (any chain) with a valid commit and RPC keys. It deploys the chain's verifier and the resolver on an anvil fork of L1 mainnet, resolves names through CCIP-Read, and checks every indexed name (or a sample of `MAINNET_SAMPLE`, with every long name) against the registrar.
 - `bun run test:fork` runs `OPBatchInboxVerifier` on L1 mainnet forks (archive RPC).
+- `bun run prove <address> [chain]` proves one address's primary name through a running indexer and gateway (the ports of `indexer:<chain>` / `gateway:<chain>`, or `--indexer URL --gateway URL`). It reads the chain and commit kind from the indexer's `/status`, deploys the verifier and a resolver pointing at the gateway on a blocksmith fork of L1, resolves the name through CCIP-Read, and prints:
+
+  ```
+  name      "quelburr.base.eth"
+  gateway   13 ms, 23,904-byte response
+  verify    12,216,685 gas (verifyName on the L1 fork)
+  proof     L2 block 61,392,830 (inbox commit 264805010390)
+  finalized L2 block 61,395,018: the proof is 2,188 blocks (7m) behind
+  L2        matches L2ReverseRegistrar.nameForAddr at L2 block 61,392,830
+  ```
 
 ## References
 

@@ -125,11 +125,15 @@ export class IndexerDB {
 	// share a database, one at a time. Commits, skipped batches and where a source resumes are its own:
 	// switching sources drops them. Returns the number of commits dropped.
 	useCommitKind(kind: CommitKind): number {
-		if (this.getState("commitKind") === kind) return 0;
+		const prev = this.getState("commitKind");
+		if (prev === kind) return 0;
 		return this.db.transaction(() => {
 			const { changes } = this.db.run("DELETE FROM commits WHERE json_extract(json, '$.kind') != ?", [kind]);
-			this.db.run("DELETE FROM skipped");
-			this.db.run("DELETE FROM state WHERE key IN ('nextGameIndex', 'deferredGames', 'nextL1Block')");
+			// a database from before kinds were recorded is a switch only if it held another kind's commits
+			if (prev !== undefined || changes) {
+				this.db.run("DELETE FROM skipped");
+				this.db.run("DELETE FROM state WHERE key IN ('nextGameIndex', 'deferredGames', 'nextL1Block')");
+			}
 			this.setState("commitKind", kind);
 			return changes;
 		})();
