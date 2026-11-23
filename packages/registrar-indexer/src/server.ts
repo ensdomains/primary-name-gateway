@@ -1,4 +1,4 @@
-import type { CommitStatus, SnapshotPage } from "@primary-name-gateway/shared";
+import { type CommitStatus, ROW_FORMAT_LINEA, ROW_FORMAT_MPT, type SnapshotPage } from "@primary-name-gateway/shared";
 import type { IndexerDB } from "./db.js";
 import type { RegistrarIndexer } from "./indexer.js";
 
@@ -10,12 +10,17 @@ const STATUSES = new Set<string>(["pending", "valid", "invalid"]);
 // GET /commits?status=valid&limit=2        newest first
 // GET /commits/:id
 // GET /changes?after=0&until=N&limit=M       registrar events, ordered, (after, until]
-// GET /snapshot?commit=ID&after=PATH&limit=N trie rows of a commit, in path order (paged)
-// GET /patch?from=A&to=B                     trie rows that turn commit A into commit B
+// GET /snapshot?commit=ID&after=ID&limit=N  rows of a commit, in order (paged; OP Stack: chunks, limit in nodes)
+// GET /patch?from=A&to=B                     rows that turn commit A into commit B
+//   both say their layout in x-row-format: mpt-chunks-4 (shared/trie.ts) or linea (shared/linea.ts)
 //
 // /snapshot and /patch only work for commits the indexer retains (404 otherwise).
 // JSON responses over 1 KB are gzipped when the client accepts it (fetch does, and decompresses).
 export function serveIndexer(indexer: RegistrarIndexer, db: IndexerDB, port: number) {
+	// how /snapshot and /patch rows are laid out (shared/trie.ts, shared/linea.ts)
+	const rowFormat = {
+		"x-row-format": indexer.config.deployment.kind === "linea" ? ROW_FORMAT_LINEA : ROW_FORMAT_MPT,
+	};
 	return Bun.serve({
 		port,
 		routes: {
@@ -47,12 +52,12 @@ export function serveIndexer(indexer: RegistrarIndexer, db: IndexerDB, port: num
 				const result = indexer.snapshot(id, after, limit);
 				if (!result) return notFound();
 				const page: SnapshotPage = { id, ...result };
-				return json(req, page);
+				return json(req, page, rowFormat);
 			},
 			"/patch": (req) => {
 				const q = new URL(req.url).searchParams;
 				const rows = indexer.patch(Number(q.get("from")), Number(q.get("to")));
-				return rows ? json(req, rows) : notFound();
+				return rows ? json(req, rows, rowFormat) : notFound();
 			},
 		},
 		fetch: () => notFound(),
@@ -63,9 +68,9 @@ export function serveIndexer(indexer: RegistrarIndexer, db: IndexerDB, port: num
 const GZIP_LEVEL = 3;
 const GZIP_MIN_BYTES = 1024;
 
-export function json(req: Request, data: unknown): Response {
+export function json(req: Request, data: unknown, extra: Record<string, string> = {}): Response {
 	const body = JSON.stringify(data);
-	const headers: Record<string, string> = { "content-type": "application/json", vary: "accept-encoding" };
+	const headers: Record<string, string> = { "content-type": "application/json", vary: "accept-encoding", ...extra };
 	if (body.length >= GZIP_MIN_BYTES && /\bgzip\b/.test(req.headers.get("accept-encoding") ?? "")) {
 		headers["content-encoding"] = "gzip";
 		return new Response(Bun.gzipSync(body, { level: GZIP_LEVEL }), { headers });

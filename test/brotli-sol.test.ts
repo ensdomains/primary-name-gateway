@@ -66,7 +66,7 @@ describe("BrotliPrefix.sol", () => {
 
 	function rng(seed: number) {
 		return () => {
-			seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+			seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
 			return seed / 0x7fffffff;
 		};
 	}

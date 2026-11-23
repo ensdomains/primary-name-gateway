@@ -198,7 +198,7 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 		const long = all.filter(([, n]) => (n.length - 2) / 2 >= 32).slice(0, limit / 2);
 		let seed = 1;
 		const rand = () => {
-			seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+			seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
 			return seed / 0x80000000;
 		};
 		const rest = all.filter(() => rand() < (limit - long.length) / all.length);

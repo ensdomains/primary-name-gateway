@@ -1,6 +1,6 @@
 # Base
 
-Base is an OP Stack chain, so it uses the OP path ([optimism.md](optimism.md)) end to end: `OPCommitSource`, Merkle-Patricia rows, and the same `OPFaultVerifier` contract deployed for Base. This page covers what differs. The batch inbox research ([op-batch-inbox.md](op-batch-inbox.md)) also runs on Base (`base-inbox`).
+Base is an OP Stack chain, so it uses the OP path ([optimism.md](optimism.md)) end to end: `OPCommitSource`, Merkle-Patricia rows served as [chunks](optimism.md#chunks), and the same `OPFaultVerifier` contract deployed for Base. This page covers what differs. The batch inbox research ([op-batch-inbox.md](op-batch-inbox.md)) also runs on Base (`base-inbox`).
 
 | chain | Base |
 |---|---|

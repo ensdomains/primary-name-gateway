@@ -22,7 +22,7 @@ afterAll(() => foundry?.shutdown());
 test("proofs of a blob's first field elements verify with the precompile", async () => {
 	let seed = 3;
 	const blob = Uint8Array.from({ length: 4096 * 32 }, (_, i) => {
-		seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+		seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
 		return i % 32 ? seed & 0xff : seed & 0x3f; // below the BLS modulus
 	});
 	const commitment = kzg.commitment(blob);
