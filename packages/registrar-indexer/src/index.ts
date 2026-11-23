@@ -83,6 +83,7 @@ function createSource(deployment: Deployment, log: Log): { l2: ChangeReader; sou
 			},
 			intervalSec: Number(env.INDEXER_INBOX_INTERVAL_SEC ?? 600),
 			scanBlocks: Number(env.INDEXER_INBOX_SCAN_BLOCKS ?? 64),
+			firstScanBlocks: Number(env.INDEXER_INBOX_FIRST_SCAN_BLOCKS ?? 300), // an hour of L1 blocks
 			// below the verifier's maxBlockLag (EIP-2935 keeps 8191 block hashes)
 			maxBlockLag: Number(env.INDEXER_INBOX_MAX_BLOCK_LAG ?? 7200),
 			maxAttempts,

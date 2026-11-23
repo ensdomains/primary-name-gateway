@@ -22,9 +22,10 @@ import {
 	encodeBlockHeader,
 	MAINNET,
 	type RpcBlockHeader,
+	rawTransaction,
 	transactionsTrieProof,
 } from "@primary-name-gateway/shared";
-import { bytesToHex, type Hex, hexToBytes, numberToHex, parseAbi, sha256 } from "viem";
+import { bytesToHex, type Hex, hexToBytes, numberToHex, parseAbi, type RpcTransaction, sha256 } from "viem";
 
 const FIELD_ELEMENTS = 64; // enough for Base's batch prefix (OP needs 40)
 const N = 4096;
@@ -115,19 +116,11 @@ for (let i = 0; i < FIELD_ELEMENTS; i++) proofs.push(prove(i));
 const getBlock = (client: typeof l1, tag: Hex, byHash = false) =>
 	client.request({
 		method: byHash ? "eth_getBlockByHash" : "eth_getBlockByNumber",
-		params: [tag, false],
-	} as never) as Promise<RpcBlockHeader & { transactions: Hex[] }>;
+		params: [tag, true],
+	} as never) as Promise<RpcBlockHeader & { transactions: RpcTransaction[] }>;
 const l1Raw = await getBlock(l1, numberToHex(block.number));
 const l1Header = encodeBlockHeader(l1Raw);
-const raws: Hex[] = [];
-for (let i = 0; i < l1Raw.transactions.length; i += 25) {
-	const batch = l1Raw.transactions.slice(i, i + 25);
-	raws.push(
-		...(await Promise.all(
-			batch.map((h) => l1.request({ method: "eth_getRawTransactionByHash", params: [h] } as never) as Promise<Hex>),
-		)),
-	);
-}
+const raws = l1Raw.transactions.map(rawTransaction);
 const txIndex = tx.transactionIndex;
 const { root: txRoot, proof: txProof } = transactionsTrieProof(raws, txIndex);
 if (txRoot !== l1Raw.transactionsRoot) throw new Error("transactions root mismatch");
