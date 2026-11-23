@@ -13,7 +13,7 @@ import {
 	createClient,
 	DEPLOYMENTS,
 	type Deployment,
-	evmCoinType,
+	coinTypeFromChainId,
 	type IndexerStatus,
 	rpcURL,
 } from "@primary-name-gateway/shared";
@@ -67,7 +67,7 @@ async function indexedDeployment(): Promise<Deployment | undefined> {
 
 const deployment = await indexedDeployment();
 if (!deployment) console.warn(`skipping e2e: no valid commits at ${INDEXER_URL}`);
-const COIN_TYPE = deployment ? evmCoinType(deployment.l2.id) : 0;
+const COIN_TYPE = deployment ? coinTypeFromChainId(deployment.l2.id) : 0n;
 
 describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 	const d = deployment!;

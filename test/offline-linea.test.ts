@@ -15,7 +15,7 @@
 import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { IndexerDB, LineaCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
-import { evmCoinType, type LineaDeployment, type RegistrarLayout } from "@primary-name-gateway/shared";
+import { coinTypeFromChainId, type LineaDeployment, type RegistrarLayout } from "@primary-name-gateway/shared";
 import { Foundry } from "@adraffy/blocksmith";
 import { serve } from "@namestone/ezccip/serve";
 import {
@@ -40,7 +40,7 @@ import { bunSqliteAdapter } from "../packages/registrar-gateway/src/sqlite.js";
 import { FakeLineaRollup } from "./fake-linea.js";
 
 const CHAIN_ID = 59144;
-const COIN_TYPE = evmCoinType(CHAIN_ID);
+const COIN_TYPE = coinTypeFromChainId(CHAIN_ID);
 const MAX_BLOCK_LAG = 10; // L2 blocks a commit may lag behind the latest finalization
 const REGISTRAR: Address = "0x0000000000D8e504002cC26E3Ec46D81971C1664";
 const LAYOUT: RegistrarLayout = { namesSlot: 1n, ownerSlot: 0n };

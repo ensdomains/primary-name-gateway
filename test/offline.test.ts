@@ -12,7 +12,7 @@
 import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { IndexerDB, OPCommitSource, RegistrarIndexer, serveIndexer } from "@primary-name-gateway/registrar-indexer";
-import { type OPDeployment, PLAIN_LAYOUT } from "@primary-name-gateway/shared";
+import { coinTypeFromChainId, type OPDeployment, PLAIN_LAYOUT } from "@primary-name-gateway/shared";
 import { Foundry } from "@adraffy/blocksmith";
 import { serve } from "@namestone/ezccip/serve";
 import {
@@ -40,7 +40,7 @@ import { bunSqliteAdapter } from "../packages/registrar-gateway/src/sqlite.js";
 import { FakeOPRollup } from "./fake-rollup.js";
 
 const CHAIN_ID = 10;
-const COIN_TYPE = (0x80000000 | CHAIN_ID) >>> 0;
+const COIN_TYPE = coinTypeFromChainId(CHAIN_ID);
 const GAME_TYPE = 9;
 const MAX_SEQUENCE_LAG = 10; // seconds of L2 time a game may lag behind the anchor
 const REGISTRAR: Address = "0x0000000000D8e504002cC26E3Ec46D81971C1664";

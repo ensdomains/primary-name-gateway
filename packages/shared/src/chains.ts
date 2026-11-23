@@ -88,9 +88,13 @@ export const DEPLOYMENTS: Record<string, Deployment> = {
 	linea: LINEA_MAINNET,
 };
 
-// ENSIP-11 coin type of an EVM chain
-export function evmCoinType(chainId: number): number {
-	return (0x80000000 | chainId) >>> 0;
+// ENSIP-19 coin type of an EVM chain: 0x80000000 | chainId (Ethereum mainnet keeps 60)
+export function coinTypeFromChainId(chainId: number): bigint {
+	if (chainId === 1) return 60n;
+	if (!Number.isSafeInteger(chainId) || chainId < 0 || chainId >= 0x80000000) {
+		throw new Error(`invalid chain id: ${chainId}`);
+	}
+	return 0x80000000n | BigInt(chainId);
 }
 
 // "default": general calls and eth_getLogs (drpc allows large log ranges)
