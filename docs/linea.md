@@ -40,7 +40,7 @@ Nothing it reads can reorg: finalizations are read up to L1's `finalized` block,
 `LineaVerifier`:
 
 1. `stateRootHashes(l2Block) != 0`: the block was finalized.
-2. Freshness: `l2Block + maxBlockLag >= currentL2BlockNumber()`. Finalizations come every few hours (~1,000 L2 blocks), so `maxBlockLag` must exceed that plus the gateway's serve delay (`GATEWAY_SERVE_DELAY_SEC`, default 0); beyond that it bounds how stale a name can be.
+2. Freshness: `l2Block + maxL2BlockLag >= currentL2BlockNumber()`. Finalizations come every few hours (~1,000 L2 blocks), so `maxL2BlockLag` must exceed that plus the gateway's serve delay (`GATEWAY_SERVE_DELAY_SEC`, default 0); beyond that it bounds how stale a name can be.
 3. Account proof: state root → registrar leaf; the account hashes to the leaf's `hval`; return its `storageRoot`.
 4. Storage: for each slot, either its leaf (the value hashes to `hval`) or two adjacent leaves around its `hkey` (`left.next == right`, `right.prev == left`, `left.hkey < hkey < right.hkey`).
 

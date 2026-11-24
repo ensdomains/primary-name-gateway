@@ -15,8 +15,8 @@ contract MockSystemConfig is ISystemConfig {
 contract OPBatchInboxVerifierHarness is OPBatchInboxVerifier {
     mapping(uint256 => bytes32) public l1BlockHash;
 
-    constructor(ISystemConfig systemConfig, address batchInbox, uint256 maxOriginLag, uint256 maxBlockLag)
-        OPBatchInboxVerifier(systemConfig, batchInbox, maxOriginLag, maxBlockLag)
+    constructor(ISystemConfig systemConfig, address batchInbox, uint256 maxOriginLag, uint256 maxL1BlockLag)
+        OPBatchInboxVerifier(systemConfig, batchInbox, maxOriginLag, maxL1BlockLag)
     {}
 
     function setL1BlockHash(uint256 n, bytes32 h) external {

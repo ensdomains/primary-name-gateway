@@ -55,8 +55,8 @@ struct ArbitrumCommitProof {
 }
 
 /// @notice IL2StorageVerifier for Arbitrum (BoLD): the state root of an L2 block named by an assertion.
-///         With `minAgeBlocks == 0` the assertion must be confirmed (about 6.4 days). Otherwise it may
-///         be pending, if it is at least `minAgeBlocks` L1 blocks old and no assertion on its way from
+///         With `minAgeL1Blocks == 0` the assertion must be confirmed (about 6.4 days). Otherwise it may
+///         be pending, if it is at least `minAgeL1Blocks` L1 blocks old and no assertion on its way from
 ///         the last confirmed one has a rival: that trusts an honest validator to challenge in time.
 /// @dev After unruggable-gateways' BoLDVerifierLib (MIT).
 contract ArbitrumVerifier is IL2StorageVerifier {
@@ -72,15 +72,15 @@ contract ArbitrumVerifier is IL2StorageVerifier {
 
     IBoLDRollup public immutable rollup;
     /// @notice 0: confirmed assertions only. Otherwise: unchallenged assertions this many L1 blocks old.
-    uint256 public immutable minAgeBlocks;
+    uint256 public immutable minAgeL1Blocks;
     /// @notice Freshness: an assertion created at most this many L1 blocks before the latest acceptable
     ///         one (the last confirmed, or the newest old enough).
-    uint256 public immutable maxAgeBlocks;
+    uint256 public immutable maxAgeL1Blocks;
 
-    constructor(IBoLDRollup rollup_, uint256 minAgeBlocks_, uint256 maxAgeBlocks_) {
+    constructor(IBoLDRollup rollup_, uint256 minAgeL1Blocks_, uint256 maxAgeL1Blocks_) {
         rollup = rollup_;
-        minAgeBlocks = minAgeBlocks_;
-        maxAgeBlocks = maxAgeBlocks_;
+        minAgeL1Blocks = minAgeL1Blocks_;
+        maxAgeL1Blocks = maxAgeL1Blocks_;
     }
 
     /// @inheritdoc IL2StorageVerifier
@@ -119,17 +119,17 @@ contract ArbitrumVerifier is IL2StorageVerifier {
             revert InvalidAfterState();
         }
         createdAt = node.createdAtBlock;
-        uint256 latest = minAgeBlocks == 0
+        uint256 latest = minAgeL1Blocks == 0
             ? rollup.getAssertion(rollup.latestConfirmed()).createdAtBlock
-            : (block.number > minAgeBlocks ? block.number - minAgeBlocks : 0);
+            : (block.number > minAgeL1Blocks ? block.number - minAgeL1Blocks : 0);
         if (createdAt > latest) revert TooNew(createdAt, latest);
-        if (createdAt + maxAgeBlocks < latest) revert TooOld(createdAt, latest);
+        if (createdAt + maxAgeL1Blocks < latest) revert TooOld(createdAt, latest);
         if (keccak256(p.l2Header) != p.afterState.globalState.bytes32Vals[0]) revert InvalidL2Header();
         stateRoot = EthTrie.toBytes32(RLPReader.readBytes(RLPReader.readList(p.l2Header)[3]));
     }
 
     // Walk from the confirmed anchor to the commit's assertion. Each link must exist; a pending one is
-    // allowed only with minAgeBlocks, and only if its parent has no rival child.
+    // allowed only with minAgeL1Blocks, and only if its parent has no rival child.
     function _verifyChain(bytes32 h, bytes32[] memory chain)
         internal
         view
@@ -145,7 +145,7 @@ contract ArbitrumVerifier is IL2StorageVerifier {
             node = rollup.getAssertion(h);
             if (node.status == AssertionStatus.Confirmed) continue;
             if (node.status != AssertionStatus.Pending) revert UnknownAssertion(h);
-            if (minAgeBlocks == 0) revert NotConfirmed(h);
+            if (minAgeL1Blocks == 0) revert NotConfirmed(h);
             if (!unchallenged) revert Challenged(h);
         }
     }

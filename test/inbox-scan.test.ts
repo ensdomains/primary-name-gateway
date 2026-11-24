@@ -30,7 +30,7 @@ function setup() {
 		intervalSec: 600,
 		scanBlocks: 64,
 		firstScanBlocks: 300,
-		maxBlockLag: 7200,
+		maxL1BlockLag: 7200,
 		maxAttempts: 3,
 	});
 	const depths: number[] = [];

@@ -10,7 +10,7 @@ Base is an OP Stack chain, so it uses the OP path ([optimism.md](optimism.md)) e
 | commit | an **output root** game of type **621** |
 | commit id | game index |
 | valid when | `isGameClaimValid(game)`, about 5 days after creation |
-| verifier | [`OPFaultVerifier`](../packages/contracts/src/op/OPFaultVerifier.sol)`(AnchorStateRegistry, 8453, maxSequenceLag)` |
+| verifier | [`OPFaultVerifier`](../packages/contracts/src/op/OPFaultVerifier.sol)`(AnchorStateRegistry, 8453, maxL2SequenceLag)` |
 
 ## Game type 621: `AggregateVerifier`
 
@@ -20,7 +20,7 @@ What this repo relies on is the standard `IDisputeGame` surface, which it keeps:
 
 - `rootClaim` is a standard (version 0) output root. Checked on mainnet: the latest game's root matched the output root recomputed from L2.
 - `extraData` is `l2BlockNumber (32) . parentGame (20) . intermediate roots (32 each)`. `decodeGameClaim` reads the first word as the L2 block, as for any output root game.
-- `l2SequenceNumber()` is the L2 block number, so `maxSequenceLag` is in **blocks**, not seconds as on Optimism's super root games. Since Denim a block is 0.2 s ([below](#block-time)): 86,400 blocks is 4.8 hours, not 2 days.
+- `l2SequenceNumber()` is the L2 block number, so `maxL2SequenceLag` is in **blocks**, not seconds as on Optimism's super root games. Since Denim a block is 0.2 s ([below](#block-time)): 86,400 blocks is 4.8 hours, not 2 days.
 - `status()` uses the standard `GameStatus` (`CHALLENGER_WINS` = 1), and validity, blacklisting and retirement come from the `AnchorStateRegistry`.
 
 Games are created about every 20 minutes (6,000 blocks).
@@ -33,7 +33,7 @@ What depends on it:
 
 - **Batch inbox:** a span batch names its first block by timestamp, which now matches up to five blocks. `parent_check` picks one (`spanBatchParent` in [inbox.ts](../packages/registrar-indexer/src/inbox.ts)). Base posts singular batches, which name the parent by hash.
 - **Super root games** name a timestamp; `blockAtTimestamp` refuses one that matches several blocks. Base's games are output root games, which name a block.
-- **`maxSequenceLag`** counts blocks (above).
+- **`maxL2SequenceLag`** counts blocks (above).
 
 ## Early acceptance
 

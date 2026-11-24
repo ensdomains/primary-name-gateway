@@ -21,9 +21,9 @@ export type ArbitrumSourceConfig = {
 	l2: InboxL2Reader; // headers by hash, account proofs, the finalized head
 	// L1 blocks back on first start (default: the confirm period and a day, so some are confirmed)
 	lookbackBlocks?: number;
-	// accept unchallenged pending assertions this many L1 blocks old: must equal the verifier's minAgeBlocks
+	// accept unchallenged pending assertions this many L1 blocks old: must equal the verifier's minAgeL1Blocks
 	// (default 0: confirmed assertions only)
-	minAgeBlocks?: number;
+	minAgeL1Blocks?: number;
 	maxAttempts: number;
 	logStep?: number; // L1 eth_getLogs range (default 10,000: Infura's limit)
 	l1BlockTag?: BlockTag; // L1 state to trust (default "finalized": assertions and statuses can't reorg)
@@ -36,7 +36,7 @@ type Node = { secondChildBlock: bigint; status: number };
 
 // Commits from Arbitrum's BoLD rollup (ArbitrumVerifier, docs/arbitrum.md): every finished assertion
 // names an L2 block (its after state's block hash). It is valid once confirmed (about 6.4 days), or
-// with minAgeBlocks, once it is that old and nothing on its way from the last confirmed assertion has
+// with minAgeL1Blocks, once it is that old and nothing on its way from the last confirmed assertion has
 // a rival. A confirmed assertion's proof is one link from its parent; an early one's starts at the
 // last confirmed ancestor, so its proof is rebuilt when it becomes valid.
 //
@@ -49,7 +49,7 @@ export class ArbitrumCommitSource implements CommitSource {
 	constructor(readonly config: ArbitrumSourceConfig) {}
 
 	status() {
-		return { minAgeBlocks: this.config.minAgeBlocks ?? 0 };
+		return { minAgeL1Blocks: this.config.minAgeL1Blocks ?? 0 };
 	}
 
 	async tick(indexer: RegistrarIndexer) {
@@ -59,11 +59,12 @@ export class ArbitrumCommitSource implements CommitSource {
 		await this.refreshStatuses(indexer, head);
 	}
 
-	// Which assertions are valid depends on minAgeBlocks. When it changes, valid ones go back to pending
+	// Which assertions are valid depends on minAgeL1Blocks. When it changes, valid ones go back to pending
 	// and are checked again under the new rule (as OPCommitSource does for minAgeSec).
 	private applyMinAge(indexer: RegistrarIndexer) {
 		const { db } = indexer;
-		const minAge = String(this.config.minAgeBlocks ?? 0);
+		const minAge = String(this.config.minAgeL1Blocks ?? 0);
+		// the recorded key keeps its name from before minAgeL1Blocks, so existing databases carry over
 		const prev = db.getState("minAgeBlocks");
 		if (prev === minAge) return;
 		if (prev !== undefined) {
@@ -72,7 +73,7 @@ export class ArbitrumCommitSource implements CommitSource {
 				for (const c of valid) db.putCommit({ ...c, status: "pending", validAt: undefined });
 			})();
 			indexer.log.warn(
-				`minAgeBlocks changed from ${prev} to ${minAge}: checking ${valid.length} valid assertions again`,
+				`minAgeL1Blocks changed from ${prev} to ${minAge}: checking ${valid.length} valid assertions again`,
 			);
 		}
 		db.setState("minAgeBlocks", minAge);
@@ -192,21 +193,21 @@ export class ArbitrumCommitSource implements CommitSource {
 	}
 
 	private async refreshStatuses(indexer: RegistrarIndexer, head: number) {
-		const { l1, deployment, minAgeBlocks = 0 } = this.config;
+		const { l1, deployment, minAgeL1Blocks = 0 } = this.config;
 		const { db } = indexer;
 		const all = db.getCommits(undefined, 100_000) as ArbitrumCommit[];
 		const byHash = new Map(all.map((c) => [c.assertionHash, c]));
 		// What might change: confirmed-only, the pending assertions a confirm period old. With
-		// minAgeBlocks, the pending ones that old and the valid unconfirmed ones, with every link back.
+		// minAgeL1Blocks, the pending ones that old and the valid unconfirmed ones, with every link back.
 		const period = await this.getConfirmPeriod();
 		const due = all.filter(
 			(c) =>
-				(c.status === "pending" && c.l1Block + (minAgeBlocks || period) <= head) ||
-				(minAgeBlocks > 0 && c.status === "valid"),
+				(c.status === "pending" && c.l1Block + (minAgeL1Blocks || period) <= head) ||
+				(minAgeL1Blocks > 0 && c.status === "valid"),
 		);
 		if (!due.length) return;
 		// the rollup's view on finalized L1, in batches of 25 (Infura answers part of a large batch with nothing)
-		const hashes = minAgeBlocks
+		const hashes = minAgeL1Blocks
 			? [...new Set(all.flatMap((c) => [c.assertionHash, c.parentAssertionHash]))]
 			: due.map((c) => c.assertionHash);
 		const nodes = new Map<Hex, Node>();
@@ -247,7 +248,7 @@ export class ArbitrumCommitSource implements CommitSource {
 				if (confirmed) {
 					db.putCommit({ ...c, status: "valid", validAt: now });
 					indexer.log.ok(`assertion ${c.id}: valid, confirmed (L2 block ${c.l2Block})`);
-				} else if (minAgeBlocks && node.status === ASSERTION_PENDING && c.l1Block + minAgeBlocks <= head) {
+				} else if (minAgeL1Blocks && node.status === ASSERTION_PENDING && c.l1Block + minAgeL1Blocks <= head) {
 					const link = chainOf(c);
 					if (!link) continue;
 					const { afterState, l2Header } = decodeArbitrumCommitProof(c.commitProof);

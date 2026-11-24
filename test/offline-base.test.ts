@@ -3,7 +3,7 @@
 //   - output root games (not super roots), of a custom game type (621, Base's AggregateVerifier),
 //     whose extraData is l2BlockNumber . parentGame . intermediate roots
 //   - the Ownable registrar layout (names at slot 0, owner at slot 1) with OwnershipTransferred events
-//   - maxSequenceLag in L2 blocks
+//   - maxL2SequenceLag in L2 blocks
 //
 // Same stack as offline.test.ts: blocksmith + mock OP contracts, FakeOPRollup, the real indexer,
 // gateway, OPFaultVerifier and L2ReverseResolver.
@@ -218,7 +218,7 @@ describe("offline e2e (base: output root games, Ownable layout)", () => {
 		expect(await resolveName(A.short)).toBe("raffy2.base.eth");
 	}, 60_000);
 
-	test("games more than maxSequenceLag blocks behind the anchor are rejected", async () => {
+	test("games more than maxL2SequenceLag blocks behind the anchor are rejected", async () => {
 		rollup.mine(MAX_SEQUENCE_LAG);
 		const game = await propose();
 		await foundry.confirm(asr.finalize(game.address));

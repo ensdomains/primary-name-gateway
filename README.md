@@ -10,16 +10,16 @@ Each L2 has a reverse registrar holding its [ENSIP-19](https://docs.ens.domains/
 
 ### Rollups
 
-Proven from what the rollup itself commits to L1. **Delay** is how far behind the L2's tip the newest provable state is. Rollups with fault proofs can accept a commitment before it's final, once it has gone unchallenged for a while (`minAgeSec` / `minAgeBlocks`, set on the verifier and the indexer alike), which trusts an honest challenger to act within that time.
+Proven from what the rollup itself commits to L1. **Delay** is how far behind the L2's tip the newest provable state is. Rollups with fault proofs can accept a commitment before it's final, once it has gone unchallenged for a while (`minAgeSec` / `minAgeL1Blocks`, set on the verifier and the indexer alike), which trusts an honest challenger to act within that time.
 
 | chain | kind | every | trust | delay |
 |---|---|---|---|---|
 | [Optimism](docs/optimism.md)<br>(10) | `op`: dispute games (super roots) | 1 h | fault proofs | `minAgeSec`<br>• `0`: ~7 days (finalized)<br>• `T`: T + ~40 min–1.5 h |
 | [Base](docs/base.md)<br>(8453) | `op`: dispute games (output roots, `AggregateVerifier`) | ~20 min | TEE proofs, challengeable with ZK | `minAgeSec`<br>• `0`: ~5 days (finalized)<br>• `T`: T + ~1 h |
-| [Arbitrum One](docs/arbitrum.md)<br>(42161) | `arbitrum`: BoLD assertions | 1 h | fault proofs (BoLD) | `minAgeBlocks`<br>• `0`: ~6.5 days (confirmed)<br>• `N`: N × 12 s + ~1.2–2.2 h (1,800: 7.7 h measured) |
+| [Arbitrum One](docs/arbitrum.md)<br>(42161) | `arbitrum`: BoLD assertions | 1 h | fault proofs (BoLD) | `minAgeL1Blocks`<br>• `0`: ~6.5 days (confirmed)<br>• `N`: N × 12 s + ~1.2–2.2 h (1,800: 7.7 h measured) |
 | [Linea](docs/linea.md)<br>(59144) | `linea`: ZK finalizations | a few hours | validity proofs | ~2–4 h (final when posted) |
 
-The early delays add up the time between commitments (every), the age of the L2 block a commitment names when it's posted (measured 2026-11-23: Optimism ~20 min, Base ~35 min, Arbitrum ~1 h), and L1 finality (~13 min: the indexer only reads finalized L1). An early Arbitrum proof is a chain of assertions from the last confirmed one (about 6.4 days back), so it costs more the smaller `minAgeBlocks` is: 2.1M gas at 1,800 blocks, against ~600k confirmed-only.
+The early delays add up the time between commitments (every), the age of the L2 block a commitment names when it's posted (measured 2026-11-23: Optimism ~20 min, Base ~35 min, Arbitrum ~1 h), and L1 finality (~13 min: the indexer only reads finalized L1). An early Arbitrum proof is a chain of assertions from the last confirmed one (about 6.4 days back), so it costs more the smaller `minAgeL1Blocks` is: 2.1M gas at 1,800 blocks, against ~600k confirmed-only.
 
 ### Other
 
@@ -52,7 +52,7 @@ flowchart TD
    1. `verifyStorageRoot(commitProof, registrar, accountProof)`: the commit is valid and fresh on L1, and the account proof gives the registrar's storage root.
    2. `verifyStorageValues(storageRoot, slots, proof)`: the name's header slot and its `NameProof.dataSlots` data slots, which must agree with the header's length. Unset slots are proven absent. All slots share one proof, so a verifier can share work between them.
 
-The serving rules are the same on every chain: the gateway serves the newest valid commit (validity is judged on finalized L1, so a client reading at latest is already past it; `GATEWAY_SERVE_DELAY_SEC` can hold a new commit back a few seconds for clients reading at finalized), and verifiers reject commits that are too stale (`maxSequenceLag` behind the anchor on OP, `maxBlockLag` L2 blocks on Linea, `maxBlockLag` L1 blocks for the batch inbox, `maxAgeBlocks` L1 blocks on Arbitrum): otherwise a gateway could prove a name from before it was changed. If the gateway's newest commit becomes invalid, it truncates back to its newest valid commit and patches from there. If the indexer no longer has the commit a gateway asks to patch from, the gateway falls back to a snapshot.
+The serving rules are the same on every chain: the gateway serves the newest valid commit (validity is judged on finalized L1, so a client reading at latest is already past it; `GATEWAY_SERVE_DELAY_SEC` can hold a new commit back a few seconds for clients reading at finalized), and verifiers reject commits that are too stale (`maxL2SequenceLag` behind the anchor on OP, `maxL2BlockLag` on Linea, `maxL1BlockLag` for the batch inbox, `maxAgeL1Blocks` on Arbitrum): otherwise a gateway could prove a name from before it was changed. If the gateway's newest commit becomes invalid, it truncates back to its newest valid commit and patches from there. If the indexer no longer has the commit a gateway asks to patch from, the gateway falls back to a snapshot.
 
 ## Packages
 
@@ -98,7 +98,7 @@ bun run indexer:arbitrum    # :8104
 bun run gateway:arbitrum    # :8204
 ```
 
-Indexer API: `GET /status` (commit kind, `l1ChainId`, `l2ChainId`, L2 block time, `minAgeSec` / `minAgeBlocks`, sync position, commit counts), `/commits?status=valid&limit=2`, `/commits/:id`, `/snapshot?commit=ID&after=KEY`, `/patch?from=A&to=B`, `/changes?after=&until=`. `/snapshot` and `/patch` serve rows in the layout their `x-row-format` header names (OP Stack: [chunks](docs/optimism.md#chunks)). Responses are JSON, gzipped when the client accepts it: a Base `/snapshot` page (50,000 nodes in about 700 chunks) is about 9 MB, or 3.9 MB gzipped.
+Indexer API: `GET /status` (commit kind, `l1ChainId`, `l2ChainId`, L2 block time, `minAgeSec` / `minAgeL1Blocks`, sync position, commit counts), `/commits?status=valid&limit=2`, `/commits/:id`, `/snapshot?commit=ID&after=KEY`, `/patch?from=A&to=B`, `/changes?after=&until=`. `/snapshot` and `/patch` serve rows in the layout their `x-row-format` header names (OP Stack: [chunks](docs/optimism.md#chunks)). Responses are JSON, gzipped when the client accepts it: a Base `/snapshot` page (50,000 nodes in about 700 chunks) is about 9 MB, or 3.9 MB gzipped.
 
 Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
 
@@ -136,7 +136,7 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
   L2        matches L2ReverseRegistrar.nameForAddr at L2 block 61,419,983
   ```
 
-  If the indexer accepts commits early, pass its value as `--min-age`: seconds for OP Stack fault proofs (`INDEXER_MIN_AGE_SEC`), L1 blocks for Arbitrum (`INDEXER_MIN_AGE_BLOCKS`). It defaults to that variable when set.
+  If the indexer accepts commits early, pass its value as `--min-age`: seconds for OP Stack fault proofs (`INDEXER_MIN_AGE_SEC`), L1 blocks for Arbitrum (`INDEXER_MIN_AGE_L1_BLOCKS`). It defaults to that variable when set.
 
 ## References
 

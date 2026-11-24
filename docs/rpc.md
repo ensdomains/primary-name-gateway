@@ -101,11 +101,11 @@ Indexer (`bun run indexer:<chain>`, or `bun run indexer` with `INDEXER_CHAIN`):
 | `INDEXER_MIN_FINAL_AGE_SEC` | game finality − 1 day | Optimism / Base: start checking validity at this age |
 | `INDEXER_MIN_AGE_SEC` | `0` | Optimism / Base: accept unchallenged games this old; must equal the verifier's `minAgeSec` ([optimism.md](optimism.md#early-acceptance-minagesec)). Changing it re-checks the valid games. |
 | `INDEXER_LOOKBACK_L1_BLOCKS` | `3600` | Linea: L1 blocks to scan on first start. Arbitrum: the same, default the confirm period and a day (about 53,000) |
-| `INDEXER_MIN_AGE_BLOCKS` | `0` | Arbitrum: accept unchallenged assertions this many L1 blocks old; must equal the verifier's `minAgeBlocks` ([arbitrum.md](arbitrum.md)). Changing it re-checks the valid assertions. |
+| `INDEXER_MIN_AGE_L1_BLOCKS` | `0` | Arbitrum: accept unchallenged assertions this many L1 blocks old; must equal the verifier's `minAgeL1Blocks` ([arbitrum.md](arbitrum.md)). Changing it re-checks the valid assertions. |
 | `INDEXER_INBOX_INTERVAL_SEC` | `600` | inbox: at most one commit per this much L1 time |
 | `INDEXER_INBOX_SCAN_BLOCKS` | `64` | inbox: L1 blocks to look back for a channel start whose parent is final |
 | `INDEXER_INBOX_FIRST_SCAN_BLOCKS` | `300` | inbox: the same with no commits yet (about an hour) |
-| `INDEXER_INBOX_MAX_BLOCK_LAG` | `7200` | inbox: commits older than this many L1 blocks become invalid (below the verifier's `maxBlockLag`) |
+| `INDEXER_INBOX_MAX_L1_BLOCK_LAG` | `7200` | inbox: commits older than this many L1 blocks become invalid (below the verifier's `maxL1BlockLag`) |
 | `KZG_TRUSTED_SETUP` | `data/kzg/trusted_setup.txt` | inbox: downloaded there if missing |
 | `INDEXER_FLUSH_CHANGES` | `50000` | All but Linea: changes applied in memory before the trie rows are written ([optimism.md](optimism.md#trie-rows)) |
 | `INDEXER_CACHE_MB` | `64` | SQLite page cache |
@@ -128,7 +128,7 @@ Gateway (`bun run gateway:<chain>`, or `bun run gateway` with `GATEWAY_CHAIN`):
 | variable | default | |
 |---|---|---|
 | `GATEWAY_URL` | the chain's gateway port on localhost | or `--gateway URL` |
-| `INDEXER_MIN_AGE_SEC` / `INDEXER_MIN_AGE_BLOCKS` | `0` | the verifier's early acceptance (OP Stack seconds / Arbitrum L1 blocks), or `--min-age` |
+| `INDEXER_MIN_AGE_SEC` / `INDEXER_MIN_AGE_L1_BLOCKS` | `0` | the verifier's early acceptance (OP Stack seconds / Arbitrum L1 blocks), or `--min-age` |
 
 Fork test (`bun run test:fork`, [op-batch-inbox.md](op-batch-inbox.md)): needs an archive L1 RPC (`ALCHEMY_KEY`, or `PROOF_RPC_URL_1` / `RPC_URL_1`).
 

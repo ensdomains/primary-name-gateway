@@ -1,6 +1,6 @@
 # Arbitrum
 
-Arbitrum One settles to L1 through **BoLD** assertions: a validator posts an assertion naming an L2 block (by hash), and after the confirm period without a successful challenge it is confirmed. The indexer commits to assertions, the gateway serves Merkle-Patricia rows as for OP Stack chains ([chunks](optimism.md#chunks)), and [`ArbitrumVerifier`](../packages/contracts/src/arbitrum/ArbitrumVerifier.sol) checks an assertion against the rollup. Like `OPFaultVerifier`'s `minAgeSec`, it can accept assertions before confirmation (`minAgeBlocks`).
+Arbitrum One settles to L1 through **BoLD** assertions: a validator posts an assertion naming an L2 block (by hash), and after the confirm period without a successful challenge it is confirmed. The indexer commits to assertions, the gateway serves Merkle-Patricia rows as for OP Stack chains ([chunks](optimism.md#chunks)), and [`ArbitrumVerifier`](../packages/contracts/src/arbitrum/ArbitrumVerifier.sol) checks an assertion against the rollup. Like `OPFaultVerifier`'s `minAgeSec`, it can accept assertions before confirmation (`minAgeL1Blocks`).
 
 | chain | Arbitrum One |
 |---|---|
@@ -8,8 +8,8 @@ Arbitrum One settles to L1 through **BoLD** assertions: a validator posts an ass
 | registrar | `0x0000000000D8e504002cC26E3Ec46D81971C1664`, created at L2 block 349,263,357, **plain** layout (names at slot 0; no `owner()`) |
 | L1 rollup | `RollupProxy` `0x4DCeB440657f21083db8aDd07665f8ddBe1DCfc0` (BoLD) |
 | commit | an assertion whose machine finished; id = L1 block × 10000 + log index of its `AssertionCreated` |
-| valid when | confirmed: `confirmPeriodBlocks` = 45,818 L1 blocks (about 6.4 days) after creation; or with `minAgeBlocks`, unchallenged and that old |
-| verifier | `ArbitrumVerifier(rollup, minAgeBlocks, maxAgeBlocks)` |
+| valid when | confirmed: `confirmPeriodBlocks` = 45,818 L1 blocks (about 6.4 days) after creation; or with `minAgeL1Blocks`, unchallenged and that old |
+| verifier | `ArbitrumVerifier(rollup, minAgeL1Blocks, maxAgeL1Blocks)` |
 | scripts | `bun run indexer:arbitrum` / `gateway:arbitrum` (ports 8104 / 8204), `bun run prove <address> arbitrum`; `bun scripts/arbitrum-fixture.ts` refreshes the forge fixture |
 
 ## Assertions
@@ -40,23 +40,23 @@ l2Header                    RLP header of the L2 block afterState names
 
 The verifier walks it: each step recomputes the child's hash and reads its node.
 
-- **`minAgeBlocks == 0`:** every link must be confirmed. The indexer's proof is one link, anchored at the commit's parent (a confirmed assertion's parent is confirmed).
-- **`minAgeBlocks > 0`:** a link may be pending if its parent has no rival child (`secondChildBlock == 0`). The anchor is the last confirmed ancestor, so the chain is as long as the unconfirmed stretch: up to about 150 links (one an hour for 6.4 days), each one `getAssertion` call. The trust: an honest validator challenges a bad assertion within `minAgeBlocks`. A challenge on the way (a rival anywhere from the anchor to the commit) is refused.
-- **Freshness and age:** `latest` is the newest acceptable assertion's L1 block: `latestConfirmed()`'s `createdAtBlock`, or `block.number - minAgeBlocks`. The commit's assertion must have `createdAtBlock <= latest` (old enough) and `createdAtBlock + maxAgeBlocks >= latest` (fresh enough).
+- **`minAgeL1Blocks == 0`:** every link must be confirmed. The indexer's proof is one link, anchored at the commit's parent (a confirmed assertion's parent is confirmed).
+- **`minAgeL1Blocks > 0`:** a link may be pending if its parent has no rival child (`secondChildBlock == 0`). The anchor is the last confirmed ancestor, so the chain is as long as the unconfirmed stretch: up to about 150 links (one an hour for 6.4 days), each one `getAssertion` call. The trust: an honest validator challenges a bad assertion within `minAgeL1Blocks`. A challenge on the way (a rival anywhere from the anchor to the commit) is refused.
+- **Freshness and age:** `latest` is the newest acceptable assertion's L1 block: `latestConfirmed()`'s `createdAtBlock`, or `block.number - minAgeL1Blocks`. The commit's assertion must have `createdAtBlock <= latest` (old enough) and `createdAtBlock + maxAgeL1Blocks >= latest` (fresh enough).
 - Then: `keccak256(l2Header) == afterState.globalState.bytes32Vals[0]`, the state root is header field 3, and the account and storage proofs are Merkle-Patricia (`EthTrie`), as for OP Stack chains.
 
-[`ArbitrumVerifier.t.sol`](../packages/contracts/test/ArbitrumVerifier.t.sol) runs the real fixture against a mock rollup holding the real assertions' nodes: a confirmed assertion resolves `lillithh.eth` and an unset address through `L2ReverseResolver`; its pending child is refused without `minAgeBlocks`, accepted at exactly `minAgeBlocks` old and refused one block younger; a rival child, a wrong inbox accumulator, a tampered after state, the wrong header, a stale assertion, an unconfirmed anchor and an empty chain are each refused.
+[`ArbitrumVerifier.t.sol`](../packages/contracts/test/ArbitrumVerifier.t.sol) runs the real fixture against a mock rollup holding the real assertions' nodes: a confirmed assertion resolves `lillithh.eth` and an unset address through `L2ReverseResolver`; its pending child is refused without `minAgeL1Blocks`, accepted at exactly `minAgeL1Blocks` old and refused one block younger; a rival child, a wrong inbox accumulator, a tampered after state, the wrong header, a stale assertion, an unconfirmed anchor and an empty chain are each refused.
 
 ## The indexer
 
 [arbitrum.ts](../packages/registrar-indexer/src/arbitrum.ts) (`INDEXER_CHAIN=arbitrum`):
 
 - **Discovery:** `AssertionCreated` events on finalized L1, from a cursor (`arbitrumNextL1Block`), 10,000 L1 blocks per `eth_getLogs` (Infura's limit). On first start, and after downtime, it starts `INDEXER_LOOKBACK_L1_BLOCKS` back (default: the confirm period and a day, so there are confirmed assertions). Each finished assertion becomes a commit: its L2 block (the header by hash), the registrar's account proof there (archive: Alchemy), and the one-link proof. Assertions are taken in order; one that fails is retried next tick, and skipped after `INDEXER_MAX_ATTEMPTS` (5). An assertion whose machine didn't finish is skipped.
-- **Status**, each tick, from `getAssertion` on finalized L1 (batches of 25), only for assertions whose status can change: confirmed-only, the pending ones a confirm period old; with `INDEXER_MIN_AGE_BLOCKS`, the pending ones that old and the valid unconfirmed ones, with every assertion back to a confirmed one:
+- **Status**, each tick, from `getAssertion` on finalized L1 (batches of 25), only for assertions whose status can change: confirmed-only, the pending ones a confirm period old; with `INDEXER_MIN_AGE_L1_BLOCKS`, the pending ones that old and the valid unconfirmed ones, with every assertion back to a confirmed one:
   - confirmed: valid;
-  - with `INDEXER_MIN_AGE_BLOCKS` (must equal the verifier's `minAgeBlocks`): a pending assertion that old, with an unchallenged chain back to a confirmed one, is valid, and its proof is rebuilt with that chain;
+  - with `INDEXER_MIN_AGE_L1_BLOCKS` (must equal the verifier's `minAgeL1Blocks`): a pending assertion that old, with an unchallenged chain back to a confirmed one, is valid, and its proof is rebuilt with that chain;
   - a valid but unconfirmed assertion whose chain gets a rival becomes invalid.
-- **`minAgeBlocks` changes:** the indexer records it (`/status` shows `minAgeBlocks`); on a change every valid assertion goes back to pending and is checked again under the new rule, and the indexer's tick rebuilds the tries of the newest valid commits (`keepTries`).
+- **`minAgeL1Blocks` changes:** the indexer records it (`/status` shows `minAgeL1Blocks`); on a change every valid assertion goes back to pending and is checked again under the new rule, and the indexer's tick rebuilds the tries of the newest valid commits (`keepTries`).
 - **Events:** the registrar's history is 177M L2 blocks. Arbitrum's public RPC answers `eth_getLogs` over 10,000,000 blocks (Infura 10,000, drpc's free plan 100), so `ARBITRUM.wideLogsRPC` is preferred for logs: the whole replay is about 30 calls (the range starts at 5,000 blocks and doubles up to 10M).
 
 ## Offline end-to-end
@@ -64,7 +64,7 @@ The verifier walks it: each step recomputes the child's hash and reads its node.
 [offline-arbitrum.test.ts](../test/offline-arbitrum.test.ts) runs the real indexer, gateway, `ArbitrumVerifier` and resolver on anvil, with `MockBoLDRollup` creating assertions with BoLD's event and hashes (and confirming and challenging them on demand) and an in-memory L2 with real headers ([fake-arbitrum.ts](../test/fake-arbitrum.ts)):
 
 - a confirmed assertion is served, and both a confirmed-only and an early verifier accept it;
-- pending assertions `minAgeBlocks` old are served through a two-link chain, which a confirmed-only verifier refuses (`NotConfirmed`);
+- pending assertions `minAgeL1Blocks` old are served through a two-link chain, which a confirmed-only verifier refuses (`NotConfirmed`);
 - a rival child on the way makes the early commit invalid (`Challenged` on L1, invalid in the indexer), and the gateway falls back to the one before it;
 - restarting confirmed-only re-checks the valid commits: the early one goes back to pending.
 
@@ -79,22 +79,22 @@ The verifier walks it: each step recomputes the child's hash and reads its node.
 | mode | proof | behind finalized | response | gas |
 |---|---|---|---|---|
 | confirmed only | 1 link from a confirmed assertion | 6d12h | 6.7 KB | about 600,000 |
-| `INDEXER_MIN_AGE_BLOCKS=1800` (6 hours), verifier `--min-age 1800` | 149 links from the last confirmed one | 7h26m | 16.4 KB | 2,100,214 |
+| `INDEXER_MIN_AGE_L1_BLOCKS=1800` (6 hours), verifier `--min-age 1800` | 149 links from the last confirmed one | 7h26m | 16.4 KB | 2,100,214 |
 
-- Restarted with `INDEXER_MIN_AGE_BLOCKS=1800`, the indexer checked its valid assertions again and accepted the 149 pending ones over 6 hours old (6 younger ones stayed pending). A confirmed-only verifier rejects their proofs with `NotConfirmed` on the first pending link, as it should; the same database serves either mode after a restart, since the indexer records `minAgeBlocks` and re-checks on a change.
+- Restarted with `INDEXER_MIN_AGE_L1_BLOCKS=1800`, the indexer checked its valid assertions again and accepted the 149 pending ones over 6 hours old (6 younger ones stayed pending). A confirmed-only verifier rejects their proofs with `NotConfirmed` on the first pending link, as it should; the same database serves either mode after a restart, since the indexer records `minAgeL1Blocks` and re-checks on a change.
 
 ## Compared with unruggable-gateways
 
 The verifier follows unruggable's `BoLDVerifierLib` ([contracts/arbitrum](https://github.com/unruggable-labs/unruggable-gateways/tree/main/contracts/arbitrum), MIT) and `BoLDRollup.ts` ([src/arbitrum](https://github.com/unruggable-labs/unruggable-gateways/tree/main/src/arbitrum)):
 
-- Same chain walk, the same rival rule for pending links, and the same window: unruggable's `_checkWindow(latest, got)` with `latest` = the last confirmed assertion's `createdAtBlock`, or `block.number - minAgeBlocks`.
+- Same chain walk, the same rival rule for pending links, and the same window: unruggable's `_checkWindow(latest, got)` with `latest` = the last confirmed assertion's `createdAtBlock`, or `block.number - minAgeL1Blocks`.
 - The proof here carries `bytes32[]` pairs instead of packed bytes, and the verifier implements `IL2StorageVerifier` (one storage root per commit) instead of the GatewayVM.
 - Unruggable keeps assertions in memory and builds a chain per request; the indexer stores each assertion as a commit and rebuilds an early commit's chain once, when it becomes valid.
 - Pre-BoLD (Nitro, `NitroVerifierLib`: nodes with `latestNodeCreated`, `getNode`) isn't implemented: Arbitrum One and Nova moved to BoLD.
 
 ## Open
 
-- The confirm period makes finality-only proofs about 6.4 days behind; `minAgeBlocks` (for example 1,800 = 6 hours) brings that down, with the chained proof's gas growing with the unconfirmed stretch (about 150 `getAssertion` calls at most).
+- The confirm period makes finality-only proofs about 6.4 days behind; `minAgeL1Blocks` (for example 1,800 = 6 hours) brings that down, with the chained proof's gas growing with the unconfirmed stretch (about 150 `getAssertion` calls at most).
 - Arbitrum Nova (`0xE7E8cCC7c381809BDC4b213CE44016300707B7Bd`, BoLD) would be another deployment of the same code, if it has a registrar.
 
 ## References

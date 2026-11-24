@@ -54,7 +54,7 @@ struct OPFaultCommitProof {
 /// @dev Deploy one per chain: (AnchorStateRegistry, L2 chain id).
 ///      1. `game` is a valid, finalized claim according to the AnchorStateRegistry, or (if `minAgeSec > 0`)
 ///         proper, respected, not lost, and either resolved for the defender or unchallenged for `minAgeSec`
-///      2. `game` is not older than the current anchor by more than `maxSequenceLag` (freshness)
+///      2. `game` is not older than the current anchor by more than `maxL2SequenceLag` (freshness)
 ///      3. rootClaim = keccak(superRoot) and superRoot has (l2ChainId => outputRoot), or rootClaim = outputRoot
 ///      4. outputRoot = keccak(outputRootProof)
 ///      5. account proof: stateRoot => storageRoot
@@ -75,10 +75,10 @@ contract OPFaultVerifier is IL2StorageVerifier {
     uint256 public immutable l2ChainId;
     /// @notice How far a game's `l2SequenceNumber` may lag behind the anchor's, i.e. how stale a proven
     ///         value may be. Units: seconds for super root games (the sequence number is a timestamp),
-    ///         blocks for output root games. Must exceed the time between games plus the gateway's margin,
+    ///         blocks for output root games. Must exceed the time between games plus the gateway's serve delay,
     ///         or a gateway's fallback commit is rejected. The anchor only moves when it is updated, so it
     ///         can trail the newest valid game.
-    uint256 public immutable maxSequenceLag;
+    uint256 public immutable maxL2SequenceLag;
     /// @notice 0: only finalized games (`isGameClaimValid`). Otherwise also accept a game that nobody has
     ///         challenged for this many seconds. That trusts honest challengers to respond within `minAgeSec`:
     ///         an unchallenged fraudulent proposal would be accepted until it is challenged or blacklisted.
@@ -87,12 +87,12 @@ contract OPFaultVerifier is IL2StorageVerifier {
     constructor(
         IAnchorStateRegistry anchorStateRegistry_,
         uint256 l2ChainId_,
-        uint256 maxSequenceLag_,
+        uint256 maxL2SequenceLag_,
         uint256 minAgeSec_
     ) {
         anchorStateRegistry = anchorStateRegistry_;
         l2ChainId = l2ChainId_;
-        maxSequenceLag = maxSequenceLag_;
+        maxL2SequenceLag = maxL2SequenceLag_;
         minAgeSec = minAgeSec_;
     }
 
@@ -127,7 +127,7 @@ contract OPFaultVerifier is IL2StorageVerifier {
         IDisputeGame game = IDisputeGame(p.game);
         uint256 seq = game.l2SequenceNumber();
         (, uint256 anchorSeq) = anchorStateRegistry.getAnchorRoot();
-        if (seq + maxSequenceLag < anchorSeq) revert StaleGame(seq, anchorSeq);
+        if (seq + maxL2SequenceLag < anchorSeq) revert StaleGame(seq, anchorSeq);
         bytes32 rootClaim = game.rootClaim();
         bytes32 outputRoot = p.superRoot.length == 0 ? rootClaim : findOutputRoot(p.superRoot, rootClaim);
         if (keccak256(abi.encode(p.outputRootProof)) != outputRoot) revert InvalidOutputRoot();

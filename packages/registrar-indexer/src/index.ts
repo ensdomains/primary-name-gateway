@@ -53,6 +53,13 @@ type Log = (...args: unknown[]) => void;
 // L2 reader + commit source for a deployment, from env
 function createSource(deployment: Deployment, log: Log): { l2: ChangeReader; source: CommitSource } {
 	const env = process.env;
+	// renamed: ignoring one would silently change which commits are valid
+	for (const [old, now] of [
+		["INDEXER_MIN_AGE_BLOCKS", "INDEXER_MIN_AGE_L1_BLOCKS"],
+		["INDEXER_INBOX_MAX_BLOCK_LAG", "INDEXER_INBOX_MAX_L1_BLOCK_LAG"],
+	]) {
+		if (env[old] !== undefined) throw new Error(`${old} is now ${now}`);
+	}
 	const l1 = createClient(deployment.l1);
 	const maxAttempts = Number(env.INDEXER_MAX_ATTEMPTS ?? 5);
 	if (deployment.kind === "op") {
@@ -95,8 +102,8 @@ function createSource(deployment: Deployment, log: Log): { l2: ChangeReader; sou
 			intervalSec: Number(env.INDEXER_INBOX_INTERVAL_SEC ?? 600),
 			scanBlocks: Number(env.INDEXER_INBOX_SCAN_BLOCKS ?? 64),
 			firstScanBlocks: Number(env.INDEXER_INBOX_FIRST_SCAN_BLOCKS ?? 300), // an hour of L1 blocks
-			// below the verifier's maxBlockLag (EIP-2935 keeps 8191 block hashes)
-			maxBlockLag: Number(env.INDEXER_INBOX_MAX_BLOCK_LAG ?? 7200),
+			// below the verifier's maxL1BlockLag (EIP-2935 keeps 8191 block hashes)
+			maxL1BlockLag: Number(env.INDEXER_INBOX_MAX_L1_BLOCK_LAG ?? 7200),
 			maxAttempts,
 		});
 		return { l2, source };
@@ -113,8 +120,8 @@ function createSource(deployment: Deployment, log: Log): { l2: ChangeReader; sou
 			l1,
 			l2,
 			lookbackBlocks: env.INDEXER_LOOKBACK_L1_BLOCKS ? Number(env.INDEXER_LOOKBACK_L1_BLOCKS) : undefined,
-			// accept unchallenged assertions this many L1 blocks old; must match the deployed ArbitrumVerifier's minAgeBlocks
-			minAgeBlocks: Number(env.INDEXER_MIN_AGE_BLOCKS ?? 0),
+			// accept unchallenged assertions this many L1 blocks old; must match the deployed ArbitrumVerifier's minAgeL1Blocks
+			minAgeL1Blocks: Number(env.INDEXER_MIN_AGE_L1_BLOCKS ?? 0),
 			maxAttempts,
 		});
 		return { l2, source };
