@@ -20,7 +20,7 @@ What this repo relies on is the standard `IDisputeGame` surface, which it keeps:
 
 - `rootClaim` is a standard (version 0) output root. Checked on mainnet: the latest game's root matched the output root recomputed from L2.
 - `extraData` is `l2BlockNumber (32) . parentGame (20) . intermediate roots (32 each)`. `decodeGameClaim` reads the first word as the L2 block, as for any output root game.
-- `l2SequenceNumber()` is the L2 block number, so `maxSequenceLag` is in **blocks**, not seconds as on OP Mainnet's super root games. Since Denim a block is 0.2 s ([below](#block-time)): 86,400 blocks is 4.8 hours, not 2 days.
+- `l2SequenceNumber()` is the L2 block number, so `maxSequenceLag` is in **blocks**, not seconds as on Optimism's super root games. Since Denim a block is 0.2 s ([below](#block-time)): 86,400 blocks is 4.8 hours, not 2 days.
 - `status()` uses the standard `GameStatus` (`CHALLENGER_WINS` = 1), and validity, blacklisting and retirement come from the `AnchorStateRegistry`.
 
 Games are created about every 20 minutes (6,000 blocks).
@@ -50,8 +50,8 @@ Base is big enough that two storage keys share a 9-nibble prefix, so some leaves
 - The indexer's defaults follow `gameFinalitySec` (5 days): it looks back 6 days on first start and starts polling validity for games older than 4 days.
 - The 6-day lookback needs archive `eth_getProof` on Base (Alchemy serves it; drpc doesn't that far back).
 - The trie (about 5M rows, 730 MB) lives in the indexer's database. On first start the indexer builds it from the change log: replaying 3.77M events took 3.5 minutes with a 783 MB peak RSS on an M-series Mac (2026-11-22, defaults). The in-memory trie it replaced needed about 2.5 GB. Larger `INDEXER_FLUSH_CHANGES` builds faster but uses more memory (100,000: 2.7 minutes, 2 GB; 10,000: 6.4 minutes, 340 MB).
-- Base's L2 finalized head trails its tip by about 3 hours. Games for blocks above it are deferred until it catches up ([optimism.md#reorgs](optimism.md#reorgs)).
-- `mainnet.base.org` rate limits `eth_getLogs`, so there is no public RPC fallback: set `DRPC_KEY` or `INFURA_KEY` for logs.
+- Base's L2 finalized head trails its tip by about 20 minutes (18 measured, 2026-11-23). Games for blocks above it are deferred until it catches up ([optimism.md#reorgs](optimism.md#reorgs)).
+- `mainnet.base.org` rate limits `eth_getLogs`, so there is no public RPC fallback: set a paid `DRPC_KEY` or an `INFURA_KEY` for logs (drpc's free plan allows only 100-block ranges).
 - The registrar's history has very dense stretches (the migration's `batchSetName`: over 12,000 events in ~120 blocks), past what providers return per request (drpc: 20,000 results). The reader sizes each range for about 5,000 logs from the previous range's density (at most doubling), cuts it by 8 when a provider refuses it, down to a single block if needed, and starts each run at 5,000 blocks ([rpc.md](rpc.md)). On drpc a refused range takes 5–30 s, so avoiding refusals matters more than range size: a catch-up through Base's dense stretch ran at about 10,000 blocks/s.
 
 ```sh

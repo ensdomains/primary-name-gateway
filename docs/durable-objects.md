@@ -73,13 +73,13 @@ export class Gateway extends DurableObject<Env> {
 			exec: (query, ...params) => ctx.storage.sql.exec(query, ...params).toArray(),
 			transaction: (fn) => ctx.storage.transactionSync(fn),
 		});
+		const d = DEPLOYMENTS[env.CHAIN];
 		this.gateway = new RegistrarGateway(store, {
 			indexerURL: env.INDEXER_URL,
 			keepCommits: 2,
 			serveDelaySec: 0,
-			layout: DEPLOYMENTS[env.CHAIN].layout,
+			layout: d.layout,
 		});
-		const d = DEPLOYMENTS[env.CHAIN];
 		this.handler = createGatewayHandler(this.gateway, {
 			kind: d.kind,
 			l1ChainId: d.l1.id,
@@ -120,7 +120,7 @@ Wrangler config (see [get started](https://developers.cloudflare.com/durable-obj
 |---|---|
 | 30 s CPU per invocation by default, configurable up to 5 minutes (`limits.cpu_ms`); alarm handlers have 15 minutes of wall time | A steady-state sync takes milliseconds. A first snapshot does not: Base's is 102 pages (about 70,000 chunk rows, 393 MB gzipped); a bun gateway loads it in about 30 s. That spans many alarms (see Open). |
 | 10 GB storage per object | Base's chunks take about 0.6 GB in SQLite, and the gateway holds one copy plus the chunks that changed since its oldest held commit. |
-| rows written: Free 100,000/day; Paid 50 million/month included, then $1.00/million | Every trie row put or pruned is a row written, and after the first prune each patch row is also recorded once in `trie_dirty`. Rows are chunks (see [optimism.md](optimism.md#chunks)): a Base snapshot is about 70,000 rows, which fits a day of the Free plan. After that, a patch is a few hundred rows per commit. Linea's and OP Mainnet's registrars are tiny. |
+| rows written: Free 100,000/day; Paid 50 million/month included, then $1.00/million | Every trie row put or pruned is a row written, and after the first prune each patch row is also recorded once in `trie_dirty`. Rows are chunks (see [optimism.md](optimism.md#chunks)): a Base snapshot is about 70,000 rows, which fits a day of the Free plan. After that, a patch is a few hundred rows per commit. Linea's and Optimism's registrars are tiny. |
 | rows read: Paid 25 billion/month included | A proof reads 5 rows per slot (4 trunk nodes and 1 limb). |
 | about 1,000 requests per second per object (soft) | One object serves one chain's requests one at a time. To serve more, run more objects (each a full copy that syncs on its own), for example one per region. |
 | SQL: 100 bound parameters, 100 KB per statement, 8 MB per row | `SqlNodeStore` binds at most 3 parameters per statement. Its largest rows are Base limbs, at most about 11 KB. |
@@ -134,7 +134,7 @@ The indexer doesn't fit a Durable Object, and doesn't need to:
 - It needs archive RPC.
 - For the batch inbox, it computes KZG proofs, at about 0.25 seconds each.
 
-It runs as a normal process. Gateways only read `/commits`, `/snapshot` and `/patch` from it, and they check every commit they load against its storage root.
+It runs as a normal process. Gateways only read `/commits`, `/commits/:id`, `/snapshot` and `/patch` from it, and they check every commit they load against its storage root.
 
 ## Open
 

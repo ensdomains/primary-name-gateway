@@ -40,7 +40,7 @@ Nothing it reads can reorg: finalizations are read up to L1's `finalized` block,
 `LineaVerifier`:
 
 1. `stateRootHashes(l2Block) != 0`: the block was finalized.
-2. Freshness: `l2Block + maxBlockLag >= currentL2BlockNumber()`. Finalizations come every few hours (~1,000 L2 blocks), so `maxBlockLag` must exceed that plus the gateway's margin; beyond that it bounds how stale a name can be.
+2. Freshness: `l2Block + maxBlockLag >= currentL2BlockNumber()`. Finalizations come every few hours (~1,000 L2 blocks), so `maxBlockLag` must exceed that plus the gateway's serve delay (`GATEWAY_SERVE_DELAY_SEC`, default 0); beyond that it bounds how stale a name can be.
 3. Account proof: state root → registrar leaf; the account hashes to the leaf's `hval`; return its `storageRoot`.
 4. Storage: for each slot, either its leaf (the value hashes to `hval`) or two adjacent leaves around its `hkey` (`left.next == right`, `right.prev == left`, `left.hkey < hkey < right.hkey`).
 
@@ -67,7 +67,7 @@ What the indexer serves and the gateway stores ([linea.ts](../packages/shared/sr
 
 The gateway builds multiproofs by copying `h` and `l` rows; it hashes only slot keys and the root row. An exclusion proof needs the greatest key below the missing one, which is `NodeStore.floor("k", ...)`.
 
-The trie is mutable, so the indexer logs its rows per L2 block in a `RowLog` and keeps only the versions its retained commits need; a patch is the rows that changed between two versions.
+The trie is mutable, so the indexer logs its rows per L2 block in a `RowLog` ([tries.ts](../packages/registrar-indexer/src/tries.ts)) and keeps only the versions its retained commits need; a patch is the rows that changed between two versions.
 
 ## Contracts and licensing
 

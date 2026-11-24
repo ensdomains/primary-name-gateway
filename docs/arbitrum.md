@@ -10,7 +10,7 @@ Arbitrum One settles to L1 through **BoLD** assertions: a validator posts an ass
 | commit | an assertion whose machine finished; id = L1 block × 10000 + log index of its `AssertionCreated` |
 | valid when | confirmed: `confirmPeriodBlocks` = 45,818 L1 blocks (about 6.4 days) after creation; or with `minAgeBlocks`, unchallenged and that old |
 | verifier | `ArbitrumVerifier(rollup, minAgeBlocks, maxAgeBlocks)` |
-| scripts | `bun run indexer:arbitrum` / `gateway:arbitrum` (ports 8104 / 8204), `bun run prove <address> arbitrum` |
+| scripts | `bun run indexer:arbitrum` / `gateway:arbitrum` (ports 8104 / 8204), `bun run prove <address> arbitrum`; `bun scripts/arbitrum-fixture.ts` refreshes the forge fixture |
 
 ## Assertions
 
@@ -21,7 +21,7 @@ Each assertion is a node in a tree rooted at the genesis assertion ([BoLD](https
 - `getAssertion(hash)` returns `{firstChildBlock, secondChildBlock, createdAtBlock, isFirstChild, status, configHash}`. `status` is `Pending` (1) or `Confirmed` (2). A nonzero `secondChildBlock` means a rival child exists: a challenge.
 - `latestConfirmed()` is the newest confirmed assertion.
 
-Measured on mainnet (2026-11-23): an assertion about every 300 L1 blocks (an hour), the newest confirmed one created 46,114 L1 blocks (6.4 days) ago, and every check below holds on real data (`test/fixtures/arbitrum.json`, from [arbitrum-fixture.ts](../scripts/arbitrum-fixture.ts)):
+Measured on mainnet (2026-11-23): an assertion about every 300 L1 blocks (an hour), the newest confirmed one created 46,114 L1 blocks (6.4 days) ago, and every check below holds on real data (`packages/contracts/test/fixtures/arbitrum.json`, from [arbitrum-fixture.ts](../scripts/arbitrum-fixture.ts)):
 
 - the assertion hash recomputes from the event;
 - our header encoder (`encodeBlockHeader`) reproduces the L2 block hash: Arbitrum's extra RPC fields (`l1BlockNumber`, `sendCount`, `sendRoot`) aren't part of the header;
@@ -51,12 +51,13 @@ The verifier walks it: each step recomputes the child's hash and reads its node.
 
 [arbitrum.ts](../packages/registrar-indexer/src/arbitrum.ts) (`INDEXER_CHAIN=arbitrum`):
 
-- **Discovery:** `AssertionCreated` events on finalized L1, from a cursor (`arbitrumNextL1Block`), 10,000 L1 blocks per `eth_getLogs` (Infura's limit). On first start, and after downtime, it starts `INDEXER_LOOKBACK_L1_BLOCKS` back (default: the confirm period and a day, so there are confirmed assertions). Each finished assertion becomes a commit: its L2 block (the header by hash), the registrar's account proof there (archive: Alchemy), and the one-link proof. Assertions are taken in order; one that fails is retried next tick.
-- **Status**, each tick, from one batched `getAssertion` per held assertion on finalized L1:
+- **Discovery:** `AssertionCreated` events on finalized L1, from a cursor (`arbitrumNextL1Block`), 10,000 L1 blocks per `eth_getLogs` (Infura's limit). On first start, and after downtime, it starts `INDEXER_LOOKBACK_L1_BLOCKS` back (default: the confirm period and a day, so there are confirmed assertions). Each finished assertion becomes a commit: its L2 block (the header by hash), the registrar's account proof there (archive: Alchemy), and the one-link proof. Assertions are taken in order; one that fails is retried next tick, and skipped after `INDEXER_MAX_ATTEMPTS` (5). An assertion whose machine didn't finish is skipped.
+- **Status**, each tick, from `getAssertion` on finalized L1 (batches of 25), only for assertions whose status can change: confirmed-only, the pending ones a confirm period old; with `INDEXER_MIN_AGE_BLOCKS`, the pending ones that old and the valid unconfirmed ones, with every assertion back to a confirmed one:
   - confirmed: valid;
   - with `INDEXER_MIN_AGE_BLOCKS` (must equal the verifier's `minAgeBlocks`): a pending assertion that old, with an unchallenged chain back to a confirmed one, is valid, and its proof is rebuilt with that chain;
   - a valid but unconfirmed assertion whose chain gets a rival becomes invalid.
-- **Events:** the registrar's history is 177M L2 blocks. Arbitrum's public RPC answers `eth_getLogs` over 10,000,000 blocks (Infura 10,000, drpc's free plan 100), so `ARBITRUM.wideLogsRPC` is preferred for logs: the whole replay is about 18 calls.
+- **`minAgeBlocks` changes:** the indexer records it (`/status` shows `minAgeBlocks`); on a change every valid assertion goes back to pending and is checked again under the new rule, and the indexer's tick rebuilds the tries of the newest valid commits (`keepTries`).
+- **Events:** the registrar's history is 177M L2 blocks. Arbitrum's public RPC answers `eth_getLogs` over 10,000,000 blocks (Infura 10,000, drpc's free plan 100), so `ARBITRUM.wideLogsRPC` is preferred for logs: the whole replay is about 30 calls (the range starts at 5,000 blocks and doubles up to 10M).
 
 ## Offline end-to-end
 

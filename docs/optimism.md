@@ -1,6 +1,6 @@
-# OP Mainnet
+# Optimism
 
-| chain | OP Mainnet |
+| chain | Optimism |
 |---|---|
 | chain id / coin type | 10 / `0x8000000a` |
 | registrar | `0x0000000000D8e504002cC26E3Ec46D81971C1664` (plain layout, see [registrar.md](registrar.md)) |
@@ -32,9 +32,9 @@ A game takes about 7 days to become a valid claim. `OPFaultVerifier` can optiona
 2. not lost (`status != CHALLENGER_WINS`), and
 3. either resolved for the defender (waiting for the airgap), or at least `minAgeSec` old and **unchallenged**: `claimDataLen() == 1` for OP's fault dispute games, `counteredByIntermediateRootIndexPlusOne() == 0` for Base's `AggregateVerifier` (type 621). Unknown game types are never accepted early.
 
-**Trust:** this assumes honest challengers respond within `minAgeSec`. A fraudulent proposal that nobody challenges in time is accepted until it is challenged, loses, or is blacklisted; from then on the verifier rejects it, the indexer marks it `invalid`, and gateways rewind to their newest acceptable commit. For calibration, 2 of OP Mainnet's last 200 games (as of 2026-11-22) had been challenged.
+**Trust:** this assumes honest challengers respond within `minAgeSec`. A fraudulent proposal that nobody challenges in time is accepted until it is challenged, loses, or is blacklisted; from then on the verifier rejects it, the indexer marks it `invalid`, and gateways rewind to their newest acceptable commit. For calibration, 2 of Optimism's last 200 games (as of 2026-11-22) had been challenged.
 
-The indexer has to apply the same rule as the deployed verifier, or a gateway serves commits the verifier rejects: set `INDEXER_MIN_AGE_SEC` to the verifier's `minAgeSec`. It then polls pending games from that age on, and keeps re-checking the valid games a gateway may hold (the newest `retainValid`). `/status` reports it as `minAgeSec`, and `test:mainnet` deploys its verifier with it; `bun run prove` takes it as `--min-age`, since it only talks to the gateway.
+The indexer has to apply the same rule as the deployed verifier, or a gateway serves commits the verifier rejects: set `INDEXER_MIN_AGE_SEC` to the verifier's `minAgeSec`. It then polls pending games from that age on, and keeps re-checking the valid games a gateway may hold (the newest `retainValid`, 24 by default). `/status` reports it as `minAgeSec`, and `test:mainnet` deploys its verifier with it; `bun run prove` takes it as `--min-age` (default `INDEXER_MIN_AGE_SEC`), since it never contacts the indexer.
 
 The indexer records its `minAgeSec`. Started with a different one on the same database, it sets every valid game back to pending and checks it again under the new rule. Otherwise, going back to finalized games only would mark the games accepted early invalid for good. Tries of the newest valid games that were dropped meanwhile are rebuilt from the newest trie: the newest finalized game is days older than the early ones that were kept. `offline-minage.test.ts` switches both ways on one database.
 
@@ -54,8 +54,8 @@ Waiting for finality costs nothing here: a game takes about 7 days to become val
 
 `OPFaultVerifier.verifyStorageRoot(commitProof, registrar, accountProof)`:
 
-1. `AnchorStateRegistry.isGameClaimValid(game)`: registered, respected type, resolved for the proposer, past the airgap, not blacklisted or retired.
-2. Freshness: `game.l2SequenceNumber() + maxSequenceLag >= anchor.l2SequenceNumber`. The unit is seconds for super root games (the sequence number is a timestamp) and blocks for output root games. The anchor only moves when it is updated, so it can trail the newest valid game. `maxSequenceLag` must exceed the time between games plus the gateway's margin; beyond that it bounds how stale a name can be.
+1. `isGameAcceptable(game)`: `AnchorStateRegistry.isGameClaimValid(game)` (registered, respected type, resolved for the proposer, past the airgap, not blacklisted or retired), or with `minAgeSec > 0` the early rule ([above](#early-acceptance-minagesec)).
+2. Freshness: `game.l2SequenceNumber() + maxSequenceLag >= anchor.l2SequenceNumber`. The unit is seconds for super root games (the sequence number is a timestamp) and blocks for output root games. The anchor only moves when it is updated, so it can trail the newest valid game. `maxSequenceLag` must exceed the time between games plus the gateway's serve delay (`GATEWAY_SERVE_DELAY_SEC`, default 0); beyond that it bounds how stale a name can be.
 3. `rootClaim == keccak(superRoot)` and `superRoot` contains `(l2ChainId, outputRoot)`, or `rootClaim == outputRoot`.
 4. `outputRoot == keccak(abi.encode(outputRootProof))`.
 5. Account proof: `stateRoot` → registrar `storageRoot` (Merkle-Patricia).
@@ -95,7 +95,7 @@ The indexer keeps the trie in its SQLite database as versioned rows ([sql-row-lo
 - Events are applied to an `EthRowStorage`, which reads only the nodes along the touched paths. The changed rows are written every `INDEXER_FLUSH_CHANGES` changes (default 50,000) and at each commit. Rows sit at hashed paths, so each write touches pages all over the table; larger batches share pages and cost memory.
 - `trie_head` holds the newest node of every path. `trie_history` holds older nodes for as long as a retained commit (pending, or one of the newest valid) still reads them.
 - A snapshot is the chunks at a commit's version. A patch is the chunks holding the nodes written between two versions.
-- `base` and `base-inbox` share the database ([rpc.md](rpc.md), `INDEXER_DB`). Each keeps its own commits and resume point; only the active source's commits are read. Coming back after the other source ran, the newest valid commits' tries are rebuilt from the newest trie, and games older than the lookback are skipped.
+- An L2's sources share the database (`base` / `base-inbox`, `optimism` / `optimism-inbox`; [rpc.md](rpc.md), `INDEXER_DB`). Each keeps its own commits and resume point; only the active source's commits are read. Coming back after the other source ran, the newest valid commits' tries are rebuilt from the newest trie, and games older than the lookback are skipped.
 - Each tick first catches up on events to `INDEXER_CATCHUP_BLOCKS` (10,000) below the L2's finalized head, so a new indexer starts replaying at once instead of at its first commit. A long sync logs where it is every 10 seconds (block, percent, changes, rate, time left, and how long a slow `eth_getLogs` has been waiting), and `/status` has `syncingTo` while it runs. Stopping it (Ctrl-C) is safe at any point: every write is a transaction.
 - Memory doesn't grow with the registrar, and a restart resumes from the stored trie instead of replaying every event. On first start with an existing change log, the indexer builds the rows from it.
 - A game for an older L2 block than the indexer has synced (out of order) is rebuilt from the newest trie. Every key written since is set back to its value then, from the change log; that gives the storage hash to check. The rows that differ are written into history at the game's version.
