@@ -1,5 +1,5 @@
 // runtime-agnostic: no bun / node imports (usable from a Cloudflare Durable Object)
-import { createFetchHandler, EZCCIP } from "@adraffy/ezccip";
+import { CCIPReadError, createFetchHandler, EZCCIP } from "@adraffy/ezccip";
 import type { Commit } from "@primary-name-gateway/shared";
 import type { RegistrarGateway } from "./gateway.js";
 import { createRPCHandler } from "./rpc.js";
@@ -19,6 +19,8 @@ export { MemoryNodeStore, type NodeStore, type SqlAdapter, SqlNodeStore } from "
 export function createEZCCIP(gateway: RegistrarGateway): EZCCIP {
 	const ezccip = new EZCCIP({ protocol: "raw" });
 	ezccip.addFunctionHandler("function proveName(address addr) returns (bytes)", async ([addr], _ctx, history) => {
+		// expected while the first snapshot (or a new one) loads: a 503 with this message, logged on one line
+		if (!gateway.commits.length) throw new CCIPReadError("no commit yet: the gateway is syncing", { status: 503 });
 		const { proof, commit } = gateway.proveName(addr);
 		history.show = [addr, `${commit.kind}=${commit.id}`, `l2=${commit.l2Block}`];
 		return [proof];

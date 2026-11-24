@@ -356,6 +356,20 @@ describe("offline e2e", () => {
 		expect(status.stats.rows).toBeGreaterThan(0);
 	}, 30_000);
 
+	test("a gateway with no commit yet answers CCIP-Read with a 503 and says why", async () => {
+		const empty = createGatewayHandler(new RegistrarGateway(new MemoryNodeStore(), gatewayConfig));
+		const data = encodeFunctionData({
+			abi: parseAbi(["function proveName(address) returns (bytes)"]),
+			functionName: "proveName",
+			args: [A.short],
+		});
+		const res = await empty(
+			new Request("http://gateway/", { method: "POST", body: JSON.stringify({ sender: REGISTRAR, data }) }),
+		);
+		expect(res.status).toBe(503);
+		expect(await res.json()).toEqual({ message: "no commit yet: the gateway is syncing" });
+	});
+
 	test("the deployment comes from the indexer; a store of another deployment starts over", async () => {
 		const logs: string[] = [];
 		const other = new RegistrarGateway(new MemoryNodeStore(), {
