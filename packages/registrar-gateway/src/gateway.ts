@@ -132,8 +132,10 @@ export class RegistrarGateway {
 		for (const target of targets) {
 			if (held.some((c) => c.id === target.id)) continue;
 			let head = this.head;
-			if (head && !valid.has(head.id) && (await this.isInvalid(head))) {
-				// the store's newest commit stopped being valid: rewind to the newest held commit
+			// The indexer lists its newest valid commits: one older than the store's newest, without that one,
+			// means the newest isn't valid there (invalid, pending again under stricter settings, or unknown
+			// to a rebuilt indexer). Rewind to the newest held commit, or start over from `target`.
+			if (head && !valid.has(head.id) && target.l2Block < head.l2Block) {
 				head = held.at(-1);
 				if (head) {
 					this.store.truncate(head.l2Block);
@@ -249,13 +251,6 @@ export class RegistrarGateway {
 		this.setHeld([]);
 		this.setHead(undefined);
 		this.store.setMeta(META_BOOTSTRAP, undefined);
-	}
-
-	private async isInvalid(commit: Commit): Promise<boolean> {
-		const res = await this.fetchRaw(`/commits/${commit.id}`);
-		if (res.status === 404) return true;
-		if (!res.ok) throw new Error(`commit ${commit.id}: ${res.status}`);
-		return ((await res.json()) as Commit).status === "invalid";
 	}
 
 	// rows in another layout would load fine and then fail every proof
