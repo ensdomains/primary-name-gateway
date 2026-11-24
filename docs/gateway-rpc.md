@@ -14,11 +14,11 @@ The gateway's HTTP side ([index.ts](../packages/registrar-gateway/src/index.ts),
   "lastSync": { "at": 1795493534, "ms": 6 },
   "startedAt": 1795493534,
   "stats": { "snapshots": 0, "patches": 0, "rows": 0 },
-  "keep": 2, "marginSec": 120
+  "keepCommits": 2, "serveDelaySec": 0
 }
 ```
 
-- `served`: the commit CCIP-Read proofs come from (the newest held one valid for at least `marginSec`); `held`: the commits in the store.
+- `served`: the commit CCIP-Read proofs come from (the newest held one, once valid for `serveDelaySec`); `held`: the commits in the store.
 - `lastSync`: when the last sync with the indexer ended and how long it took, with `error` if it failed: a gateway that can't reach its indexer keeps serving its held commits, and this is where that shows.
 - `stats`: snapshots, patches and rows loaded since `startedAt`.
 
@@ -35,7 +35,7 @@ The gateway answers JSON-RPC at `/rpc` for the registrar's storage, at the block
 
 Rules:
 
-- **Blocks:** only the L2 blocks of the held commits (`GATEWAY_KEEP`, 2 by default). `latest`, `safe`, `finalized` and `pending` mean the commit the gateway serves to CCIP-Read (the newest valid for at least `GATEWAY_MARGIN_SEC`). Any other block is an error that lists the held ones: answering for a nearby block would mislead. Blocks by hash aren't served.
+- **Blocks:** only the L2 blocks of the held commits (`GATEWAY_KEEP_COMMITS`, 2 by default). `latest`, `safe`, `finalized` and `pending` mean the commit the gateway serves to CCIP-Read (the newest valid, after `GATEWAY_SERVE_DELAY_SEC`). Any other block is an error that lists the held ones: answering for a nearby block would mislead. Blocks by hash aren't served.
 - **Accounts:** only the registrar. Another address is an error, never an empty proof (which would claim the account doesn't exist).
 - JSON-RPC 2.0, batches included, with CORS.
 - Like proofs for CCIP-Read, answers only copy rows: the gateway still hashes nothing but slot keys.

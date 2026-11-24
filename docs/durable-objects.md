@@ -75,8 +75,8 @@ export class Gateway extends DurableObject<Env> {
 		});
 		this.gateway = new RegistrarGateway(store, {
 			indexerURL: env.INDEXER_URL,
-			keep: 2,
-			marginSec: 120,
+			keepCommits: 2,
+			serveDelaySec: 0,
 			layout: DEPLOYMENTS[env.CHAIN].layout,
 		});
 		const d = DEPLOYMENTS[env.CHAIN];

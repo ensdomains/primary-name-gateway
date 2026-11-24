@@ -23,8 +23,11 @@ import type { NodeStore } from "./store.js";
 export type GatewayConfig = {
 	indexerURL: string;
 	layout?: RegistrarLayout; // registrar storage layout (default: names at slot 0), see docs/registrar.md
-	keep: number; // number of valid commits to hold (latest + fallbacks)
-	marginSec: number; // only serve a commit once it has been valid this long (L1 nodes lag)
+	keepCommits: number; // valid commits to hold (the newest, and fallbacks while serveDelaySec runs)
+	// Serve a commit only once it has been valid this long (default 0). The indexer judges validity on
+	// finalized L1, and validity only grows with L1, so a client reading at latest is already past it; a
+	// delay only helps clients that read at finalized on a node that saw finality a little later.
+	serveDelaySec?: number;
 	log?: (...args: unknown[]) => void;
 	fetch?: typeof fetch;
 };
@@ -94,7 +97,7 @@ export class RegistrarGateway {
 	}
 
 	private async syncOnce() {
-		const { keep } = this.config;
+		const { keepCommits: keep } = this.config;
 		if (this.store.getMeta(META_FORMAT) !== STORE_FORMAT) {
 			if (this.store.getMeta(META_HEAD)) this.log("the store's rows are in an older layout: starting over");
 			this.store.clear();
@@ -209,12 +212,12 @@ export class RegistrarGateway {
 		return root === commit.storageHash;
 	}
 
-	// newest commit that has been valid for at least marginSec, else the oldest held
+	// newest commit that has been valid for at least serveDelaySec, else the oldest held
 	pick(now = Math.floor(Date.now() / 1000)): Commit {
 		const held = this.commits;
 		if (!held.length) throw new Error("no valid commits yet");
 		for (let i = held.length - 1; i >= 0; i--) {
-			if ((held[i].validAt ?? 0) + this.config.marginSec <= now) return held[i];
+			if ((held[i].validAt ?? 0) + (this.config.serveDelaySec ?? 0) <= now) return held[i];
 		}
 		return held[0];
 	}

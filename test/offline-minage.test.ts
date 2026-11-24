@@ -92,8 +92,8 @@ describe.each([
 		gatewayDB = new Database(":memory:");
 		gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(gatewayDB)), {
 			indexerURL: indexerServer.url.origin,
-			keep: 2,
-			marginSec: 0,
+			keepCommits: 2,
+			serveDelaySec: 0,
 		});
 		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });
 		const resolver = async (minAge: number) => {

@@ -139,7 +139,7 @@ describe("offline e2e", () => {
 		indexerServer = serveIndexer(indexer, db, 0);
 
 		gatewayDB = new Database(":memory:");
-		gatewayConfig = { indexerURL: indexerServer.url.origin, keep: 2, marginSec: 0 };
+		gatewayConfig = { indexerURL: indexerServer.url.origin, keepCommits: 2, serveDelaySec: 0 };
 		gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(gatewayDB)), gatewayConfig);
 		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });
 
@@ -345,7 +345,13 @@ describe("offline e2e", () => {
 		const status = (await (await handler(new Request("http://gateway/status"))).json()) as ReturnType<
 			typeof gatewayStatus
 		>;
-		expect(status).toMatchObject({ kind: "op", l1ChainId: 31337, l2ChainId: CHAIN_ID, registrar: REGISTRAR, keep: 2 });
+		expect(status).toMatchObject({
+			kind: "op",
+			l1ChainId: 31337,
+			l2ChainId: CHAIN_ID,
+			registrar: REGISTRAR,
+			keepCommits: 2,
+		});
 		expect(status.served?.id).toBe(commit.id);
 		expect(status.held.map((c: { id: number }) => c.id)).toEqual(gateway.commits.map((c) => c.id));
 		expect(status.lastSync?.error).toBeUndefined();

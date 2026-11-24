@@ -36,8 +36,8 @@ export function gatewayStatus(gateway: RegistrarGateway, info: GatewayInfo, star
 		lastSync: gateway.lastSync,
 		startedAt,
 		stats: gateway.stats,
-		keep: gateway.config.keep,
-		marginSec: gateway.config.marginSec,
+		keepCommits: gateway.config.keepCommits,
+		serveDelaySec: gateway.config.serveDelaySec ?? 0,
 	};
 }
 

@@ -23,8 +23,8 @@ db.run("PRAGMA journal_mode = WAL");
 const gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(db)), {
 	indexerURL: env.INDEXER_URL ?? "http://localhost:8100",
 	layout: deployment.layout,
-	keep: Number(env.GATEWAY_KEEP ?? 2),
-	marginSec: Number(env.GATEWAY_MARGIN_SEC ?? 120),
+	keepCommits: Number(env.GATEWAY_KEEP_COMMITS ?? 2),
+	serveDelaySec: Number(env.GATEWAY_SERVE_DELAY_SEC ?? 0),
 	log,
 });
 log(`${chain}: resuming with ${gateway.commits.length} held commits from ${dbPath}`);
