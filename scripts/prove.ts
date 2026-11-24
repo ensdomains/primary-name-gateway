@@ -100,7 +100,8 @@ function parseArgs() {
 	gateway ??= port ? `http://localhost:${port}` : usage(`no default gateway for ${chain}: pass --gateway`);
 	minAge ??= d.kind === "arbitrum" ? process.env.INDEXER_MIN_AGE_L1_BLOCKS : process.env.INDEXER_MIN_AGE_SEC;
 	const minAgeSec = Number(minAge ?? 0);
-	if (!Number.isInteger(minAgeSec) || minAgeSec < 0) usage(`not a number of seconds: ${minAge}`);
+	if (!Number.isInteger(minAgeSec) || minAgeSec < 0)
+		usage(`--min-age: not a whole number of ${d.kind === "arbitrum" ? "L1 blocks" : "seconds"}: ${minAge}`);
 	return { addr: getAddress(addr), chain, d, gateway, minAgeSec, publicRPC };
 }
 

@@ -9,7 +9,7 @@
 | commit id | game index in the `DisputeGameFactory` |
 | valid when | `AnchorStateRegistry.isGameClaimValid(game)`, about 7 days after creation |
 | state trie | Merkle-Patricia (keccak), `eth_getProof` |
-| verifier | [`OPFaultVerifier`](../packages/contracts/src/op/OPFaultVerifier.sol), one per OP Stack chain |
+| verifier | [`OPFaultVerifier`](../packages/contracts/src/op/OPFaultVerifier.sol)`(AnchorStateRegistry, l2ChainId, maxL2SequenceLag, minAgeSec)`, one per OP Stack chain |
 | `verifyName` gas | ~0.2M |
 
 A faster alternative that trusts the batcher instead of waiting for games is researched in [op-batch-inbox.md](op-batch-inbox.md).
@@ -22,7 +22,7 @@ The indexer's `OPCommitSource` ([op.ts](../packages/registrar-indexer/src/op.ts)
 2. Fetches the **block witness** while the L2 still has that state: state root, block hash, the `L2ToL1MessagePasser` storage root, and the registrar's account proof (`eth_getProof`).
 3. Checks `outputRoot == keccak(abi.encode(0, stateRoot, messagePasserStorageRoot, blockHash))`. A mismatch is a lying proposal: it's stored as `invalid` and never served.
 4. Replays the registrar's events up to that block and checks the storage root against the account proof.
-5. Stores the commit as `pending`. Once it's old enough (`INDEXER_MIN_FINAL_AGE_SEC`), it polls `isGameClaimValid` and marks it `valid`. Recent valid games are re-checked, and a game that is blacklisted, retired, or lost (`CHALLENGER_WINS`) becomes `invalid`. The gateway then rewinds past it.
+5. Stores the commit as `pending`. Once it's old enough (`INDEXER_MIN_FINAL_AGE_SEC`, or `INDEXER_MIN_AGE_SEC` with early acceptance), it checks that the game is acceptable on both finalized and latest L1 and marks it `valid`. Recent valid games are re-checked, and a game that is blacklisted, retired, or lost (`CHALLENGER_WINS`) becomes `invalid`. The gateway then rewinds past it.
 
 ## Early acceptance (`minAgeSec`)
 
@@ -30,7 +30,7 @@ A game takes about 7 days to become a valid claim. `OPFaultVerifier` can optiona
 
 1. proper and respected according to the `AnchorStateRegistry` (registered, not blacklisted, not retired, not paused, of the respected type when created),
 2. not lost (`status != CHALLENGER_WINS`), and
-3. either resolved for the defender (waiting for the airgap), or at least `minAgeSec` old and **unchallenged**: `claimDataLen() == 1` for OP's fault dispute games, `counteredByIntermediateRootIndexPlusOne() == 0` for Base's `AggregateVerifier` (type 621). Unknown game types are never accepted early.
+3. either resolved for the defender (waiting for the airgap), or at least `minAgeSec` old and **unchallenged**: `claimDataLen() == 1` for OP's fault dispute games, `counteredByIntermediateRootIndexPlusOne() == 0` for Base's `AggregateVerifier` (type 621). A game type with neither getter is accepted early only once it has resolved for the defender.
 
 **Trust:** this assumes honest challengers respond within `minAgeSec`. A fraudulent proposal that nobody challenges in time is accepted until it is challenged, loses, or is blacklisted; from then on the verifier rejects it, the indexer marks it `invalid`, and gateways rewind to their newest acceptable commit. For calibration, 2 of Optimism's last 200 games (as of 2026-11-22) had been challenged.
 
@@ -103,8 +103,8 @@ The indexer keeps the trie in its SQLite database as versioned rows ([sql-row-lo
 ## Operating
 
 - **Archive state.** A game becomes valid about 7 days after creation (3.5d clock + 3.5d airgap), which is ~300k L2 blocks, past what pruned nodes keep. In steady state the indexer fetches the witness when a game is created, so recent state is enough. Bootstrapping with a lookback (`INDEXER_LOOKBACK_SEC`, default 8 days) needs an archive provider for proofs: proofs prefer Alchemy and logs prefer drpc.
-- `INDEXER_LOOKBACK_SEC` (default 8 days), `INDEXER_MIN_FINAL_AGE_SEC` (default 6 days).
-- The gateway serves the newest valid commit. Validity is judged on finalized L1 and only grows with it, so a client reading at latest accepts it; `GATEWAY_SERVE_DELAY_SEC` (default 0) can hold it back for clients reading at finalized.
+- `INDEXER_LOOKBACK_SEC` defaults to game finality + 1 day (Optimism: 8 days) and `INDEXER_MIN_FINAL_AGE_SEC` to finality − 1 day (6 days).
+- The gateway serves the newest valid commit. A game becomes valid on finalized L1, so a client reading at latest accepts it, and stops being valid on latest L1 (as the verifier does); `GATEWAY_SERVE_DELAY_SEC` (default 0) can hold it back for clients reading at finalized.
 
 ```sh
 bun run indexer:optimism   # :8100

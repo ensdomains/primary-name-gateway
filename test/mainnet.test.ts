@@ -1,6 +1,6 @@
 // End-to-end: anvil fork of L1 mainnet + live registrar-indexer + in-process registrar-gateway.
 //
-// 1. `bun run indexer` (INDEXER_CHAIN=optimism|base|linea|base-inbox|optimism-inbox) with at least one
+// 1. `bun run indexer` (INDEXER_CHAIN=optimism|base|linea|arbitrum|base-inbox|optimism-inbox) with at least one
 //    valid commit (OP: ~7 days of lookback and an archive proof RPC, Linea: the next finalization,
 //    inbox: the next channel start)
 // 2. `bun run test:mainnet`
@@ -110,7 +110,7 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 			const receipt = await l1.waitForTransactionReceipt({ hash });
 			return receipt.contractAddress!;
 		};
-		const { contract, args } = verifierContract(d, status?.minAgeSec ?? 0);
+		const { contract, args } = verifierContract(d, status?.minAgeSec ?? status?.minAgeL1Blocks ?? 0);
 		const verifier = await deploy(artifact(`${contract}.sol`, contract), args);
 		resolver = await deploy(artifact("L2ReverseResolver.sol", "L2ReverseResolver"), [
 			verifier,

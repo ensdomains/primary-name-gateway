@@ -15,10 +15,11 @@ import { duration, n, Progress } from "./progress.js";
 import { createIndexerTrie, type IndexerTrie, type RowPage } from "./tries.js";
 
 // Finds commits on L1 and captures what the verifier will need from the L2 at that moment.
-// OPCommitSource: dispute games, LineaCommitSource: finalizations.
+// OPCommitSource: dispute games, LineaCommitSource: finalizations, InboxCommitSource: batcher blobs,
+// ArbitrumCommitSource: BoLD assertions.
 export interface CommitSource {
 	tick(indexer: RegistrarIndexer): Promise<void>;
-	status?(): Partial<IndexerStatus>; // settings a verifier must match (OP: minAgeSec)
+	status?(): Partial<IndexerStatus>; // settings a verifier must match (OP: minAgeSec, Arbitrum: minAgeL1Blocks)
 }
 
 // the commit's L2 block isn't final yet: try again later (not a failure)

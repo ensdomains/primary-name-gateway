@@ -159,15 +159,11 @@ if (import.meta.main) {
 	log(`${chain}: ${deployment.kind} commits, L1 ${deployment.l1.id}, L2 ${deployment.l2.id}, ${dbPath}`);
 	const providers: [string, string][] = [
 		["L1", rpcURL(deployment.l1)],
-		["L2", rpcURL(deployment.l2)],
 		["L2 logs", rpcURL(deployment.l2, "logs")],
 		["L2 proofs", rpcURL(deployment.l2, "proof")],
 	];
 	if (deployment.kind === "inbox") providers.push(["L1 beacon", beaconURL(deployment.l1)]);
-	for (const [what, url] of providers) {
-		if (what === "L2 logs" && url === providers[1][1]) continue; // the same as L2
-		log(`  ${what.padEnd(9)} ${redactURL(url)}`);
-	}
+	for (const [what, url] of providers) log(`  ${what.padEnd(9)} ${redactURL(url)}`);
 	const config: IndexerConfig = {
 		chain,
 		deployment,

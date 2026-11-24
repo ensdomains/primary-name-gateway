@@ -10,7 +10,7 @@ Base is an OP Stack chain, so it uses the OP path ([optimism.md](optimism.md)) e
 | commit | an **output root** game of type **621** |
 | commit id | game index |
 | valid when | `isGameClaimValid(game)`, about 5 days after creation |
-| verifier | [`OPFaultVerifier`](../packages/contracts/src/op/OPFaultVerifier.sol)`(AnchorStateRegistry, 8453, maxL2SequenceLag)` |
+| verifier | [`OPFaultVerifier`](../packages/contracts/src/op/OPFaultVerifier.sol)`(AnchorStateRegistry, 8453, maxL2SequenceLag, minAgeSec)` |
 
 ## Game type 621: `AggregateVerifier`
 
