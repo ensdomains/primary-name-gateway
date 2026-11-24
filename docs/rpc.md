@@ -9,7 +9,7 @@ The limits below are what we observed with our own keys on 2026-11-22 (drpc paid
 | purpose | calls | used for |
 |---|---|---|
 | `logs` | `eth_getLogs` over wide block ranges, and the L2's finalized head | replaying the registrar's events from its creation block ([registrar.md](registrar.md)) |
-| `proof` | `eth_getProof` (OP Stack), `linea_getProof` (Linea) at a commit's L2 block, and L2 headers | the registrar's account proof, captured when a commit is seen. On Optimism / Base the first start looks back 6–8 days, which needs **archive** state. |
+| `proof` | `eth_getProof` (OP Stack, Arbitrum), `linea_getProof` (Linea) at a commit's L2 block, and L2 headers | the registrar's account proof (and on OP Stack the message passer's), captured when a commit is seen. On Optimism / Base the first start looks back 6–8 days, which needs **archive** state. |
 | `default` | L1: contract reads, `getLogs` for Linea finalizations and Arbitrum assertions, and for the batch inbox L1 blocks with their transactions (re-encoded to prove one, so any provider works; `eth_getRawTransactionByHash`, which Infura lacks, only as a fallback) | |
 
 The batch inbox indexer also reads blobs from L1's beacon API ([op-batch-inbox.md](op-batch-inbox.md)): `BEACON_URL_<id>` if set, otherwise the L1's public beacon (`beaconURL()` in [chains.ts](../packages/shared/src/chains.ts)).
@@ -35,7 +35,7 @@ For a chain with id `<id>` and a purpose, the first one that's set wins:
 
 `public` skips all of this: the chain's public RPC only (Base's included), so no key is spent and none can leak. Nothing in the indexer or gateway asks for it; it's for scripts and tools such as `bun run prove --public`.
 
-Chain ids: Ethereum `1`, Optimism `10`, Base `8453`, Linea `59144`, Arbitrum One `42161`. Logs show URLs through `redactURL()`, which hides the key for all three providers.
+Chain ids: Ethereum `1`, Optimism `10`, Base `8453`, Linea `59144`, Arbitrum One `42161`. Logs show URLs through `redactURL()`, which hides the key for all three providers; an `RPC_URL_<id>` with a key somewhere else (another path, a query string) is logged as is.
 
 ## Providers
 
@@ -72,6 +72,8 @@ Public RPCs:
 | `BLOCK_MISSING_IN_CHAIN - block is missing` | any (`linea_getProof`) | Shomei only keeps the last ~10–20 finalizations (about a day), and only at finalized blocks | the indexer fetches the proof when it sees the finalization, retries, then skips it ([linea.md](linea.md)) |
 | `App is inactive. Please create a new app or contact support` | Alchemy | the key's app is disabled in the dashboard | none: use another key |
 | 403 on archive calls | publicnode | public endpoint, no archive | set a key |
+| `Block at number "finalized" could not be found.` | Infura, public RPCs | a null reply for a block that exists | `retryNotFound` asks 4 times in all (0.5, 1, 1.5 s apart) before failing the tick |
+| empty `eth_getLogs` reply | Infura (L1) | a backend that answers with nothing | Arbitrum's assertion reads are retried 4 times; the L2 log reader retries rate limits on the same range |
 
 Two rules keep provider trouble from losing data:
 
@@ -100,7 +102,7 @@ Indexer (`bun run indexer:<chain>`, or `bun run indexer` with `INDEXER_CHAIN`):
 | `INDEXER_CATCHUP_BLOCKS` | `10000` | All but Linea: each tick first syncs events to this many blocks below the L2's finalized head, so a new or stopped indexer replays them at once. Commits for older blocks are rebuilt from the newest trie. |
 | `INDEXER_MAX_ATTEMPTS` | `5` | failures before a commit is skipped (sync failures don't count) |
 | `INDEXER_LOOKBACK_SEC` | game finality + 1 day | Optimism / Base: how far back the first start looks |
-| `INDEXER_MIN_FINAL_AGE_SEC` | game finality − 1 day | Optimism / Base: start checking validity at this age |
+| `INDEXER_MIN_FINAL_AGE_SEC` | game finality − 1 day | Optimism / Base: start checking validity at this age (with `INDEXER_MIN_AGE_SEC`, at that age instead) |
 | `INDEXER_MIN_AGE_SEC` | `0` | Optimism / Base: accept unchallenged games this old; must equal the verifier's `minAgeSec` ([optimism.md](optimism.md#early-acceptance-minagesec)). Changing it re-checks the valid games. |
 | `INDEXER_LOOKBACK_L1_BLOCKS` | `3600` | Linea: L1 blocks to scan on first start. Arbitrum: the same, default the confirm period and a day (about 53,000) |
 | `INDEXER_MIN_AGE_L1_BLOCKS` | `0` | Arbitrum: accept unchallenged assertions this many L1 blocks old; must equal the verifier's `minAgeL1Blocks` ([arbitrum.md](arbitrum.md)). Changing it re-checks the valid assertions. |
@@ -111,7 +113,7 @@ Indexer (`bun run indexer:<chain>`, or `bun run indexer` with `INDEXER_CHAIN`):
 | `KZG_TRUSTED_SETUP` | `data/kzg/trusted_setup.txt` | inbox: downloaded there if missing |
 | `INDEXER_FLUSH_CHANGES` | `50000` | All but Linea: changes applied in memory before the trie rows are written ([optimism.md](optimism.md#trie-rows)) |
 | `INDEXER_CACHE_MB` | `64` | SQLite page cache |
-| `NO_COLOR` / `FORCE_COLOR` | | log colors (indexer and gateway): on a terminal by default |
+| `NO_COLOR` / `FORCE_COLOR` | | log colors (indexer, gateway and `bun run prove`): on a terminal by default |
 
 Gateway (`bun run gateway:<chain>`, or `bun run gateway`). It uses no RPC: everything comes from its indexer, the deployment included (its `/status`: the name, commit kind, chain ids, registrar and layout).
 
@@ -129,13 +131,14 @@ Gateway (`bun run gateway:<chain>`, or `bun run gateway`). It uses no RPC: every
 | variable | default | |
 |---|---|---|
 | `GATEWAY_URL` | the chain's gateway port on localhost | or `--gateway URL` |
-| `INDEXER_MIN_AGE_SEC` / `INDEXER_MIN_AGE_L1_BLOCKS` | `0` | the verifier's early acceptance (OP Stack seconds / Arbitrum L1 blocks), or `--min-age` |
+
+The verifier's early acceptance comes from the gateway's `/status` (`minAgeSec` / `minAgeL1Blocks`, from its indexer), or `--min-age`.
 
 It forks L1 from its `default` URL and reads the L2 with `default` and `proof` clients. With `--public` it forks L1's public RPC and doesn't read the L2, so no keys are needed.
 
 Fork test (`bun run test:fork`, [op-batch-inbox.md](op-batch-inbox.md)): needs an archive L1 RPC (`ALCHEMY_KEY`, or `PROOF_RPC_URL_1` / `RPC_URL_1`).
 
-Mainnet test (`bun run test:mainnet`; the verifier's `minAgeSec` comes from the indexer's `/status`):
+Mainnet test (`bun run test:mainnet`; the verifier's `minAgeSec` or `minAgeL1Blocks` comes from the indexer's `/status`):
 
 | variable | default | |
 |---|---|---|

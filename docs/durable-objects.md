@@ -30,8 +30,8 @@ One object per served chain, for example named `base`, holds that chain's gatewa
 |---|---|
 | `NodeStore` (versioned trie rows) | `SqlNodeStore` over `ctx.storage.sql` |
 | `sync()` (poll the indexer, apply patches) | the `alarm()` handler, rescheduled every poll interval |
-| CCIP-Read requests (`proveName`), JSON-RPC at `/rpc` ([gateway-rpc.md](gateway-rpc.md)), and `/status` | the object's `fetch()`, served by `createGatewayHandler(gateway)`, which takes the deployment from the indexer (CCIP-Read through [`@adraffy/ezccip`](https://github.com/adraffy/ezccip.js)'s `createFetchHandler`) |
-| gateway state (held commits, the store's head, a snapshot in progress) | the `gateway_meta` table in the same SQLite database |
+| CCIP-Read requests (`proveName`), JSON-RPC at `/rpc` ([gateway-rpc.md](gateway-rpc.md)), and `/status` | the object's `fetch()`, served by `createGatewayHandler(gateway)` (no deployment to pass: `sync()` takes it from the indexer's `/status`; CCIP-Read through [`@adraffy/ezccip`](https://github.com/adraffy/ezccip.js)'s `createFetchHandler`) |
+| gateway state (the deployment, held commits, the store's head, a snapshot in progress) | the `gateway_meta` table in the same SQLite database |
 | the indexer | a normal server; the object reaches it over HTTP (`indexerURL`) |
 
 The design already makes the gateway a good fit:
@@ -46,10 +46,10 @@ The design already makes the gateway a good fit:
   ```
 
   `put` runs in one transaction, so each patch or snapshot page is applied whole or not at all.
-- **No in-memory state.** The gateway keeps everything in its store, including held commits, the head, and a snapshot cursor. Eviction and hibernation cost nothing: a new instance reads the same SQLite database and carries on with patches.
+- **No in-memory state.** The gateway keeps everything in its store, including the deployment, held commits, the head, and a snapshot cursor (only `/status`'s `lastSync` and counters are per instance). Eviction and hibernation cost nothing: a new instance reads the same SQLite database and carries on with patches.
 - **Snapshots are resumable.** The cursor is saved after each page, so an alarm that's cut short resumes on the next run.
 - **Requests are cheap.** A proof reads 5 rows per slot (4 trunk nodes and the limb on its key path), and the gateway hashes nothing but slot keys and one root per loaded commit. That fits the single-threaded model easily.
-- **Steady-state syncs are cheap.** Apart from the first snapshot, a sync is one `/commits` request and, when a commit arrives, a patch of tens to hundreds of rows. `SqlNodeStore.prune` is incremental: `put` records the paths it writes in `trie_dirty`, and a prune only looks at those. Only the first prune after a snapshot is a full pass. Even with one row per node (Base's 5M), a prune took under a millisecond after a patch and nothing when there's nothing new, where a full pass on every sync took about 1.6 s.
+- **Steady-state syncs are cheap.** Apart from the first snapshot, a sync is two small requests (`/status` and `/commits`) and, when a commit arrives, a patch of tens to hundreds of rows. `SqlNodeStore.prune` is incremental: `put` records the paths it writes in `trie_dirty`, and a prune only looks at those. Only the first prune after a snapshot is a full pass. Even with one row per node (Base's 5M), a prune took under a millisecond after a patch and nothing when there's nothing new, where a full pass on every sync took about 1.6 s.
 - **`src/index.ts` is runtime-agnostic:** no bun or node imports. Bun-only code lives in `src/main.ts` and `src/sqlite.ts`.
 
 ## Sketch
@@ -126,7 +126,7 @@ The indexer doesn't fit a Durable Object, and doesn't need to:
 - It needs archive RPC.
 - For the batch inbox, it computes KZG proofs, at about 0.25 seconds each.
 
-It runs as a normal process. Gateways only read `/commits`, `/commits/:id`, `/snapshot` and `/patch` from it, and they check every commit they load against its storage root.
+It runs as a normal process. Gateways only read `/status` (the deployment), `/commits`, `/snapshot` and `/patch` from it, and they check every commit they load against its storage root.
 
 ## Open
 

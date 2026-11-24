@@ -9,7 +9,7 @@
 | commit id | the finalized L2 block (`endBlockNumber`) |
 | valid when | the L1 block is finalized (the state is ZK proven), every few hours |
 | state trie | Shomei sparse Merkle trie (Poseidon2 over KoalaBear), `linea_getProof` |
-| verifier | [`LineaVerifier`](../packages/contracts/src/linea/LineaVerifier.sol) + [`LineaTrie`](../packages/contracts/src/linea/LineaTrie.sol) |
+| verifier | [`LineaVerifier`](../packages/contracts/src/linea/LineaVerifier.sol)`(rollup, maxL2BlockLag)` + [`LineaTrie`](../packages/contracts/src/linea/LineaTrie.sol) |
 | `verifyName` gas | ~11M (short or unset), ~13M (84 bytes), ~16M (254 bytes) |
 
 ## The trie
@@ -40,7 +40,7 @@ Nothing it reads can reorg: finalizations are read up to L1's `finalized` block,
 `LineaVerifier`:
 
 1. `stateRootHashes(l2Block) != 0`: the block was finalized.
-2. Freshness: `l2Block + maxL2BlockLag >= currentL2BlockNumber()`. Finalizations come every few hours (~1,000 L2 blocks), so `maxL2BlockLag` must exceed that plus the gateway's serve delay (`GATEWAY_SERVE_DELAY_SEC`, default 0); beyond that it bounds how stale a name can be.
+2. Freshness: `l2Block + maxL2BlockLag >= currentL2BlockNumber()`. Finalizations come every few hours, so `maxL2BlockLag` must exceed that many L2 blocks plus the gateway's serve delay (`GATEWAY_SERVE_DELAY_SEC`, default 0); beyond that it bounds how stale a name can be.
 3. Account proof: state root → registrar leaf; the account hashes to the leaf's `hval`; return its `storageRoot`.
 4. Storage: for each slot, either its leaf (the value hashes to `hval`) or two adjacent leaves around its `hkey` (`left.next == right`, `right.prev == left`, `left.hkey < hkey < right.hkey`).
 

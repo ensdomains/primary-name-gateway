@@ -52,7 +52,7 @@ The verifier walks it: each step recomputes the child's hash and reads its node.
 [arbitrum.ts](../packages/registrar-indexer/src/arbitrum.ts) (`INDEXER_CHAIN=arbitrum`):
 
 - **Discovery:** `AssertionCreated` events on finalized L1, from a cursor (`arbitrumNextL1Block`), 10,000 L1 blocks per `eth_getLogs` (Infura's limit). On first start, and after downtime, it starts `INDEXER_LOOKBACK_L1_BLOCKS` back (default: the confirm period and a day, so there are confirmed assertions). Each finished assertion becomes a commit: its L2 block (the header by hash), the registrar's account proof there (archive: Alchemy), and the one-link proof. Assertions are taken in order; one that fails is retried next tick, and skipped after `INDEXER_MAX_ATTEMPTS` (5). An assertion whose machine didn't finish is skipped.
-- **Status**, each tick, from `getAssertion` on finalized L1 (batches of 25), only for assertions whose status can change: confirmed-only, the pending ones a confirm period old; with `INDEXER_MIN_AGE_L1_BLOCKS`, the pending ones that old and the valid unconfirmed ones, with every assertion back to a confirmed one:
+- **Status**, each tick, from `getAssertion` on finalized L1 (batches of 25), only for assertions whose status can change. Without `INDEXER_MIN_AGE_L1_BLOCKS`: the pending ones a confirm period old. With it: the pending ones that old and every valid one, plus every stored assertion and its parent, to build chains:
   - confirmed: valid;
   - with `INDEXER_MIN_AGE_L1_BLOCKS` (must equal the verifier's `minAgeL1Blocks`): a pending assertion that old, with an unchallenged chain back to a confirmed one, is valid, and its proof is rebuilt with that chain;
   - a valid but unconfirmed assertion becomes invalid when its proof's chain stops passing the verifier's walk (a rival on the way). That check reads **latest** L1, so a rival takes the commit out within a tick, not after L1 finality (about 13 minutes) during which every proof of it would revert.
@@ -65,7 +65,7 @@ The verifier walks it: each step recomputes the child's hash and reads its node.
 
 - a confirmed assertion is served, and both a confirmed-only and an early verifier accept it;
 - pending assertions `minAgeL1Blocks` old are served through a two-link chain, which a confirmed-only verifier refuses (`NotConfirmed`);
-- a rival child on the way makes the early commit invalid (`Challenged` on L1, invalid in the indexer), and the gateway falls back to the one before it;
+- a rival child on the way makes the early commit invalid (`Challenged` on L1, invalid in the indexer), and the gateway falls back to the one before it. Even an indexer reading finalized L1, which can't see the rival yet, drops it (the re-check on latest L1);
 - restarting confirmed-only re-checks the valid commits: the early one goes back to pending.
 
 ## Checked on mainnet (2026-11-23)

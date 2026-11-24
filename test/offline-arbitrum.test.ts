@@ -189,6 +189,7 @@ describe("offline e2e: Arbitrum (BoLD)", () => {
 		l2.mine();
 		third = await assert(second);
 		await sync();
+		expect(gateway.info?.minAgeL1Blocks).toBe(MIN_AGE); // passed on to the gateway's /status
 		expect(status(third)).toBe("pending");
 		await mineL1(MIN_AGE);
 		await sync();

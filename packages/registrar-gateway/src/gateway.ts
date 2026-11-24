@@ -33,8 +33,12 @@ export type GatewayConfig = {
 };
 
 // What a gateway serves, from its indexer's /status: the deployment, its chains and commit kind, the
-// registrar and its storage layout (docs/registrar.md).
-export type GatewayInfo = Pick<IndexerStatus, "chain" | "kind" | "l1ChainId" | "l2ChainId" | "registrar" | "layout">;
+// registrar and its storage layout (docs/registrar.md), and the early acceptance its commits assume
+// (a verifier must match it).
+export type GatewayInfo = Pick<
+	IndexerStatus,
+	"chain" | "kind" | "l1ChainId" | "l2ChainId" | "registrar" | "layout" | "minAgeSec" | "minAgeL1Blocks"
+>;
 
 export type GatewayStats = { snapshots: number; patches: number; rows: number };
 
@@ -234,6 +238,8 @@ export class RegistrarGateway {
 			l2ChainId: s.l2ChainId,
 			registrar: s.registrar,
 			layout: s.layout,
+			minAgeSec: s.minAgeSec,
+			minAgeL1Blocks: s.minAgeL1Blocks,
 		};
 		const held = this.info;
 		if (held && !sameDeployment(held, info)) {
