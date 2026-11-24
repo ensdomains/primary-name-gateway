@@ -265,14 +265,16 @@ export class RPCInboxReader extends RPCChangeReader implements InboxL2Reader {
 }
 
 // Some providers (Infura, public RPCs) answer eth_getBlockByNumber with null now and then, for a block
-// that exists: viem's BlockNotFoundError. Ask again a few times before failing.
+// that exists: viem's BlockNotFoundError. Ask again before failing.
+const NOT_FOUND_ATTEMPTS = 4; // in all, waiting 0.5 s, 1 s, then 1.5 s between them
+
 export async function retryNotFound<T>(get: () => Promise<T>): Promise<T> {
-	for (let i = 1; ; i++) {
+	for (let attempt = 1; ; attempt++) {
 		try {
 			return await get();
 		} catch (err) {
-			if (!(err instanceof BlockNotFoundError) || i === 4) throw err;
-			await new Promise((resolve) => setTimeout(resolve, 500 * i));
+			if (!(err instanceof BlockNotFoundError) || attempt === NOT_FOUND_ATTEMPTS) throw err;
+			await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
 		}
 	}
 }
