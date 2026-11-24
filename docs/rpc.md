@@ -85,12 +85,12 @@ RPC:
 | `PROOF_RPC_URL_<id>` | explicit URL for a chain's proofs |
 | `BEACON_URL_<id>` | beacon API for an L1 (default for Ethereum: `https://ethereum-beacon-api.publicnode.com`); the batch inbox reads blobs from it |
 
-Indexer (`bun run indexer`, `indexer:base`, `indexer:linea`, `indexer:base-inbox`):
+Indexer (`bun run indexer:<chain>`, or `bun run indexer` with `INDEXER_CHAIN`):
 
 | variable | default | |
 |---|---|---|
-| `INDEXER_CHAIN` | `optimism` | `optimism`, `base`, `linea`, or `base-inbox` / `optimism-inbox` ([op-batch-inbox.md](op-batch-inbox.md)) |
-| `INDEXER_PORT` | `8100` | the `:linea` / `:base` / `:base-inbox` / `:arbitrum` scripts use 8101 / 8102 / 8103 / 8104 |
+| `INDEXER_CHAIN` | required | `optimism`, `base`, `linea`, `arbitrum`, or `base-inbox` / `optimism-inbox` ([op-batch-inbox.md](op-batch-inbox.md)) |
+| `INDEXER_PORT` | `8100` | the `:optimism` / `:linea` / `:base` / `:base-inbox` / `:arbitrum` scripts use 8100 / 8101 / 8102 / 8103 / 8104 |
 | `INDEXER_DB` | `data/<L2>.sqlite` | One per L2: `base` and `base-inbox` share `data/base.sqlite` (events and trie), one at a time (a second indexer on the same database refuses to start). Each source's commits stay; switching back resumes where it left off, rebuilding the newest valid commits' tries. |
 | `INDEXER_POLL_MS` | `30000` | |
 | `INDEXER_CATCHUP_BLOCKS` | `10000` | OP Stack: each tick first syncs events to this many blocks below the L2's finalized head, so a new or stopped indexer replays them at once. Commits for older blocks are rebuilt from the newest trie. |
@@ -108,11 +108,11 @@ Indexer (`bun run indexer`, `indexer:base`, `indexer:linea`, `indexer:base-inbox
 | `INDEXER_FLUSH_CHANGES` | `50000` | OP / Base: changes applied in memory before the trie rows are written ([optimism.md](optimism.md#trie-rows)) |
 | `INDEXER_CACHE_MB` | `64` | SQLite page cache |
 
-Gateway (`bun run gateway`, `gateway:base`, `gateway:linea`, `gateway:base-inbox`):
+Gateway (`bun run gateway:<chain>`, or `bun run gateway` with `GATEWAY_CHAIN`):
 
 | variable | default | |
 |---|---|---|
-| `GATEWAY_CHAIN` | `optimism` | sets the registrar layout and default DB name |
+| `GATEWAY_CHAIN` | required | sets the registrar layout and default DB name |
 | `INDEXER_URL` | `http://localhost:8100` | |
 | `GATEWAY_PORT` | `8200` | |
 | `GATEWAY_DB` | `data/gateway-<chain>.sqlite` | |

@@ -90,9 +90,9 @@ export class RegistrarIndexer {
 		const { db, deployment } = this.config;
 		const [latest] = db.getCommits("valid", 1);
 		return {
-			l2ChainId: deployment.l2.id,
-			l1ChainId: deployment.l1.id,
 			kind: deployment.kind,
+			l1ChainId: deployment.l1.id,
+			l2ChainId: deployment.l2.id,
 			l2BlockMs: "l2Blocks" in deployment ? deployment.l2Blocks[deployment.l2Blocks.length - 1].ms : undefined,
 			...this.config.source.status?.(),
 			registrar: deployment.L2ReverseRegistrar,

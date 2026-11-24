@@ -77,9 +77,9 @@ export type Change = {
 };
 
 export type IndexerStatus = {
-	l2ChainId: number;
-	l1ChainId: number; // where its commits are
 	kind: CommitKind;
+	l1ChainId: number; // where its commits are
+	l2ChainId: number;
 	l2BlockMs?: number; // the L2's current block time (OP Stack: Base is 200 ms since Denim)
 	minAgeSec?: number; // OP: unchallenged games this old are accepted before finality; the verifier must match
 	minAgeBlocks?: number; // Arbitrum: unchallenged assertions this many L1 blocks old, likewise

@@ -9,9 +9,14 @@ import { bunSqliteAdapter } from "./sqlite.js";
 
 const env = process.env;
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
-const chain = env.GATEWAY_CHAIN ?? "optimism";
-const deployment = DEPLOYMENTS[chain];
-if (!deployment) throw new Error(`unknown GATEWAY_CHAIN: ${chain} (${Object.keys(DEPLOYMENTS).join(", ")})`);
+const chain = env.GATEWAY_CHAIN;
+const deployment = chain && DEPLOYMENTS[chain];
+if (!deployment) {
+	console.error(
+		`${chain ? `unknown GATEWAY_CHAIN: ${chain}` : "set GATEWAY_CHAIN"} (${Object.keys(DEPLOYMENTS).join(", ")}), or use bun run gateway:<chain>`,
+	);
+	process.exit(1);
+}
 const dbPath = env.GATEWAY_DB ?? `data/gateway-${deployment.l2.name}.sqlite`;
 mkdirSync(dirname(dbPath), { recursive: true });
 const db = new Database(dbPath, { create: true, strict: true });
