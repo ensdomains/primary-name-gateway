@@ -46,6 +46,7 @@ import {
 	createEZCCIP,
 	createGatewayHandler,
 	type GatewayConfig,
+	type gatewayStatus,
 	RegistrarGateway,
 	SqlNodeStore,
 } from "../packages/registrar-gateway/src/index.js";
@@ -293,8 +294,13 @@ describe("offline e2e", () => {
 		).rejects.toThrow();
 	}, 30_000);
 
-	test("the gateway's JSON-RPC answers eth_getProof and eth_getStorageAt as the L2 would", async () => {
-		const handler = createGatewayHandler(gateway, { chainId: CHAIN_ID, registrar: REGISTRAR });
+	test("the gateway's JSON-RPC answers eth_getProof and eth_getStorageAt as the L2 would; /status", async () => {
+		const handler = createGatewayHandler(gateway, {
+			kind: "op",
+			l1ChainId: 31337,
+			l2ChainId: CHAIN_ID,
+			registrar: REGISTRAR,
+		});
 		const call = async (body: unknown): Promise<any> =>
 			(await handler(new Request("http://gateway/rpc", { method: "POST", body: JSON.stringify(body) }))).json();
 		const commit = gateway.pick();
@@ -334,6 +340,16 @@ describe("offline e2e", () => {
 		expect(replies[3].error?.message).toContain("only the registrar"); // another account
 		expect(replies[4].error?.message).toContain("isn't available"); // a block the gateway doesn't hold
 		expect(replies[5].error?.code).toBe(-32601);
+
+		// GET /status
+		const status = (await (await handler(new Request("http://gateway/status"))).json()) as ReturnType<
+			typeof gatewayStatus
+		>;
+		expect(status).toMatchObject({ kind: "op", l1ChainId: 31337, l2ChainId: CHAIN_ID, registrar: REGISTRAR, keep: 2 });
+		expect(status.served?.id).toBe(commit.id);
+		expect(status.held.map((c: { id: number }) => c.id)).toEqual(gateway.commits.map((c) => c.id));
+		expect(status.lastSync?.error).toBeUndefined();
+		expect(status.stats.rows).toBeGreaterThan(0);
 	}, 30_000);
 
 	test("a restarted gateway resumes from its store with patches only", async () => {

@@ -58,8 +58,13 @@ server = Bun.serve({
 	port: Number(env.GATEWAY_PORT ?? 8200),
 	fetch: createGatewayHandler(
 		gateway,
-		{ chainId: deployment.l2.id, registrar: deployment.L2ReverseRegistrar },
+		{
+			kind: deployment.kind,
+			l1ChainId: deployment.l1.id,
+			l2ChainId: deployment.l2.id,
+			registrar: deployment.L2ReverseRegistrar,
+		},
 		{ log: true },
 	),
 });
-log(`CCIP-Read: ${server.url}, JSON-RPC: ${server.url}rpc`);
+log(`CCIP-Read: ${server.url}, JSON-RPC: ${server.url}rpc, status: ${server.url}status`);

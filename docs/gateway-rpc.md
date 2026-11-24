@@ -1,6 +1,30 @@
-# Gateway JSON-RPC
+# Gateway JSON-RPC and status
 
-Besides CCIP-Read, the gateway answers JSON-RPC at `/rpc` for the registrar's storage, at the blocks of the commits it holds. It answers from its rows as an L2 node would, so standard tools work against it (`cast`, viem's `getProof`, any prover that calls `eth_getProof`) without an archive node. [rpc.ts](../packages/registrar-gateway/src/rpc.ts), routed by `createGatewayHandler` in [index.ts](../packages/registrar-gateway/src/index.ts): `/rpc` is JSON-RPC, every other path CCIP-Read.
+The gateway's HTTP side ([index.ts](../packages/registrar-gateway/src/index.ts), `createGatewayHandler`): `GET /status`, JSON-RPC at `/rpc`, and CCIP-Read on every other path.
+
+## Status
+
+`GET /status`, like the indexer's:
+
+```json
+{
+  "kind": "arbitrum", "l1ChainId": 1, "l2ChainId": 42161, "registrar": "0x0000000000D8e504002cC26E3Ec46D81971C1664",
+  "served": { "id": 264804150022, "l2Block": 526908163, "validAt": 1795490521 },
+  "held": [{ "id": 264801160406, "l2Block": 526895226, "validAt": 1795487068 }, { "id": 264804150022, "l2Block": 526908163, "validAt": 1795490521 }],
+  "lastSync": { "at": 1795493534, "ms": 6 },
+  "startedAt": 1795493534,
+  "stats": { "snapshots": 0, "patches": 0, "rows": 0 },
+  "keep": 2, "marginSec": 120
+}
+```
+
+- `served`: the commit CCIP-Read proofs come from (the newest held one valid for at least `marginSec`); `held`: the commits in the store.
+- `lastSync`: when the last sync with the indexer ended and how long it took, with `error` if it failed: a gateway that can't reach its indexer keeps serving its held commits, and this is where that shows.
+- `stats`: snapshots, patches and rows loaded since `startedAt`.
+
+## JSON-RPC
+
+The gateway answers JSON-RPC at `/rpc` for the registrar's storage, at the blocks of the commits it holds. It answers from its rows as an L2 node would, so standard tools work against it (`cast`, viem's `getProof`, any prover that calls `eth_getProof`) without an archive node. ([rpc.ts](../packages/registrar-gateway/src/rpc.ts))
 
 | method | answer |
 |---|---|

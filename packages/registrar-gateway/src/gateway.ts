@@ -31,6 +31,9 @@ export type GatewayConfig = {
 
 export type GatewayStats = { snapshots: number; patches: number; rows: number };
 
+// the last sync: when it ended (unix seconds), how long it took, and its error if it failed
+export type SyncResult = { at: number; ms: number; error?: string };
+
 type Bootstrap = { commit: Commit; after: string | null };
 
 const META_HELD = "held"; // commits we serve
@@ -50,6 +53,7 @@ const STORE_FORMAT = "chunks-4";
 // - restart: state lives in the store, so it resumes with patches
 export class RegistrarGateway {
 	readonly stats: GatewayStats = { snapshots: 0, patches: 0, rows: 0 };
+	lastSync: SyncResult | undefined;
 
 	constructor(
 		readonly store: NodeStore,
@@ -78,6 +82,18 @@ export class RegistrarGateway {
 	}
 
 	async sync() {
+		const t0 = Date.now();
+		try {
+			await this.syncOnce();
+			this.lastSync = { at: Math.floor(Date.now() / 1000), ms: Date.now() - t0 };
+		} catch (err) {
+			const error = err instanceof Error ? err.message.split("\n")[0] : String(err);
+			this.lastSync = { at: Math.floor(Date.now() / 1000), ms: Date.now() - t0, error };
+			throw err;
+		}
+	}
+
+	private async syncOnce() {
 		const { keep } = this.config;
 		if (this.store.getMeta(META_FORMAT) !== STORE_FORMAT) {
 			if (this.store.getMeta(META_HEAD)) this.log("the store's rows are in an older layout: starting over");
