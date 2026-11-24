@@ -2,7 +2,7 @@ import type { Change, Commit, Deployment, IndexerStatus, TrieRow } from "@primar
 import type { Hex } from "viem";
 import type { IndexerDB } from "./db.js";
 import type { ChangeReader } from "./l2.js";
-import { n, Progress } from "./progress.js";
+import { duration, n, Progress } from "./progress.js";
 import { createIndexerTrie, type IndexerTrie, type RowPage } from "./tries.js";
 
 // Finds commits on L1 and captures what the verifier will need from the L2 at that moment.
@@ -187,12 +187,17 @@ export class RegistrarIndexer {
 		if (deployment.kind === "linea" || !l2.finalizedBlock) return;
 		const target = (await l2.finalizedBlock()).number - catchUpBlocks;
 		if (target <= this.syncedBlock) return;
-		this.log(`catching up: events from L2 block ${n(this.syncedBlock + 1)} to ${n(target)}`);
-		await this.syncChanges(target);
-		this.log(`caught up: ${n(this.changeSeq)} changes through L2 block ${n(this.syncedBlock)}`);
+		const from = this.syncedBlock;
+		const before = this.changeSeq;
+		const t0 = Date.now();
+		this.log(`catching up: L2 blocks ${n(from + 1)} to ${n(target)} (${n(target - from)} blocks)`);
+		await this.syncChanges(target, false);
+		this.log(
+			`caught up: +${n(this.changeSeq - before)} changes in ${n(this.syncedBlock - from)} blocks (${duration((Date.now() - t0) / 1000)}), ${n(this.changeSeq)} through L2 block ${n(this.syncedBlock)}`,
+		);
 	}
 
-	private async syncChanges(toBlock: number) {
+	private async syncChanges(toBlock: number, summary = true) {
 		const first = this.changeSeq;
 		const progress = new Progress("syncing events: L2 block", this.syncedBlock, toBlock, (...a) => this.log(...a));
 		this.syncingTo = toBlock;
@@ -204,7 +209,8 @@ export class RegistrarIndexer {
 			this.syncingTo = undefined;
 		}
 		const count = this.changeSeq - first;
-		if (count) this.log(`synced ${n(count)} changes through L2 block ${n(this.syncedBlock)} (${progress.elapsed})`);
+		if (count && summary)
+			this.log(`synced ${n(count)} changes through L2 block ${n(this.syncedBlock)} (${progress.elapsed})`);
 	}
 
 	private async syncTo(toBlock: number, progress: Progress, first: number) {
