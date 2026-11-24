@@ -8,7 +8,7 @@
 // chain: a deployment (base, base-inbox, optimism, linea, ...). --gateway: its URL, default
 // http://localhost:<port> with the port of `bun run gateway:<chain>`. --min-age: the verifier's
 // early acceptance, as the indexer's: OP Stack fault proofs in seconds (INDEXER_MIN_AGE_SEC), Arbitrum in
-// L1 blocks (INDEXER_MIN_AGE_BLOCKS); default that variable, or 0. Needs .env RPC keys.
+// L1 blocks (INDEXER_MIN_AGE_L1_BLOCKS); default that variable, or 0. Needs .env RPC keys.
 
 import { Foundry } from "@adraffy/blocksmith";
 import {
@@ -91,7 +91,7 @@ function parseArgs() {
 	const d = (chain && DEPLOYMENTS[chain]) || usage(chain ? `unknown chain: ${chain}` : "which chain?");
 	const port = GATEWAY_PORTS[chain];
 	gateway ??= port ? `http://localhost:${port}` : usage(`no default gateway for ${chain}: pass --gateway`);
-	minAge ??= d.kind === "arbitrum" ? process.env.INDEXER_MIN_AGE_BLOCKS : process.env.INDEXER_MIN_AGE_SEC;
+	minAge ??= d.kind === "arbitrum" ? process.env.INDEXER_MIN_AGE_L1_BLOCKS : process.env.INDEXER_MIN_AGE_SEC;
 	const minAgeSec = Number(minAge ?? 0);
 	if (!Number.isInteger(minAgeSec) || minAgeSec < 0) usage(`not a number of seconds: ${minAge}`);
 	return { addr: getAddress(addr), chain, d, gateway, minAgeSec };
@@ -240,7 +240,7 @@ try {
 	const e = err as BaseError;
 	console.error(e.walk?.((x) => !(x instanceof BaseError))?.message ?? e.shortMessage ?? e.message);
 	if ((d.kind === "op" || d.kind === "arbitrum") && !minAgeSec) {
-		const env = d.kind === "arbitrum" ? "INDEXER_MIN_AGE_BLOCKS" : "INDEXER_MIN_AGE_SEC";
+		const env = d.kind === "arbitrum" ? "INDEXER_MIN_AGE_L1_BLOCKS" : "INDEXER_MIN_AGE_SEC";
 		console.error(`(if the indexer accepts commits early, pass --min-age with its ${env})`);
 	}
 	process.exitCode = 1;

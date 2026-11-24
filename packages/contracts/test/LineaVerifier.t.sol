@@ -25,7 +25,7 @@ contract TrieHarness {
 
 /// @dev Real linea_getProof output from mainnet (scripts/linea-fixture.ts), converted to multiproofs.
 contract LineaVerifierTest is Test {
-    uint256 constant MAX_BLOCK_LAG = 1000;
+    uint256 constant MAX_L2_BLOCK_LAG = 1000;
     uint256 constant DEPTH = 40;
 
     // one linea_getProof path
@@ -50,7 +50,7 @@ contract LineaVerifierTest is Test {
         registrar = vm.parseJsonAddress(json, ".registrar");
         rollup = new MockLineaRollup();
         rollup.finalize(l2Block, vm.parseJsonBytes32(json, ".stateRoot"));
-        verifier = new LineaVerifier(ILineaRollup(address(rollup)), MAX_BLOCK_LAG);
+        verifier = new LineaVerifier(ILineaRollup(address(rollup)), MAX_L2_BLOCK_LAG);
         resolver = new L2ReverseResolver(verifier, registrar, 0, 0x8000e708, new string[](0));
     }
 
@@ -183,8 +183,8 @@ contract LineaVerifierTest is Test {
 
     function test_stale() public {
         bytes memory proof = _accountProof();
-        rollup.finalize(l2Block + MAX_BLOCK_LAG + 1, keccak256("later"));
-        vm.expectRevert(abi.encodeWithSelector(LineaVerifier.StaleCommit.selector, l2Block, l2Block + MAX_BLOCK_LAG + 1));
+        rollup.finalize(l2Block + MAX_L2_BLOCK_LAG + 1, keccak256("later"));
+        vm.expectRevert(abi.encodeWithSelector(LineaVerifier.StaleCommit.selector, l2Block, l2Block + MAX_L2_BLOCK_LAG + 1));
         verifier.verifyStorageRoot(abi.encode(l2Block), registrar, proof);
     }
 

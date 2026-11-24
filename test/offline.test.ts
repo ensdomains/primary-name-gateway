@@ -230,7 +230,7 @@ describe("offline e2e", () => {
 		expect(gateway.stats).toMatchObject({ snapshots: 1, patches: 0 });
 	}, 60_000);
 
-	test("round 2: updates are picked up incrementally; previous commit still verifies within maxSequenceLag", async () => {
+	test("round 2: updates are picked up incrementally; previous commit still verifies within maxL2SequenceLag", async () => {
 		rollup.setName(A.short, "raffy2.eth");
 		rollup.setName(A.cleared, "");
 		rollup.setName(A.long, "now-short.eth");
@@ -261,7 +261,7 @@ describe("offline e2e", () => {
 		expect(await resolveName(A.short)).toBe("raffy2.eth");
 	}, 60_000);
 
-	test("round 3: stale commits are rejected once the anchor moves past maxSequenceLag", async () => {
+	test("round 3: stale commits are rejected once the anchor moves past maxL2SequenceLag", async () => {
 		rollup.mine(10); // 20s of L2 time
 		const game = await propose();
 		await finalize(game);

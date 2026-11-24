@@ -50,13 +50,13 @@ contract OPBatchInboxVerifier is IL2StorageVerifier {
     ///         chain's sequencing window, 3600 on OP Mainnet and Base): a later batch is dropped.
     uint256 public immutable maxOriginLag;
     /// @notice Accept batcher transactions at most this many L1 blocks old.
-    uint256 public immutable maxBlockLag;
+    uint256 public immutable maxL1BlockLag;
 
-    constructor(ISystemConfig systemConfig_, address batchInbox_, uint256 maxOriginLag_, uint256 maxBlockLag_) {
+    constructor(ISystemConfig systemConfig_, address batchInbox_, uint256 maxOriginLag_, uint256 maxL1BlockLag_) {
         systemConfig = systemConfig_;
         batchInbox = batchInbox_;
         maxOriginLag = maxOriginLag_;
-        maxBlockLag = maxBlockLag_;
+        maxL1BlockLag = maxL1BlockLag_;
     }
 
     /// @inheritdoc IL2StorageVerifier
@@ -92,7 +92,7 @@ contract OPBatchInboxVerifier is IL2StorageVerifier {
         uint256 l1Block = _uint(l1[8]);
         bytes32 l1Hash = _l1BlockHash(l1Block);
         if (l1Hash == bytes32(0) || keccak256(p.l1Header) != l1Hash) revert InvalidL1Header();
-        if (l1Block + maxBlockLag < block.number) revert StaleCommit(l1Block);
+        if (l1Block + maxL1BlockLag < block.number) revert StaleCommit(l1Block);
         // the batcher transaction
         (bool exists, bytes memory txn) =
             MerkleTrie.get(_rlpIndex(p.txIndex), p.txProof, EthTrie.toBytes32(RLPReader.readBytes(l1[4])));

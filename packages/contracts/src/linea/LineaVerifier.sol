@@ -26,11 +26,11 @@ contract LineaVerifier is IL2StorageVerifier {
     /// @notice How many L2 blocks a commit may lag behind the latest finalized block
     ///         (`currentL2BlockNumber()`), i.e. how stale a proven value may be. Must exceed the blocks
     ///         between finalizations plus the gateway's margin, or a gateway's fallback commit is rejected.
-    uint256 public immutable maxBlockLag;
+    uint256 public immutable maxL2BlockLag;
 
-    constructor(ILineaRollup rollup_, uint256 maxBlockLag_) {
+    constructor(ILineaRollup rollup_, uint256 maxL2BlockLag_) {
         rollup = rollup_;
-        maxBlockLag = maxBlockLag_;
+        maxL2BlockLag = maxL2BlockLag_;
     }
 
     /// @inheritdoc IL2StorageVerifier
@@ -69,11 +69,11 @@ contract LineaVerifier is IL2StorageVerifier {
         }
     }
 
-    /// @notice The state root of a finalized L2 block at most `maxBlockLag` blocks behind the latest.
+    /// @notice The state root of a finalized L2 block at most `maxL2BlockLag` blocks behind the latest.
     function verifyStateRoot(uint256 l2BlockNumber) public view returns (bytes32 stateRoot) {
         stateRoot = rollup.stateRootHashes(l2BlockNumber);
         if (stateRoot == 0) revert NotFinalized(l2BlockNumber);
         uint256 current = rollup.currentL2BlockNumber();
-        if (l2BlockNumber + maxBlockLag < current) revert StaleCommit(l2BlockNumber, current);
+        if (l2BlockNumber + maxL2BlockLag < current) revert StaleCommit(l2BlockNumber, current);
     }
 }

@@ -2,7 +2,7 @@
 // challenges assertions with BoLD's event and hashes, an in-memory L2 with real headers, and the real
 // ArbitrumCommitSource, indexer, gateway, ArbitrumVerifier and L2ReverseResolver.
 //
-// The indexer accepts assertions MIN_AGE L1 blocks old (INDEXER_MIN_AGE_BLOCKS); two resolvers share the
+// The indexer accepts assertions MIN_AGE L1 blocks old (INDEXER_MIN_AGE_L1_BLOCKS); two resolvers share the
 // gateway: one with a confirmed-only verifier and one with the same MIN_AGE.
 
 import { Database } from "bun:sqlite";
@@ -67,13 +67,13 @@ describe("offline e2e: Arbitrum (BoLD)", () => {
 	let early: Address;
 	let acc = 0;
 
-	const source = (minAgeBlocks: number) =>
+	const source = (minAgeL1Blocks: number) =>
 		new ArbitrumCommitSource({
 			deployment,
 			l1,
 			l2,
 			lookbackBlocks: 1000,
-			minAgeBlocks,
+			minAgeL1Blocks,
 			maxAttempts: 1,
 			l1BlockTag: "latest",
 		});
@@ -215,7 +215,7 @@ describe("offline e2e: Arbitrum (BoLD)", () => {
 		const strict = new RegistrarIndexer({ ...indexer.config, source: source(0) });
 		await mineL1(CONFIRM_PERIOD);
 		await strict.tick();
-		expect(strict.status().minAgeBlocks).toBe(0);
+		expect(strict.status().minAgeL1Blocks).toBe(0);
 		expect(status(first)).toBe("valid"); // confirmed
 		expect(status(second)).toBe("pending"); // accepted early, not confirmed
 		expect(db.getCommits("valid", 1)[0].l2Block).toBe(1);

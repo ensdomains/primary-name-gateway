@@ -39,7 +39,7 @@ export type InboxSourceConfig = {
 	intervalSec: number; // at most one commit per this many seconds of L1 time (KZG proofs are slow)
 	scanBlocks: number; // L1 blocks to look back from the finalized head for a channel start
 	firstScanBlocks: number; // the same with no commits yet: far enough back for a parent that is final
-	maxBlockLag: number; // a commit is invalid once its L1 block is this many blocks old (the verifier's maxBlockLag)
+	maxL1BlockLag: number; // a commit is invalid once its L1 block is this many blocks old (the verifier's maxL1BlockLag)
 	maxAttempts: number;
 };
 
@@ -260,7 +260,7 @@ export class InboxCommitSource implements CommitSource {
 	// commits too old for the verifier
 	private expire(indexer: RegistrarIndexer, l1Head: number) {
 		for (const c of indexer.db.getCommits("valid", 1000)) {
-			if (c.kind === "inbox" && l1Head - c.l1Block > this.config.maxBlockLag) {
+			if (c.kind === "inbox" && l1Head - c.l1Block > this.config.maxL1BlockLag) {
 				indexer.db.putCommit({ ...c, status: "invalid" });
 				indexer.log.error(`batch ${c.id}: invalid (L1 block ${c.l1Block} is too old)`);
 			}

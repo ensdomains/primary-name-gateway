@@ -41,7 +41,7 @@ import { FakeLineaRollup } from "./fake-linea.js";
 
 const CHAIN_ID = 59144;
 const COIN_TYPE = coinTypeFromChainId(CHAIN_ID);
-const MAX_BLOCK_LAG = 10; // L2 blocks a commit may lag behind the latest finalization
+const MAX_L2_BLOCK_LAG = 10; // L2 blocks a commit may lag behind the latest finalization
 const REGISTRAR: Address = "0x0000000000D8e504002cC26E3Ec46D81971C1664";
 const LAYOUT: RegistrarLayout = { namesSlot: 1n, ownerSlot: 0n };
 
@@ -120,7 +120,7 @@ describe("offline e2e (linea)", () => {
 		gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(gatewayDB)), gatewayConfig);
 		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });
 
-		const verifier = await foundry.deploy({ file: "LineaVerifier", args: [lineaRollup.target, MAX_BLOCK_LAG] });
+		const verifier = await foundry.deploy({ file: "LineaVerifier", args: [lineaRollup.target, MAX_L2_BLOCK_LAG] });
 		const r = await foundry.deploy({
 			file: "L2ReverseResolver",
 			args: [verifier.target, REGISTRAR, LAYOUT.namesSlot, COIN_TYPE, [ccip.endpoint]],
@@ -225,7 +225,7 @@ describe("offline e2e (linea)", () => {
 		expect(await resolveName(A.huge)).toBe(round1[A.huge]);
 		expect(gateway.stats).toMatchObject({ snapshots: 1, patches: 1 });
 
-		// the older commit is 3 blocks behind (< MAX_BLOCK_LAG): still accepted
+		// the older commit is 3 blocks behind (< MAX_L2_BLOCK_LAG): still accepted
 		expect(await verifyName(A.short, finalized[0])).toBe("raffy.eth");
 	}, 60_000);
 
@@ -241,8 +241,8 @@ describe("offline e2e (linea)", () => {
 		expect(await resolveName(A.short)).toBe("raffy2.eth"); // still the previous commit
 	}, 60_000);
 
-	test("round 3: stale commits are rejected once finalization moves past maxBlockLag", async () => {
-		rollup.mine(MAX_BLOCK_LAG + 1);
+	test("round 3: stale commits are rejected once finalization moves past maxL2BlockLag", async () => {
+		rollup.mine(MAX_L2_BLOCK_LAG + 1);
 		const id = await finalize();
 		await sync();
 

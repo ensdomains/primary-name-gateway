@@ -38,7 +38,7 @@ The indexer has to apply the same rule as the deployed verifier, or a gateway se
 
 The indexer records its `minAgeSec`. Started with a different one on the same database, it sets every valid game back to pending and checks it again under the new rule. Otherwise, going back to finalized games only would mark the games accepted early invalid for good. Tries of the newest valid games that were dropped meanwhile are rebuilt from the newest trie: the newest finalized game is days older than the early ones that were kept. `offline-minage.test.ts` switches both ways on one database.
 
-Freshness doesn't get weaker: `maxSequenceLag` still bounds a game's lag behind the anchor (the newest finalized state), so the oldest acceptable state is the same as without `minAgeSec`. An honest gateway just serves much newer state.
+Freshness doesn't get weaker: `maxL2SequenceLag` still bounds a game's lag behind the anchor (the newest finalized state), so the oldest acceptable state is the same as without `minAgeSec`. An honest gateway just serves much newer state.
 
 ## Reorgs
 
@@ -55,7 +55,7 @@ Waiting for finality costs nothing here: a game takes about 7 days to become val
 `OPFaultVerifier.verifyStorageRoot(commitProof, registrar, accountProof)`:
 
 1. `isGameAcceptable(game)`: `AnchorStateRegistry.isGameClaimValid(game)` (registered, respected type, resolved for the proposer, past the airgap, not blacklisted or retired), or with `minAgeSec > 0` the early rule ([above](#early-acceptance-minagesec)).
-2. Freshness: `game.l2SequenceNumber() + maxSequenceLag >= anchor.l2SequenceNumber`. The unit is seconds for super root games (the sequence number is a timestamp) and blocks for output root games. The anchor only moves when it is updated, so it can trail the newest valid game. `maxSequenceLag` must exceed the time between games plus the gateway's serve delay (`GATEWAY_SERVE_DELAY_SEC`, default 0); beyond that it bounds how stale a name can be.
+2. Freshness: `game.l2SequenceNumber() + maxL2SequenceLag >= anchor.l2SequenceNumber`. The unit is seconds for super root games (the sequence number is a timestamp) and blocks for output root games. The anchor only moves when it is updated, so it can trail the newest valid game. `maxL2SequenceLag` must exceed the time between games plus the gateway's serve delay (`GATEWAY_SERVE_DELAY_SEC`, default 0); beyond that it bounds how stale a name can be.
 3. `rootClaim == keccak(superRoot)` and `superRoot` contains `(l2ChainId, outputRoot)`, or `rootClaim == outputRoot`.
 4. `outputRoot == keccak(abi.encode(outputRootProof))`.
 5. Account proof: `stateRoot` → registrar `storageRoot` (Merkle-Patricia).
