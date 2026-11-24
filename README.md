@@ -27,7 +27,9 @@ Proven from what the L2's sequencer or batcher posts, before the rollup commits 
 
 | name | kind | frequency | trust | chains | delay |
 |---|---|---|---|---|---|
-| [OP Batch Inbox](docs/op-batch-inbox.md) | `inbox`: a batcher blob that starts a channel names its parent L2 block | a channel about every minute (Base); the indexer commits at most every 10 min (`INDEXER_INBOX_INTERVAL_SEC`) | the batcher key (`SystemConfig.batcherHash()`) | OP Mainnet, Base | ~25 min: ~6 min behind the L2's finalized head (measured on Base), which trails the tip by ~18 min; the indexer only commits final L2 blocks, the verifier would take a block minutes old |
+| [OP Batch Inbox](docs/op-batch-inbox.md) | `inbox`: a batcher blob that starts a channel names its parent L2 block | ~1 min | the batcher key (`SystemConfig.batcherHash()`) | OP Mainnet, Base | ~25 min: ~6 min behind the L2's finalized head (measured on Base), which trails the tip by ~18 min; the indexer only commits final L2 blocks, the verifier would take a block minutes old |
+
+The indexer makes at most one inbox commit per `INDEXER_INBOX_INTERVAL_SEC` (10 min).
 
 [docs/registrar.md](docs/registrar.md) covers the registrar contract, its storage layouts, and why its storage can be rebuilt from events. ENSIP-19 coin types are `0x80000000 | chainId`.
 
