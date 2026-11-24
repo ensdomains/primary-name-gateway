@@ -6,15 +6,18 @@
 //   bun run prove <address> <chain> [--gateway URL] [--min-age SEC]
 //
 // chain: a deployment (base, base-inbox, optimism, linea, ...); the gateway defaults to the port of
-// `bun run gateway:<chain>`. --min-age: the verifier's minAgeSec for OP Stack fault proofs, as the
-// indexer's INDEXER_MIN_AGE_SEC (default: that variable, or 0). Needs .env RPC keys.
+// `bun run gateway:<chain>`. --min-age: the verifier's early acceptance, as the indexer's: OP Stack fault
+// proofs in seconds (INDEXER_MIN_AGE_SEC), Arbitrum in L1 blocks (INDEXER_MIN_AGE_BLOCKS); default that
+// variable, or 0. Needs .env RPC keys.
 
 import { Foundry } from "@adraffy/blocksmith";
 import {
+	assertionHash,
 	coinTypeFromChainId,
 	createClient,
 	DEPLOYMENTS,
 	type Deployment,
+	decodeArbitrumCommitProof,
 	decodeOPBatchInboxCommitProof,
 	decodeOPFaultCommitProof,
 	rpcURL,
@@ -41,7 +44,13 @@ import { packetToBytes } from "viem/ens";
 import { verifierContract } from "./verifiers.js";
 
 // the ports of the package.json gateway scripts
-const GATEWAY_PORTS: Record<string, number> = { optimism: 8200, linea: 8201, base: 8202, "base-inbox": 8203 };
+const GATEWAY_PORTS: Record<string, number> = {
+	optimism: 8200,
+	linea: 8201,
+	base: 8202,
+	"base-inbox": 8203,
+	arbitrum: 8204,
+};
 
 const RESOLVER_ABI = parseAbi([
 	"function resolve(bytes name, bytes data) view returns (bytes)",
@@ -70,7 +79,7 @@ function usage(message?: string): never {
 function parseArgs() {
 	const args = process.argv.slice(2);
 	let gateway = process.env.GATEWAY_URL;
-	let minAge = process.env.INDEXER_MIN_AGE_SEC;
+	let minAge: string | undefined;
 	const rest: string[] = [];
 	for (let i = 0; i < args.length; i++) {
 		if (args[i] === "--gateway") gateway = args[++i];
@@ -82,6 +91,7 @@ function parseArgs() {
 	const d = (chain && DEPLOYMENTS[chain]) || usage(chain ? `unknown chain: ${chain}` : "which chain?");
 	const port = GATEWAY_PORTS[chain];
 	gateway ??= port ? `http://localhost:${port}` : usage(`no default gateway for ${chain}: pass --gateway`);
+	minAge ??= d.kind === "arbitrum" ? process.env.INDEXER_MIN_AGE_BLOCKS : process.env.INDEXER_MIN_AGE_SEC;
 	const minAgeSec = Number(minAge ?? 0);
 	if (!Number.isInteger(minAgeSec) || minAgeSec < 0) usage(`not a number of seconds: ${minAge}`);
 	return { addr: getAddress(addr), chain, d, gateway, minAgeSec };
@@ -116,12 +126,26 @@ async function proofBlock(d: Deployment, commitProof: Hex): Promise<{ block: num
 			const [block] = decodeAbiParameters([{ type: "uint256" }], commitProof);
 			return { block: Number(block), commit: "finalization" };
 		}
+		case "arbitrum": {
+			const p = decodeArbitrumCommitProof(commitProof);
+			let h = p.anchor; // walk the chain to the commit's assertion
+			for (let i = 0; i < p.chain.length; i += 2) h = assertionHash(h, p.chain[i], p.chain[i + 1]);
+			const links = p.chain.length / 2;
+			return {
+				block: Number(hexToBigInt((fromRlp(p.l2Header) as Hex[])[8])),
+				commit: `assertion ${h.slice(0, 10)}…, ${links} link${links > 1 ? "s" : ""} from a confirmed one`,
+			};
+		}
 	}
 }
 
 const { addr, chain, d, gateway, minAgeSec } = parseArgs();
 const blockMs = "l2Blocks" in d ? `, ${d.l2Blocks[d.l2Blocks.length - 1].ms} ms blocks` : "";
-const early = minAgeSec ? `, games accepted unchallenged after ${minAgeSec}s` : "";
+const early = !minAgeSec
+	? ""
+	: d.kind === "arbitrum"
+		? `, assertions accepted unchallenged after ${minAgeSec} L1 blocks`
+		: `, games accepted unchallenged after ${minAgeSec}s`;
 console.log(`${chain} (${d.kind}, L1 ${d.l1.id} → L2 ${d.l2.id}${blockMs}${early}): gateway ${gateway}`);
 
 const started = Date.now();
@@ -215,8 +239,9 @@ try {
 	// viem's errors repeat the call: the first cause that isn't viem's wrapper says what failed
 	const e = err as BaseError;
 	console.error(e.walk?.((x) => !(x instanceof BaseError))?.message ?? e.shortMessage ?? e.message);
-	if (d.kind === "op" && !minAgeSec) {
-		console.error("(if the indexer accepts games early, pass --min-age with its INDEXER_MIN_AGE_SEC)");
+	if ((d.kind === "op" || d.kind === "arbitrum") && !minAgeSec) {
+		const env = d.kind === "arbitrum" ? "INDEXER_MIN_AGE_BLOCKS" : "INDEXER_MIN_AGE_SEC";
+		console.error(`(if the indexer accepts commits early, pass --min-age with its ${env})`);
 	}
 	process.exitCode = 1;
 } finally {

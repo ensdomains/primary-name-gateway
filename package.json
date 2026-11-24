@@ -15,7 +15,7 @@
 		"test": "bun run test:unit && bun run test:contracts && bun run test:e2e && bun run test:inbox && bun run test:kzg",
 		"test:unit": "bun test test/trie.test.ts test/chunks.test.ts test/brotli.test.ts test/store.test.ts test/l2.test.ts test/server.test.ts test/indexer-db.test.ts test/progress.test.ts test/block-schedule.test.ts test/commit-proofs.test.ts test/inbox-scan.test.ts test/raw-transaction.test.ts test/linea.test.ts",
 		"test:contracts": "cd packages/contracts && forge test",
-		"test:e2e": "bun run forge && bun test test/inline-node.test.ts test/offline.test.ts test/offline-base.test.ts test/offline-minage.test.ts test/offline-linea.test.ts",
+		"test:e2e": "bun run forge && bun test test/inline-node.test.ts test/offline.test.ts test/offline-base.test.ts test/offline-minage.test.ts test/offline-linea.test.ts test/offline-arbitrum.test.ts",
 		"test:inbox": "bun run forge && bun test test/brotli-sol.test.ts test/op-batch-sol.test.ts test/op-batch-verifier.test.ts",
 		"test:kzg": "bun run forge && bun test test/kzg.test.ts",
 		"test:mainnet": "bun run forge && bun test test/mainnet.test.ts",
@@ -29,7 +29,9 @@
 		"lint": "biome check",
 		"lint:fix": "biome check --write",
 		"indexer:base-inbox": "INDEXER_CHAIN=base-inbox INDEXER_PORT=8103 bun packages/registrar-indexer/src/index.ts",
-		"gateway:base-inbox": "GATEWAY_CHAIN=base-inbox GATEWAY_PORT=8203 INDEXER_URL=http://localhost:8103 bun packages/registrar-gateway/src/main.ts"
+		"gateway:base-inbox": "GATEWAY_CHAIN=base-inbox GATEWAY_PORT=8203 INDEXER_URL=http://localhost:8103 bun packages/registrar-gateway/src/main.ts",
+		"indexer:arbitrum": "INDEXER_CHAIN=arbitrum INDEXER_PORT=8104 bun packages/registrar-indexer/src/index.ts",
+		"gateway:arbitrum": "GATEWAY_CHAIN=arbitrum GATEWAY_PORT=8204 INDEXER_URL=http://localhost:8104 bun packages/registrar-gateway/src/main.ts"
 	},
 	"devDependencies": {
 		"@adraffy/blocksmith": "^0.1.60",

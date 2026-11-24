@@ -8,6 +8,7 @@ export type ChainInfo = {
 	alchemySlug: string;
 	infuraSlug?: string;
 	publicRPC?: string;
+	wideLogsRPC?: string; // a public endpoint with wide eth_getLogs, preferred for "logs" over keyed providers
 	logStep?: number; // eth_getLogs block range
 };
 
@@ -54,6 +55,18 @@ export const LINEA: ChainInfo = {
 	infuraSlug: "linea-mainnet",
 	publicRPC: "https://rpc.linea.build",
 	logStep: 500000,
+};
+
+export const ARBITRUM: ChainInfo = {
+	id: 42161,
+	name: "arbitrum",
+	drpcSlug: "arbitrum",
+	alchemySlug: "arb-mainnet",
+	infuraSlug: "arbitrum-mainnet",
+	publicRPC: "https://arb1.arbitrum.io/rpc",
+	// eth_getLogs over 10M blocks (Infura: 10k, drpc free: 100): the registrar's history is 177M blocks
+	wideLogsRPC: "https://arb1.arbitrum.io/rpc",
+	logStep: 10_000_000,
 };
 
 type DeploymentBase = {
@@ -112,7 +125,13 @@ export type InboxDeployment = DeploymentBase & {
 	l2Blocks: BlockSchedule; // starts at the rollup genesis: span batches' timestamps are relative to it
 };
 
-export type Deployment = OPDeployment | LineaDeployment | InboxDeployment;
+// Arbitrum (BoLD): assertions on L1 name L2 blocks (ArbitrumVerifier, docs/arbitrum.md)
+export type ArbitrumDeployment = DeploymentBase & {
+	kind: "arbitrum";
+	Rollup: Address; // RollupProxy: latestConfirmed(), getAssertion(), AssertionCreated
+};
+
+export type Deployment = OPDeployment | LineaDeployment | InboxDeployment | ArbitrumDeployment;
 
 // https://docs.optimism.io/superchain/addresses
 // https://docs.ens.domains/ensip/19/#annex-supported-chains
@@ -178,12 +197,24 @@ export const BASE_MAINNET_INBOX: InboxDeployment = {
 	l2Blocks: BASE_BLOCKS,
 };
 
+// https://docs.arbitrum.io/build-decentralized-apps/reference/contract-addresses
+export const ARBITRUM_MAINNET: ArbitrumDeployment = {
+	kind: "arbitrum",
+	l1: MAINNET,
+	l2: ARBITRUM,
+	Rollup: "0x4DCeB440657f21083db8aDd07665f8ddBe1DCfc0",
+	L2ReverseRegistrar: "0x0000000000D8e504002cC26E3Ec46D81971C1664",
+	layout: PLAIN_LAYOUT, // no owner(); a name resolves at keccak(addr . 0) (test/ArbitrumVerifier.t.sol)
+	registrarCreatedAtBlock: 349263357,
+};
+
 export const DEPLOYMENTS: Record<string, Deployment> = {
 	optimism: OP_MAINNET,
 	base: BASE_MAINNET,
 	linea: LINEA_MAINNET,
 	"optimism-inbox": OP_MAINNET_INBOX,
 	"base-inbox": BASE_MAINNET_INBOX,
+	arbitrum: ARBITRUM_MAINNET,
 };
 
 // ENSIP-19 coin type of an EVM chain: 0x80000000 | chainId (Ethereum mainnet keeps 60)
@@ -215,6 +246,7 @@ export function rpcURL(chain: ChainInfo, purpose: RPCPurpose = "default"): strin
 	const env = process.env;
 	const explicit = (purpose === "proof" && env[`PROOF_RPC_URL_${chain.id}`]) || env[`RPC_URL_${chain.id}`];
 	if (explicit) return explicit;
+	if (purpose === "logs" && chain.wideLogsRPC) return chain.wideLogsRPC;
 	const urls = {
 		drpc: env.DRPC_KEY && `https://lb.drpc.live/${chain.drpcSlug}/${env.DRPC_KEY}`,
 		alchemy: env.ALCHEMY_KEY && `https://${chain.alchemySlug}.g.alchemy.com/v2/${env.ALCHEMY_KEY}`,

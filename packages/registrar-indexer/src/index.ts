@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { beaconURL, createClient, DEPLOYMENTS, type Deployment, redactURL, rpcURL } from "@primary-name-gateway/shared";
+import { ArbitrumCommitSource } from "./arbitrum.js";
 import { IndexerDB } from "./db.js";
 import { InboxCommitSource } from "./inbox.js";
 import { type CommitSource, type IndexerConfig, RegistrarIndexer } from "./indexer.js";
@@ -12,6 +13,7 @@ import { OPCommitSource } from "./op.js";
 import { n } from "./progress.js";
 import { serveIndexer } from "./server.js";
 
+export { ArbitrumCommitSource, type ArbitrumSourceConfig } from "./arbitrum.js";
 export { chunkPage, chunkPatch, type NodeSource } from "./chunks.js";
 export { IndexerDB } from "./db.js";
 export { InboxCommitSource, type InboxSourceConfig, spanBatchParent } from "./inbox.js";
@@ -86,6 +88,24 @@ function createSource(deployment: Deployment, log: Log): { l2: ChangeReader; sou
 			firstScanBlocks: Number(env.INDEXER_INBOX_FIRST_SCAN_BLOCKS ?? 300), // an hour of L1 blocks
 			// below the verifier's maxBlockLag (EIP-2935 keeps 8191 block hashes)
 			maxBlockLag: Number(env.INDEXER_INBOX_MAX_BLOCK_LAG ?? 7200),
+			maxAttempts,
+		});
+		return { l2, source };
+	}
+	if (deployment.kind === "arbitrum") {
+		const l2 = new RPCInboxReader(
+			deployment,
+			createClient(deployment.l2, "logs"),
+			createClient(deployment.l2, "proof"),
+			log,
+		);
+		const source = new ArbitrumCommitSource({
+			deployment,
+			l1,
+			l2,
+			lookbackBlocks: env.INDEXER_LOOKBACK_L1_BLOCKS ? Number(env.INDEXER_LOOKBACK_L1_BLOCKS) : undefined,
+			// accept unchallenged assertions this many L1 blocks old; must match the deployed ArbitrumVerifier's minAgeBlocks
+			minAgeBlocks: Number(env.INDEXER_MIN_AGE_BLOCKS ?? 0),
 			maxAttempts,
 		});
 		return { l2, source };

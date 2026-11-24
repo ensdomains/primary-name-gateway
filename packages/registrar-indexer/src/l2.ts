@@ -1,4 +1,5 @@
 import {
+	type ArbitrumDeployment,
 	blocksAtTimestamp,
 	type Change,
 	type Deployment,
@@ -112,8 +113,8 @@ export class RPCChangeReader implements ChangeReader {
 				// By 8: a refusal is slow, and a jump into a dense stretch can be 1000x; the next success resizes.
 				if (this.logStep <= 1) throw err;
 				// a fixed range limit (eg. infura: "exceeds limit of 10000"): never grow past it
-				const limit = /limit of (\d+)/.exec(String(err instanceof Error ? err.message : err))?.[1];
-				if (limit) this.maxLogStep = Math.max(1, Math.min(this.maxLogStep, Number(limit)));
+				const limit = /limit of (\d+)|only (\d+) are allowed/.exec(String(err instanceof Error ? err.message : err));
+				if (limit) this.maxLogStep = Math.max(1, Math.min(this.maxLogStep, Number(limit[1] ?? limit[2])));
 				this.logStep = Math.max(1, Math.min(this.logStep >> 3, this.maxLogStep));
 				const why = String(err instanceof Error ? err.message : err)
 					.split("\n")[0]
@@ -196,9 +197,10 @@ export class RPCLineaReader extends RPCChangeReader implements LineaL2Reader {
 	}
 }
 
+// headers by number or hash, account proofs and the finalized head: the batch inbox and Arbitrum
 export class RPCInboxReader extends RPCChangeReader implements InboxL2Reader {
 	constructor(
-		override readonly deployment: InboxDeployment,
+		override readonly deployment: InboxDeployment | ArbitrumDeployment,
 		logsClient: PublicClient,
 		readonly proofClient: PublicClient, // eth_getProof
 		log?: (...args: unknown[]) => void,
