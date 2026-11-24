@@ -70,7 +70,7 @@ Rows are keyed by a string: a [chunk](docs/optimism.md#chunks) key for OP Stack 
 | store | use |
 |---|---|
 | `MemoryNodeStore` | tests, ephemeral |
-| `SqlNodeStore` + `bunSqliteAdapter(db)` | the bun server (`GATEWAY_DB`, default `data/gateway-<chain>.sqlite`) |
+| `SqlNodeStore` + `bunSqliteAdapter(db)` | the bun server (`GATEWAY_DB`, default `data/gateway-<port>.sqlite`): a cache that survives restarts, and starts over when its indexer serves another deployment |
 | `SqlNodeStore` + a Durable Object adapter | a Cloudflare Durable Object per chain: `ctx.storage.sql` as the store, `sync()` on an alarm, requests through `createGatewayHandler(gateway)`. See [docs/durable-objects.md](docs/durable-objects.md) for how it fits, a sketch, and the limits that matter. |
 
 ## Setup
