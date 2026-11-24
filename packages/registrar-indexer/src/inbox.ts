@@ -102,7 +102,7 @@ export class InboxCommitSource implements CommitSource {
 			if (result !== "not final") return;
 			notFinal++;
 		}
-		indexer.log(
+		indexer.log.warn(
 			notFinal
 				? `${notFinal} channel starts in the last ${depth} finalized L1 blocks, none with a final parent yet`
 				: `no channel start in the last ${depth} finalized L1 blocks`,
@@ -150,20 +150,20 @@ export class InboxCommitSource implements CommitSource {
 			return "committed";
 		} catch (err) {
 			if (err instanceof NotFinalizedError) {
-				indexer.log(`batch ${id}: ${err.message}: trying an earlier batch`);
+				indexer.log.warn(`batch ${id}: ${err.message}: trying an earlier batch`);
 				return "not final";
 			}
 			if (err instanceof SyncError) {
-				indexer.log(`batch ${id}: waiting: ${err.message}`);
+				indexer.log.warn(`batch ${id}: waiting: ${err.message}`);
 				return "later";
 			}
 			const n = (this.attempts.get(id) ?? 0) + 1;
 			this.attempts.set(id, n);
 			if (n < this.config.maxAttempts) {
-				indexer.log(`batch ${id}: attempt ${n} failed:`, errorMessage(err));
+				indexer.log.warn(`batch ${id}: attempt ${n} failed:`, errorMessage(err));
 				return "later";
 			}
-			indexer.log(`batch ${id}: skipped after ${n} attempts:`, errorMessage(err));
+			indexer.log.error(`batch ${id}: skipped after ${n} attempts:`, errorMessage(err));
 			indexer.db.putSkipped(id, `${tx.hash}: ${errorMessage(err)}`);
 			return "later";
 		}
@@ -262,7 +262,7 @@ export class InboxCommitSource implements CommitSource {
 		for (const c of indexer.db.getCommits("valid", 1000)) {
 			if (c.kind === "inbox" && l1Head - c.l1Block > this.config.maxBlockLag) {
 				indexer.db.putCommit({ ...c, status: "invalid" });
-				indexer.log(`commit ${c.id}: invalid (L1 block ${c.l1Block} is too old)`);
+				indexer.log.error(`batch ${c.id}: invalid (L1 block ${c.l1Block} is too old)`);
 			}
 		}
 	}

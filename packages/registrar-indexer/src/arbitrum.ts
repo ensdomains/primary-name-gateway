@@ -71,7 +71,7 @@ export class ArbitrumCommitSource implements CommitSource {
 			db.db.transaction(() => {
 				for (const c of valid) db.putCommit({ ...c, status: "pending", validAt: undefined });
 			})();
-			indexer.log(`minAgeBlocks ${prev} → ${minAge}: checking ${valid.length} valid assertions again`);
+			indexer.log.warn(`minAgeBlocks ${prev} → ${minAge}: checking ${valid.length} valid assertions again`);
 		}
 		db.setState("minAgeBlocks", minAge);
 	}
@@ -174,16 +174,16 @@ export class ArbitrumCommitSource implements CommitSource {
 			return "done";
 		} catch (err) {
 			if (err instanceof NotFinalizedError || err instanceof SyncError) {
-				indexer.log(`assertion ${id}: waiting: ${err.message}`);
+				indexer.log.warn(`assertion ${id}: waiting: ${err.message}`);
 				return "retry";
 			}
 			const n = (this.attempts.get(id) ?? 0) + 1;
 			this.attempts.set(id, n);
 			if (n < maxAttempts) {
-				indexer.log(`assertion ${id}: attempt ${n} failed:`, errorMessage(err));
+				indexer.log.warn(`assertion ${id}: attempt ${n} failed:`, errorMessage(err));
 				return "retry";
 			}
-			indexer.log(`assertion ${id}: skipped after ${n} attempts:`, errorMessage(err));
+			indexer.log.error(`assertion ${id}: skipped after ${n} attempts:`, errorMessage(err));
 			indexer.db.putSkipped(id, `${assertionHash}: ${errorMessage(err)}`);
 			return "done";
 		}
@@ -244,19 +244,19 @@ export class ArbitrumCommitSource implements CommitSource {
 			if (c.status === "pending") {
 				if (confirmed) {
 					db.putCommit({ ...c, status: "valid", validAt: now });
-					indexer.log(`assertion ${c.id}: valid, confirmed (L2 block ${c.l2Block})`);
+					indexer.log.ok(`assertion ${c.id}: valid, confirmed (L2 block ${c.l2Block})`);
 				} else if (minAgeBlocks && node.status === ASSERTION_PENDING && c.l1Block + minAgeBlocks <= head) {
 					const link = chainOf(c);
 					if (!link) continue;
 					const { afterState, l2Header } = decodeArbitrumCommitProof(c.commitProof);
 					const commitProof = encodeArbitrumCommitProof({ ...link, afterState, l2Header });
 					db.putCommit({ ...c, status: "valid", validAt: now, commitProof });
-					indexer.log(`assertion ${c.id}: valid, unchallenged ${link.chain.length / 2} links from a confirmed one`);
+					indexer.log.ok(`assertion ${c.id}: valid, unchallenged ${link.chain.length / 2} links from a confirmed one`);
 				}
 			} else if (c.status === "valid" && !confirmed && !chainOf(c)) {
 				// accepted early, then challenged on the way
 				db.putCommit({ ...c, status: "invalid" });
-				indexer.log(`assertion ${c.id}: invalid (challenged before confirmation)`);
+				indexer.log.error(`assertion ${c.id}: invalid (challenged before confirmation)`);
 			}
 		}
 	}

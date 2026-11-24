@@ -9,6 +9,7 @@ import {
 	type OPDeployment,
 	REGISTRAR_ABI,
 	type RpcBlockHeader,
+	toLog,
 } from "@primary-name-gateway/shared";
 import { type Address, decodeAbiParameters, getAbiItem, type Hex, numberToHex, type PublicClient } from "viem";
 
@@ -123,7 +124,9 @@ export class RPCChangeReader implements ChangeReader {
 				if (isRateLimited(err)) {
 					if (waits === 5) throw err;
 					const ms = this.rateLimitWaitMs * 2 ** waits++;
-					this.log?.(`getLogs rate limited: retrying the same ${end - fromBlock + 1} blocks in ${ms / 1000}s`);
+					toLog(this.log).warn(
+						`getLogs rate limited: retrying the same ${end - fromBlock + 1} blocks in ${ms / 1000}s`,
+					);
 					await new Promise((resolve) => setTimeout(resolve, ms));
 					continue;
 				}
@@ -138,7 +141,9 @@ export class RPCChangeReader implements ChangeReader {
 					.split("\n")[0]
 					.replace(/https?:\/\/\S+/g, "<rpc>");
 				const sec = Math.round((Date.now() - t0) / 1000);
-				this.log?.(`getLogs over ${end - fromBlock + 1} blocks failed after ${sec}s (${why}): step = ${this.logStep}`);
+				toLog(this.log).warn(
+					`getLogs over ${end - fromBlock + 1} blocks failed after ${sec}s (${why}): step = ${this.logStep}`,
+				);
 			}
 		}
 	}

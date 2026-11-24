@@ -2,12 +2,12 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { DEPLOYMENTS } from "@primary-name-gateway/shared";
+import { createLog, DEPLOYMENTS } from "@primary-name-gateway/shared";
 import { createGatewayHandler, RegistrarGateway, SqlNodeStore } from "./index.js";
 import { bunSqliteAdapter } from "./sqlite.js";
 
 const env = process.env;
-const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
+const log = createLog();
 const chain = env.GATEWAY_CHAIN;
 const deployment = chain && DEPLOYMENTS[chain];
 if (!deployment) {
@@ -73,10 +73,10 @@ const poll = async () => {
 		if (!ready && gateway.commits.length) {
 			ready = true;
 			const c = gateway.pick();
-			log(`ready: serving commit ${c.id} (L2 block ${c.l2Block})`);
+			log.ok(`ready: serving commit ${c.id} (L2 block ${c.l2Block})`);
 		}
 	} catch (err) {
-		log("sync failed:", err);
+		log.error("sync failed:", err);
 	}
 	timer = setTimeout(poll, pollMs);
 };
