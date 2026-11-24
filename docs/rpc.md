@@ -33,6 +33,8 @@ For a chain with id `<id>` and a purpose, the first one that's set wins:
 
 5. the chain's public RPC, where there is one (none for Base)
 
+`public` skips all of this: the chain's public RPC only, so no key is spent (and none can leak), or an error where there is none (Base). Nothing in the indexer or gateway asks for it; it's for scripts and tools.
+
 Chain ids: Ethereum `1`, Optimism `10`, Base `8453`, Linea `59144`, Arbitrum One `42161`. Logs show URLs through `redactURL()`, which hides the key for all three providers.
 
 ## Providers

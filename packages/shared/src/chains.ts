@@ -229,13 +229,14 @@ export function coinTypeFromChainId(chainId: number): bigint {
 // "default": general calls
 // "logs": eth_getLogs over large ranges; not retried, the caller shrinks the range
 // "proof": eth_getProof / linea_getProof at historical blocks (OP Stack lookback needs archive state)
-export type RPCPurpose = "default" | "logs" | "proof";
+// "public": the chain's public RPC only, never a key or an RPC_URL_<id> (which may hold one)
+export type RPCPurpose = "default" | "logs" | "proof" | "public";
 
 // Provider limits seen with our keys (2026-11-22):
 //   drpc     wide getLogs (capped at 20000 results), proofs only ~100k blocks back
 //   alchemy  archive proofs; free plan: getLogs over 10 blocks
 //   infura   getLogs over 10000 blocks, proofs within 10000 blocks of the head, linea_getProof
-const ORDER: Record<RPCPurpose, ("drpc" | "alchemy" | "infura")[]> = {
+const ORDER: Record<Exclude<RPCPurpose, "public">, ("drpc" | "alchemy" | "infura")[]> = {
 	default: ["drpc", "infura", "alchemy"],
 	logs: ["drpc", "infura", "alchemy"],
 	proof: ["alchemy", "drpc", "infura"],
@@ -243,6 +244,10 @@ const ORDER: Record<RPCPurpose, ("drpc" | "alchemy" | "infura")[]> = {
 
 // PROOF_RPC_URL_<chainId> (proof only) > RPC_URL_<chainId> > DRPC_KEY / ALCHEMY_KEY / INFURA_KEY (by purpose) > public
 export function rpcURL(chain: ChainInfo, purpose: RPCPurpose = "default"): string {
+	if (purpose === "public") {
+		if (!chain.publicRPC) throw new Error(`no public rpc for ${chain.name}`);
+		return chain.publicRPC;
+	}
 	const env = process.env;
 	const explicit = (purpose === "proof" && env[`PROOF_RPC_URL_${chain.id}`]) || env[`RPC_URL_${chain.id}`];
 	if (explicit) return explicit;
