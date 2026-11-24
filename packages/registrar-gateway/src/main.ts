@@ -64,7 +64,10 @@ server = Bun.serve({
 		{ log: true },
 	),
 });
-log(`listening: CCIP-Read ${server.url}, JSON-RPC ${server.url}rpc, status ${server.url}status`);
+log("listening:");
+log(`  CCIP-Read  ${server.url}`);
+log(`  JSON-RPC   ${server.url}rpc`);
+log(`  status     ${server.url}status`);
 log(`syncing from the indexer at ${gateway.config.indexerURL}, every ${pollMs / 1000}s`);
 
 let ready = false;

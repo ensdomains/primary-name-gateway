@@ -1,7 +1,7 @@
 // The services' log (shared/log.ts): colored on a terminal only, by the level each call site picks.
 
 import { expect, test } from "bun:test";
-import { createLog, errorLine, toLog, useColor } from "@primary-name-gateway/shared";
+import { createLog, errorLine, styles, toLog, useColor } from "@primary-name-gateway/shared";
 
 test("color only on a terminal, never with NO_COLOR, always with FORCE_COLOR", () => {
 	expect(useColor({ isTTY: true }, {})).toBeTrue();
@@ -79,4 +79,10 @@ test("errorLine: other errors give their first line and where in the packages th
 		"TypeError: undefined is not an object (evaluating 'logs.map') (getChanges, packages/registrar-indexer/src/l2.ts:89)",
 	);
 	expect(errorLine("plain")).toBe("plain");
+});
+
+test("styles: ANSI codes with color, the text unchanged without", () => {
+	expect(styles(true).green("ok")).toBe("\x1b[32mok\x1b[0m");
+	expect(styles(true).bold("k")).toBe("\x1b[1mk\x1b[0m");
+	expect(styles(false).red("plain")).toBe("plain");
 });

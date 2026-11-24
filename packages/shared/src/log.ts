@@ -20,20 +20,26 @@ export function useColor(stream: { isTTY?: boolean } | undefined = proc?.stdout,
 	return !!stream?.isTTY;
 }
 
-const GREEN = 32;
-const YELLOW = 33;
-const RED = 31;
+type Style = (s: string) => string;
+
+// ANSI styles for a terminal; without color each returns its text unchanged
+export function styles(color = useColor()): Record<"bold" | "dim" | "red" | "green" | "yellow", Style> {
+	const paint =
+		(code: number): Style =>
+		(s) =>
+			color ? `\x1b[${code}m${s}\x1b[0m` : s;
+	return { bold: paint(1), dim: paint(2), red: paint(31), green: paint(32), yellow: paint(33) };
+}
 
 export function createLog(color = useColor(), write: (...args: unknown[]) => void = console.log): Log {
-	const paint = (code: number, s: string) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
+	const { dim, green, yellow, red } = styles(color);
 	const line =
-		(code?: number) =>
+		(style?: Style) =>
 		(...args: unknown[]) => {
-			const time = paint(2, new Date().toISOString());
 			const [first, ...rest] = args;
-			write(time, code && typeof first === "string" ? paint(code, first) : first, ...rest);
+			write(dim(new Date().toISOString()), style && typeof first === "string" ? style(first) : first, ...rest);
 		};
-	return Object.assign(line(), { ok: line(GREEN), warn: line(YELLOW), error: line(RED) });
+	return Object.assign(line(), { ok: line(green), warn: line(yellow), error: line(red) });
 }
 
 // a Log from a plain function (every level calls it), or a silent one
