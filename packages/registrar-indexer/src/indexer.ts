@@ -1,4 +1,13 @@
-import type { Change, Commit, Deployment, IndexerStatus, TrieRow } from "@primary-name-gateway/shared";
+import {
+	type Change,
+	type Commit,
+	type CommitKind,
+	type Deployment,
+	type IndexerStatus,
+	type Log,
+	type TrieRow,
+	toLog,
+} from "@primary-name-gateway/shared";
 import type { Hex } from "viem";
 import type { IndexerDB } from "./db.js";
 import type { ChangeReader } from "./l2.js";
@@ -25,7 +34,7 @@ export type IndexerConfig = {
 	db: IndexerDB;
 	retainValid?: number; // keep tries of this many recent valid commits for /patch (default 24)
 	catchUpBlocks?: number; // catch up to this many blocks below the L2's finalized head (default 10,000)
-	log?: (...args: unknown[]) => void;
+	log?: Log | ((...args: unknown[]) => void);
 };
 
 // Replays the L2 registrar's events into its storage trie and keeps the tries of recent commits.
@@ -42,7 +51,7 @@ export class RegistrarIndexer {
 		this.trie = createIndexerTrie(deployment.kind, deployment.layout, db);
 		this.syncedBlock = Number(db.getState("syncedBlock") ?? deployment.registrarCreatedAtBlock - 1);
 		const aside = db.useCommitKind(deployment.kind);
-		if (aside) this.log(`${aside} commits of another commit source set aside (${deployment.kind} now)`);
+		if (aside) this.log.warn(`${aside} commits of another commit source set aside (${deployment.kind} now)`);
 		// replay the changes the trie doesn't have yet, capturing retained commits on the way
 		const retained = this.retainedCommits();
 		this.trie.retain(new Set(retained.map((c) => c.id)));
@@ -69,16 +78,18 @@ export class RegistrarIndexer {
 		}
 		if (last > first) this.log(`rebuilt the trie: ${n(last - first)} changes from the change log (${rebuild.elapsed})`);
 		const missing = retained.filter((c) => !this.trie.has(c.id)).length;
-		if (missing) this.log(`${missing} retained commits are older than the stored trie (not served)`);
+		if (missing) this.log.warn(`${missing} retained commits are older than the stored trie (not served)`);
 	}
 
 	get db(): IndexerDB {
 		return this.config.db;
 	}
 
-	log(...args: unknown[]) {
-		this.config.log?.(...args);
+	get log(): Log {
+		this.#log ??= toLog(this.config.log);
+		return this.#log;
 	}
+	#log: Log | undefined;
 
 	// commits whose tries are kept: all pending + recent valid
 	private retainedCommits(): Commit[] {
@@ -124,7 +135,7 @@ export class RegistrarIndexer {
 			throw new Error(`commit ${c.id}: rebuilt storage hash ${storageHash}, expected ${c.storageHash}`);
 		}
 		this.trie.capture(c);
-		this.log(`commit ${c.id}: trie rebuilt (L2 block ${c.l2Block})`);
+		this.log(`${commitName(c.kind)} ${c.id}: trie rebuilt (L2 block ${c.l2Block})`);
 	}
 
 	async tick() {
@@ -176,7 +187,9 @@ export class RegistrarIndexer {
 		}
 		if (!this.trie.has(id)) this.trie.capture({ id, l2Block, changeSeq });
 		this.db.putCommit({ ...commit, changeSeq } as Commit);
-		this.log(`commit ${id}: L2 block ${l2Block}, ${changeSeq} changes, storageHash ${storageHash} (${commit.status})`);
+		(commit.status === "valid" ? this.log.ok : this.log)(
+			`${commitName(commit.kind)} ${id}: L2 block ${l2Block}, ${changeSeq} changes, storageHash ${storageHash} (${commit.status})`,
+		);
 	}
 
 	// Sync events to near the L2's finalized head, so a new or stopped indexer replays them now instead
@@ -192,7 +205,7 @@ export class RegistrarIndexer {
 		const t0 = Date.now();
 		this.log(`catching up: L2 blocks ${n(from + 1)} to ${n(target)} (${n(target - from)} blocks)`);
 		await this.syncChanges(target, false);
-		this.log(
+		this.log.ok(
 			`caught up: +${n(this.changeSeq - before)} changes in ${n(this.syncedBlock - from)} blocks (${duration((Date.now() - t0) / 1000)}), ${n(this.changeSeq)} through L2 block ${n(this.syncedBlock)}`,
 		);
 	}
@@ -228,6 +241,11 @@ export class RegistrarIndexer {
 			progress.update(this.syncedBlock, `${n(this.changeSeq - first)} changes`);
 		}
 	}
+}
+
+// what each source calls its commits, in logs
+export function commitName(kind: CommitKind): string {
+	return { op: "game", inbox: "batch", arbitrum: "assertion", linea: "finalization" }[kind];
 }
 
 export function errorMessage(err: unknown): string {

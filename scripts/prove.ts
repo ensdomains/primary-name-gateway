@@ -146,7 +146,7 @@ const early = !minAgeSec
 	: d.kind === "arbitrum"
 		? `, assertions accepted unchallenged after ${minAgeSec} L1 blocks`
 		: `, games accepted unchallenged after ${minAgeSec}s`;
-console.log(`${chain} (${d.kind}, L1 ${d.l1.id} → L2 ${d.l2.id}${blockMs}${early}): gateway ${gateway}`);
+console.log(`${chain} (${d.kind}, L1 ${d.l1.id}, L2 ${d.l2.id}${blockMs}${early}): gateway ${gateway}`);
 
 const started = Date.now();
 const foundry = await Foundry.launch({

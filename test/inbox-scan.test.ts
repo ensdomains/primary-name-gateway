@@ -10,7 +10,7 @@ import {
 	type RegistrarIndexer,
 	SyncError,
 } from "@primary-name-gateway/registrar-indexer";
-import { BASE_MAINNET_INBOX, type Commit } from "@primary-name-gateway/shared";
+import { BASE_MAINNET_INBOX, type Commit, toLog } from "@primary-name-gateway/shared";
 import type { PublicClient } from "viem";
 
 type Batch = { id: number } | "known";
@@ -19,7 +19,7 @@ function setup() {
 	const db = new IndexerDB(":memory:");
 	db.useCommitKind("inbox");
 	const logs: string[] = [];
-	const indexer = { db, log: (...a: unknown[]) => logs.push(a.join(" ")) } as unknown as RegistrarIndexer;
+	const indexer = { db, log: toLog((...a: unknown[]) => logs.push(a.join(" "))) } as unknown as RegistrarIndexer;
 	const l1 = { getBlock: async () => ({ number: 1_000_000n, timestamp: 10_000_000n }) } as unknown as PublicClient;
 	const source = new InboxCommitSource({
 		deployment: BASE_MAINNET_INBOX,

@@ -5,6 +5,7 @@ import {
 	encodeLineaMultiProof,
 	encodeMPTStorageProofs,
 	LINEA_ROOT_PATH,
+	type Log,
 	lineaRootHash,
 	PLAIN_LAYOUT,
 	primarySlot,
@@ -16,6 +17,7 @@ import {
 	rootHash,
 	type SnapshotPage,
 	type TrieRow,
+	toLog,
 } from "@primary-name-gateway/shared";
 import { encodeAbiParameters, type Hex } from "viem";
 import type { NodeStore } from "./store.js";
@@ -28,7 +30,7 @@ export type GatewayConfig = {
 	// finalized L1, and validity only grows with L1, so a client reading at latest is already past it; a
 	// delay only helps clients that read at finalized on a node that saw finality a little later.
 	serveDelaySec?: number;
-	log?: (...args: unknown[]) => void;
+	log?: Log | ((...args: unknown[]) => void);
 	fetch?: typeof fetch;
 };
 
@@ -64,9 +66,11 @@ export class RegistrarGateway {
 		readonly config: GatewayConfig,
 	) {}
 
-	private log(...args: unknown[]) {
-		this.config.log?.(...args);
+	private get log(): Log {
+		this.#log ??= toLog(this.config.log);
+		return this.#log;
 	}
+	#log: Log | undefined;
 
 	// held commits, ascending by L2 block
 	get commits(): Commit[] {
@@ -100,7 +104,7 @@ export class RegistrarGateway {
 	private async syncOnce() {
 		const { keepCommits: keep } = this.config;
 		if (this.store.getMeta(META_FORMAT) !== STORE_FORMAT) {
-			if (this.store.getMeta(META_HEAD)) this.log("the store's rows are in an older layout: starting over");
+			if (this.store.getMeta(META_HEAD)) this.log.warn("the store's rows are in an older layout: starting over");
 			this.store.clear();
 			this.setHeld([]);
 			this.setHead(undefined);
@@ -113,7 +117,7 @@ export class RegistrarGateway {
 		const targets: Commit[] = await this.fetchJSON(`/commits?status=valid&limit=${keep}`);
 		targets.sort((a, b) => a.l2Block - b.l2Block || a.id - b.id);
 		// said once, not on every poll
-		if (!targets.length && !this.waiting) this.log("the indexer has no valid commit yet: waiting");
+		if (!targets.length && !this.waiting) this.log.warn("the indexer has no valid commit yet: waiting");
 		this.waiting = !targets.length;
 		const valid = new Set(targets.map((c) => c.id));
 		// drop held commits that are no longer valid (blacklisted/retired); their rows get pruned
@@ -127,7 +131,7 @@ export class RegistrarGateway {
 				if (head) {
 					this.store.truncate(head.l2Block);
 					this.setHead(head);
-					this.log(`rewound to commit ${head.id}`);
+					this.log.warn(`rewound to commit ${head.id}`);
 				}
 			}
 			if (head && target.l2Block < head.l2Block) continue; // older than what we have
@@ -157,10 +161,10 @@ export class RegistrarGateway {
 		this.stats.patches++;
 		this.stats.rows += rows.length;
 		if (!this.checkRoot(to)) {
-			this.log(`patch ${from.id} => ${to.id} gave the wrong root: starting over`);
+			this.log.warn(`patch ${from.id} => ${to.id} gave the wrong root: starting over`);
 			return false;
 		}
-		this.log(`holding commit ${to.id}: L2 block ${to.l2Block} (+${rows.length} rows)`);
+		this.log.ok(`holding commit ${to.id}: L2 block ${to.l2Block} (+${rows.length} rows)`);
 		return true;
 	}
 
@@ -205,7 +209,7 @@ export class RegistrarGateway {
 		this.stats.snapshots++;
 		this.stats.rows += rows;
 		const sec = Math.round((Date.now() - t0) / 1000);
-		this.log(
+		this.log.ok(
 			`holding commit ${commit.id}: L2 block ${commit.l2Block} (snapshot, ${rows.toLocaleString("en-US")} rows, ${sec}s)`,
 		);
 	}

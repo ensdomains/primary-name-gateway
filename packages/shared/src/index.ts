@@ -3,6 +3,7 @@ export * from "./brotli.js";
 export * from "./chains.js";
 export * from "./header.js";
 export * from "./linea.js";
+export * from "./log.js";
 export * from "./op.js";
 export * from "./op-batch.js";
 export * from "./registrar.js";
