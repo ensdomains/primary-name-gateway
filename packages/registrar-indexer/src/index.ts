@@ -53,13 +53,6 @@ type Log = (...args: unknown[]) => void;
 // L2 reader + commit source for a deployment, from env
 function createSource(deployment: Deployment, log: Log): { l2: ChangeReader; source: CommitSource } {
 	const env = process.env;
-	// renamed: ignoring one would silently change which commits are valid
-	for (const [old, now] of [
-		["INDEXER_MIN_AGE_BLOCKS", "INDEXER_MIN_AGE_L1_BLOCKS"],
-		["INDEXER_INBOX_MAX_BLOCK_LAG", "INDEXER_INBOX_MAX_L1_BLOCK_LAG"],
-	]) {
-		if (env[old] !== undefined) throw new Error(`${old} is now ${now}`);
-	}
 	const l1 = createClient(deployment.l1);
 	const maxAttempts = Number(env.INDEXER_MAX_ATTEMPTS ?? 5);
 	if (deployment.kind === "op") {

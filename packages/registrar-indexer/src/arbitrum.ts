@@ -64,8 +64,7 @@ export class ArbitrumCommitSource implements CommitSource {
 	private applyMinAge(indexer: RegistrarIndexer) {
 		const { db } = indexer;
 		const minAge = String(this.config.minAgeL1Blocks ?? 0);
-		// the recorded key keeps its name from before minAgeL1Blocks, so existing databases carry over
-		const prev = db.getState("minAgeBlocks");
+		const prev = db.getState("minAgeL1Blocks");
 		if (prev === minAge) return;
 		if (prev !== undefined) {
 			const valid = db.getCommits("valid", Number.MAX_SAFE_INTEGER);
@@ -76,7 +75,7 @@ export class ArbitrumCommitSource implements CommitSource {
 				`minAgeL1Blocks changed from ${prev} to ${minAge}: checking ${valid.length} valid assertions again`,
 			);
 		}
-		db.setState("minAgeBlocks", minAge);
+		db.setState("minAgeL1Blocks", minAge);
 	}
 
 	private async getConfirmPeriod(): Promise<number> {
