@@ -130,9 +130,9 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
   ```
   launching an L1 fork of https://mainnet.infura.io/v3/***... (1.6 s)
   L1 fork at block 26,487,410 (2026-11-24T20:28:23.000Z)
-  deploying ArbitrumVerifier... 0x5C51…3f9F (867 ms)
-  deploying L2ReverseResolver... 0xa349…9aB8 (406 ms)
-  warming the fork (a first resolve loads the L1 state it reads)... (32.0 s)
+  deploying ArbitrumVerifier... (867 ms)
+  deploying L2ReverseResolver... (406 ms)
+  warming the fork with ffffffffffffffffffffffffffffffffffffffff.8000a4b1.reverse (it loads the L1 state the verifier reads)... (32.8 s)
   resolving 629c26b50823872e561a721c0c2d5113edda4dd9.8000a4b1.reverse... (16 ms)
   estimating verifyName gas... (279 ms)
   reading the L2 at the proof's block... (343 ms)
@@ -145,7 +145,7 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
   L2        matches L2ReverseRegistrar.nameForAddr at L2 block 527,125,030
   ```
 
-  The first resolve only warms the fork: it pulls the L1 state the verifier reads (the rollup, the assertion chain) over RPC, which takes tens of seconds. The second is the one timed, as a client would see it. Another run, on the Base batch inbox:
+  The first resolve only warms the fork: it resolves an address with no name, which pulls the L1 state the verifier reads (the rollup, the assertion chain) over RPC and takes tens of seconds. The real name's resolve is the one timed, as a client would see it. Another run, on the Base batch inbox:
 
   ```
   name      "quelburr.base.eth"

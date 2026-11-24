@@ -104,14 +104,13 @@ function parseArgs() {
 
 const n = (x: number | bigint) => x.toLocaleString("en-US");
 
-// "label... result (time)" on one line, so a slow step shows what it's waiting on
-async function step<T>(label: string, f: () => Promise<T>, result?: (r: T) => string): Promise<T> {
+// "label... (time)" on one line, so a slow step shows what it's waiting on
+async function step<T>(label: string, f: () => Promise<T>): Promise<T> {
 	process.stdout.write(`${label}... `);
 	const t0 = performance.now();
 	try {
 		const r = await f();
-		const shown = result?.(r);
-		console.log(`${shown ? `${shown} ` : ""}(${ms(performance.now() - t0)})`);
+		console.log(`(${ms(performance.now() - t0)})`);
 		return r;
 	} catch (err) {
 		console.log("failed");
@@ -196,36 +195,33 @@ try {
 	const fork = await l1.getBlock();
 	console.log(`L1 fork at block ${n(fork.number)} (${new Date(Number(fork.timestamp) * 1000).toISOString()})`);
 	const { contract, args } = verifierContract(d, minAgeSec);
-	const verifier = await step(
-		`deploying ${contract}`,
-		() => foundry.deploy({ file: contract, args }),
-		(c) => c.target as string,
-	);
+	const verifier = await step(`deploying ${contract}`, () => foundry.deploy({ file: contract, args }));
 	const coinType = coinTypeFromChainId(d.l2.id);
-	const resolver = await step(
-		"deploying L2ReverseResolver",
-		() =>
-			foundry.deploy({
-				file: "L2ReverseResolver",
-				args: [verifier.target, d.L2ReverseRegistrar, d.layout.namesSlot, coinType, [gateway]],
-			}),
-		(c) => c.target as string,
+	const resolver = await step("deploying L2ReverseResolver", () =>
+		foundry.deploy({
+			file: "L2ReverseResolver",
+			args: [verifier.target, d.L2ReverseRegistrar, d.layout.namesSlot, coinType, [gateway]],
+		}),
 	);
 
 	// ENSIP-19 reverse name, resolved as a client would (viem follows the OffchainLookup)
-	const name = `${addr.slice(2).toLowerCase()}.${coinType.toString(16)}.reverse`;
-	const call = encodeFunctionData({ abi: RESOLVER_ABI, functionName: "name", args: [namehash(name)] });
-	const resolve = () =>
+	const reverseName = (a: Address) => `${a.slice(2).toLowerCase()}.${coinType.toString(16)}.reverse`;
+	const resolve = (name: string) =>
 		l1.readContract({
 			address: resolver.target as Address,
 			abi: RESOLVER_ABI,
 			functionName: "resolve",
-			args: [toHex(packetToBytes(name)), call],
+			args: [
+				toHex(packetToBytes(name)),
+				encodeFunctionData({ abi: RESOLVER_ABI, functionName: "name", args: [namehash(name)] }),
+			],
 		});
-	// the first resolve pulls the rollup's and the verifier's L1 state into the fork over RPC: slow, and
-	// not what a client sees, so the timed one is the second
-	await step("warming the fork (a first resolve loads the L1 state it reads)", resolve);
-	const result = await step(`resolving ${name}`, resolve);
+	// The first resolve pulls the rollup's and the verifier's L1 state into the fork over RPC: slow, and
+	// not what a client sees. It's for an address with no name, so nothing about the real one is warm.
+	const warmup = reverseName("0xffffffffffffffffffffffffffffffffffffffff");
+	await step(`warming the fork with ${warmup} (it loads the L1 state the verifier reads)`, () => resolve(warmup));
+	const name = reverseName(addr);
+	const result = await step(`resolving ${name}`, () => resolve(name));
 	const primary = decodeFunctionResult({ abi: RESOLVER_ABI, functionName: "name", data: result });
 	const [proof] = decodeAbiParameters([{ type: "bytes" }], response!);
 	const gas = await step("estimating verifyName gas", () =>
