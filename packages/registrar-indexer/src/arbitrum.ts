@@ -11,7 +11,7 @@ import {
 	encodeMPTProof,
 	MACHINE_FINISHED,
 } from "@primary-name-gateway/shared";
-import { getAbiItem, type Hex, type PublicClient } from "viem";
+import { type BlockTag, getAbiItem, type Hex, type PublicClient } from "viem";
 import { type CommitSource, errorMessage, NotFinalizedError, type RegistrarIndexer, SyncError } from "./indexer.js";
 import type { InboxL2Reader } from "./l2.js";
 
@@ -26,6 +26,7 @@ export type ArbitrumSourceConfig = {
 	minAgeBlocks?: number;
 	maxAttempts: number;
 	logStep?: number; // L1 eth_getLogs range (default 10,000: Infura's limit)
+	l1BlockTag?: BlockTag; // L1 state to trust (default "finalized": assertions and statuses can't reorg)
 };
 
 const CURSOR = "arbitrumNextL1Block";
@@ -53,7 +54,7 @@ export class ArbitrumCommitSource implements CommitSource {
 
 	async tick(indexer: RegistrarIndexer) {
 		this.applyMinAge(indexer);
-		const head = Number((await this.config.l1.getBlock({ blockTag: "finalized" })).number);
+		const head = Number((await this.config.l1.getBlock({ blockTag: this.config.l1BlockTag ?? "finalized" })).number);
 		await this.discover(indexer, head);
 		await this.refreshStatuses(indexer, head);
 	}
@@ -95,8 +96,8 @@ export class ArbitrumCommitSource implements CommitSource {
 		const lookback = this.config.lookbackBlocks ?? (await this.getConfirmPeriod()) + 7200;
 		let next = Number(db.getState(CURSOR) ?? -1);
 		// on first start, and after downtime: older assertions can't be served
-		if (next < head - lookback) {
-			next = head - lookback;
+		if (next < Math.max(0, head - lookback)) {
+			next = Math.max(0, head - lookback);
 			db.setState(CURSOR, next);
 			indexer.log(`starting at L1 block ${next} (${lookback} blocks of assertions)`);
 		}
@@ -217,7 +218,7 @@ export class ArbitrumCommitSource implements CommitSource {
 							abi: BOLD_ROLLUP_ABI,
 							functionName: "getAssertion",
 							args: [h],
-							blockTag: "finalized",
+							blockTag: this.config.l1BlockTag ?? "finalized",
 						}),
 					),
 				),

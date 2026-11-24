@@ -58,6 +58,15 @@ The verifier walks it: each step recomputes the child's hash and reads its node.
   - a valid but unconfirmed assertion whose chain gets a rival becomes invalid.
 - **Events:** the registrar's history is 177M L2 blocks. Arbitrum's public RPC answers `eth_getLogs` over 10,000,000 blocks (Infura 10,000, drpc's free plan 100), so `ARBITRUM.wideLogsRPC` is preferred for logs: the whole replay is about 18 calls.
 
+## Offline end-to-end
+
+[offline-arbitrum.test.ts](../test/offline-arbitrum.test.ts) runs the real indexer, gateway, `ArbitrumVerifier` and resolver on anvil, with `MockBoLDRollup` creating assertions with BoLD's event and hashes (and confirming and challenging them on demand) and an in-memory L2 with real headers ([fake-arbitrum.ts](../test/fake-arbitrum.ts)):
+
+- a confirmed assertion is served, and both a confirmed-only and an early verifier accept it;
+- pending assertions `minAgeBlocks` old are served through a two-link chain, which a confirmed-only verifier refuses (`NotConfirmed`);
+- a rival child on the way makes the early commit invalid (`Challenged` on L1, invalid in the indexer), and the gateway falls back to the one before it;
+- restarting confirmed-only re-checks the valid commits: the early one goes back to pending.
+
 ## Checked on mainnet (2026-11-23)
 
 `bun run indexer:arbitrum` from an empty database, with Alchemy for proofs and a public L1 node (Infura was rate-limiting):
@@ -86,7 +95,6 @@ The verifier follows unruggable's `BoLDVerifierLib` ([contracts/arbitrum](https:
 
 - The confirm period makes finality-only proofs about 6.4 days behind; `minAgeBlocks` (for example 1,800 = 6 hours) brings that down, with the chained proof's gas growing with the unconfirmed stretch (about 150 `getAssertion` calls at most).
 - Arbitrum Nova (`0xE7E8cCC7c381809BDC4b213CE44016300707B7Bd`, BoLD) would be another deployment of the same code, if it has a registrar.
-- No offline end-to-end test yet (a fake BoLD rollup and L2 like `fake-rollup.ts`); the verifier is tested in forge on mainnet data, and the indexer live.
 
 ## References
 
