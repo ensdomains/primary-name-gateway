@@ -74,3 +74,38 @@ test("ranges are sized from the last one's density, so a dense stretch rarely fa
 	expect(ok.filter((n) => n < 5000).length).toBeWithin(110, 200);
 	expect(Math.max(...ok)).toBe(500000); // back to the widest range once sparse
 });
+
+// a provider that fails the first `n` requests with `error`, then answers with no logs
+function flakyClient(n: number, error: () => unknown) {
+	const ranges: number[] = [];
+	const client = {
+		async getLogs({ fromBlock, toBlock }: { fromBlock: bigint; toBlock: bigint }) {
+			ranges.push(Number(toBlock - fromBlock) + 1);
+			if (ranges.length <= n) throw error();
+			return [];
+		},
+	};
+	return { client: client as unknown as PublicClient, ranges };
+}
+
+test("a rate limit retries the same range after a wait, without shrinking it", async () => {
+	for (const error of [
+		() => Object.assign(new Error("HTTP request failed. Status: 429"), { status: 429 }),
+		() => new Error("Too Many Requests"),
+		() => new TypeError("undefined is not an object (evaluating 'logs.map')"), // viem, on a reply without a result
+	]) {
+		const { client, ranges } = flakyClient(2, error);
+		const reader = new RPCChangeReader(OP_MAINNET, client);
+		reader.rateLimitWaitMs = 1;
+		await reader.getChanges(0, 1_000_000);
+		expect(ranges).toEqual([5000, 5000, 5000]);
+	}
+});
+
+test("a rate limit that doesn't let up fails the call (the tick retries)", async () => {
+	const { client, ranges } = flakyClient(100, () => Object.assign(new Error("rate limited"), { status: 429 }));
+	const reader = new RPCChangeReader(OP_MAINNET, client);
+	reader.rateLimitWaitMs = 1;
+	await expect(reader.getChanges(0, 1_000_000)).rejects.toThrow("rate limited");
+	expect(ranges).toEqual(Array(6).fill(5000));
+});

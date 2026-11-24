@@ -14,7 +14,7 @@ The limits below are what we observed with our own keys on 2026-11-22 (drpc paid
 
 The batch inbox indexer also reads blobs from L1's beacon API ([op-batch-inbox.md](op-batch-inbox.md)): `BEACON_URL_<id>` if set, otherwise the L1's public beacon (`beaconURL()` in [chains.ts](../packages/shared/src/chains.ts)).
 
-`createClient(chain, purpose)` ([chains.ts](../packages/shared/src/chains.ts)) picks the URL. Clients for `logs` don't retry and time out after 30s, because an oversized range fails the same way every time, slowly, and the caller should shrink it instead. The others retry 5 times with a 60s timeout.
+`createClient(chain, purpose)` ([chains.ts](../packages/shared/src/chains.ts)) picks the URL. Clients for `logs` don't retry and time out after 30s, because an oversized range fails the same way every time, slowly, and the caller should shrink it instead. A rate limit is different: HTTP 429, "Too Many Requests", or a throttled reply viem can't read (`isRateLimited` in [l2.ts](../packages/registrar-indexer/src/l2.ts)) retries the same range after 2, 4, 8, 16 and 32 s, then fails the tick. The others retry 5 times with a 60s timeout.
 
 ## Choosing a URL
 
