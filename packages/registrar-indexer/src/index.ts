@@ -1,6 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { beaconURL, createClient, DEPLOYMENTS, type Deployment, redactURL, rpcURL } from "@primary-name-gateway/shared";
+import {
+	beaconURL,
+	createClient,
+	createLog,
+	DEPLOYMENTS,
+	type Deployment,
+	redactURL,
+	rpcURL,
+} from "@primary-name-gateway/shared";
 import { ArbitrumCommitSource } from "./arbitrum.js";
 import { IndexerDB } from "./db.js";
 import { InboxCommitSource } from "./inbox.js";
@@ -9,7 +17,6 @@ import { KZG } from "./kzg.js";
 import { type ChangeReader, RPCInboxReader, RPCLineaReader, RPCOPReader } from "./l2.js";
 import { LineaCommitSource } from "./linea.js";
 import { lockDatabase } from "./lock.js";
-import { createLog } from "./log.js";
 import { OPCommitSource } from "./op.js";
 import { n } from "./progress.js";
 import { serveIndexer } from "./server.js";
@@ -36,7 +43,6 @@ export {
 } from "./l2.js";
 export { LINEA_ROLLUP_ABI, LineaCommitSource, type LineaSourceConfig } from "./linea.js";
 export { lockDatabase } from "./lock.js";
-export { createLog, lineColor, useColor } from "./log.js";
 export { OPCommitSource, type OPSourceConfig } from "./op.js";
 export { serveIndexer } from "./server.js";
 export { KeptVersions, SqlRowLog } from "./sql-row-log.js";
@@ -149,7 +155,7 @@ if (import.meta.main) {
 	process.once("exit", lockDatabase(dbPath));
 	const db = new IndexerDB(dbPath);
 	const log = createLog();
-	log(`${chain}: ${deployment.kind} commits, L1 ${deployment.l1.id} → L2 ${deployment.l2.id}, ${dbPath}`);
+	log(`${chain}: ${deployment.kind} commits, L1 ${deployment.l1.id}, L2 ${deployment.l2.id}, ${dbPath}`);
 	const providers: [string, string][] = [
 		["L1", rpcURL(deployment.l1)],
 		["L2", rpcURL(deployment.l2)],
@@ -192,7 +198,7 @@ if (import.meta.main) {
 		try {
 			await indexer.tick();
 		} catch (err) {
-			log("tick failed:", err);
+			log.error("tick failed:", err);
 		}
 		await Bun.sleep(pollMs);
 	}

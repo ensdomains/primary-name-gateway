@@ -77,18 +77,18 @@ export class LineaCommitSource implements CommitSource {
 				} catch (err) {
 					if (err instanceof SyncError) {
 						// not this finalization's fault: retry next tick without using up an attempt
-						indexer.log(`finalization ${id}: waiting for event sync: ${err.message}`);
+						indexer.log.warn(`finalization ${id}: waiting for event sync: ${err.message}`);
 						db.setState("nextL1Block", Number(log.blockNumber));
 						return;
 					}
 					const n = (this.attempts.get(id) ?? 0) + 1;
 					this.attempts.set(id, n);
 					if (n < maxAttempts) {
-						indexer.log(`finalization ${id}: attempt ${n} failed:`, errorMessage(err));
+						indexer.log.warn(`finalization ${id}: attempt ${n} failed:`, errorMessage(err));
 						db.setState("nextL1Block", Number(log.blockNumber)); // retry next tick
 						return;
 					}
-					indexer.log(`finalization ${id}: skipped after ${n} attempts:`, errorMessage(err));
+					indexer.log.error(`finalization ${id}: skipped after ${n} attempts:`, errorMessage(err));
 					db.putSkipped(id, errorMessage(err));
 				}
 			}

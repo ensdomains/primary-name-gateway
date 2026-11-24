@@ -67,7 +67,7 @@ export class OPCommitSource implements CommitSource {
 			db.db.transaction(() => {
 				for (const c of valid) db.putCommit({ ...c, status: "pending", validAt: undefined });
 			})();
-			indexer.log(`minAgeSec ${prev} → ${minAgeSec}: checking ${valid.length} valid games again`);
+			indexer.log.warn(`minAgeSec changed from ${prev} to ${minAgeSec}: checking ${valid.length} valid games again`);
 		}
 		db.setState("minAgeSec", minAgeSec);
 	}
@@ -144,20 +144,20 @@ export class OPCommitSource implements CommitSource {
 			return "done";
 		} catch (err) {
 			if (err instanceof SyncError) {
-				indexer.log(`game ${id}: waiting for event sync: ${err.message}`);
+				indexer.log.warn(`game ${id}: waiting for event sync: ${err.message}`);
 				return "retry";
 			}
 			if (err instanceof NotFinalizedError) {
-				indexer.log(`game ${id}: deferred: ${err.message}`);
+				indexer.log.warn(`game ${id}: deferred: ${err.message}`);
 				return "deferred";
 			}
 			const n = (this.attempts.get(id) ?? 0) + 1;
 			this.attempts.set(id, n);
 			if (n < this.config.maxAttempts) {
-				indexer.log(`game ${id}: attempt ${n} failed:`, errorMessage(err));
+				indexer.log.warn(`game ${id}: attempt ${n} failed:`, errorMessage(err));
 				return "retry";
 			}
-			indexer.log(`game ${id}: skipped after ${n} attempts:`, errorMessage(err));
+			indexer.log.error(`game ${id}: skipped after ${n} attempts:`, errorMessage(err));
 			indexer.db.putSkipped(id, `${game}: ${errorMessage(err)}`);
 			return "done";
 		}
@@ -199,7 +199,7 @@ export class OPCommitSource implements CommitSource {
 		const claim = decodeGameClaim(rootClaim, extraData, deployment.l2.id);
 		if (!claim) {
 			indexer.db.putSkipped(id, `${game}: undecodable claim`);
-			indexer.log(`game ${id}: undecodable claim`);
+			indexer.log.error(`game ${id}: undecodable claim`);
 			return;
 		}
 		// only snapshot final L2 state: the change log is append-only
@@ -238,7 +238,7 @@ export class OPCommitSource implements CommitSource {
 		if (hashOutputRootProof(outputRootProof) !== claim.outputRoot) {
 			// a bad proposal: it should lose, but we never serve it either way
 			indexer.db.putCommit({ ...commit, changeSeq: 0, status: "invalid" });
-			indexer.log(`game ${id}: output root mismatch at L2 block ${l2Block} (invalid proposal)`);
+			indexer.log.error(`game ${id}: output root mismatch at L2 block ${l2Block} (invalid proposal)`);
 			return;
 		}
 		await indexer.addCommit(commit, witness.storageHash);
@@ -325,7 +325,7 @@ export class OPCommitSource implements CommitSource {
 				if (c.status === "valid") return;
 				// wall-clock: the gateway compares this against its own clock
 				db.putCommit({ ...c, status: "valid", validAt: Math.floor(Date.now() / 1000) });
-				indexer.log(`game ${c.id}: valid (L2 block ${c.l2Block})`);
+				indexer.log.ok(`game ${c.id}: valid (L2 block ${c.l2Block})`);
 			} else if ((c.status === "valid" && !acceptableNow) || blacklisted || status === GAME_STATUS_CHALLENGER_WINS) {
 				db.putCommit({ ...c, status: "invalid" });
 				const reason = blacklisted
@@ -333,7 +333,7 @@ export class OPCommitSource implements CommitSource {
 					: status === GAME_STATUS_CHALLENGER_WINS
 						? "challenger wins"
 						: "no longer acceptable (challenged, retired or paused)";
-				indexer.log(`game ${c.id}: invalid (${reason})`);
+				indexer.log.error(`game ${c.id}: invalid (${reason})`);
 			}
 		});
 	}
