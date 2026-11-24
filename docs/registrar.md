@@ -32,7 +32,7 @@ Deployed (checked 2026-11-22 with `eth_getStorageAt` and `owner()`):
 
 | chain | chain id | coin type | variant |
 |---|---|---|---|
-| OP Mainnet | 10 | `0x8000000a` | plain |
+| Optimism | 10 | `0x8000000a` | plain |
 | Linea | 59144 | `0x8000e708` | plain |
 | Arbitrum One | 42161 | `0x8000a4b1` | plain |
 | Scroll | 534352 | `0x80082750` | plain |

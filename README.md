@@ -12,22 +12,22 @@ Each L2 has a reverse registrar holding its [ENSIP-19](https://docs.ens.domains/
 
 Proven from what the rollup itself commits to L1. **Delay** is how far behind the L2's tip the newest provable state is. Rollups with fault proofs can accept a commitment before it's final, once it has gone unchallenged for a while (`minAgeSec` / `minAgeBlocks`, set on the verifier and the indexer alike), which trusts an honest challenger to act within that time.
 
-| chain | kind | frequency | trust | delay |
+| chain | kind | every | trust | delay |
 |---|---|---|---|---|
-| [OP Mainnet](docs/optimism.md)<br>(10) | `op`: dispute games (super roots) | 1 h | fault proofs | `minAgeSec`<br>• `0`: ~7 days (finalized)<br>• `T`: T + ~40 min–1.5 h |
+| [Optimism](docs/optimism.md)<br>(10) | `op`: dispute games (super roots) | 1 h | fault proofs | `minAgeSec`<br>• `0`: ~7 days (finalized)<br>• `T`: T + ~40 min–1.5 h |
 | [Base](docs/base.md)<br>(8453) | `op`: dispute games (output roots, `AggregateVerifier`) | ~20 min | TEE proofs, challengeable with ZK | `minAgeSec`<br>• `0`: ~5 days (finalized)<br>• `T`: T + ~1 h |
 | [Arbitrum One](docs/arbitrum.md)<br>(42161) | `arbitrum`: BoLD assertions | 1 h | fault proofs (BoLD) | `minAgeBlocks`<br>• `0`: ~6.5 days (confirmed)<br>• `N`: N × 12 s + ~1.2–2.2 h (1,800: 7.7 h measured) |
 | [Linea](docs/linea.md)<br>(59144) | `linea`: ZK finalizations | a few hours | validity proofs | ~2–4 h (final when posted) |
 
-The early delays add up the time between commitments (frequency), the age of the L2 block a commitment names when it's posted (measured 2026-11-23: OP Mainnet ~20 min, Base ~35 min, Arbitrum ~1 h), and L1 finality (~13 min: the indexer only reads finalized L1). An early Arbitrum proof is a chain of assertions from the last confirmed one (about 6.4 days back), so it costs more the smaller `minAgeBlocks` is: 2.1M gas at 1,800 blocks, against ~600k confirmed-only.
+The early delays add up the time between commitments (every), the age of the L2 block a commitment names when it's posted (measured 2026-11-23: Optimism ~20 min, Base ~35 min, Arbitrum ~1 h), and L1 finality (~13 min: the indexer only reads finalized L1). An early Arbitrum proof is a chain of assertions from the last confirmed one (about 6.4 days back), so it costs more the smaller `minAgeBlocks` is: 2.1M gas at 1,800 blocks, against ~600k confirmed-only.
 
 ### Sequencer
 
 Proven from what the L2's sequencer or batcher posts, before the rollup commits to it: much fresher, trusting the batcher key instead of fault or validity proofs. Research: nothing is deployed.
 
-| name | kind | frequency | trust | chains | delay |
+| name | kind | every | trust | chains | delay |
 |---|---|---|---|---|---|
-| [OP Batch Inbox](docs/op-batch-inbox.md) | `inbox`: a batcher blob that starts a channel names its parent L2 block | ~1 min | the batcher key (`SystemConfig.batcherHash()`) | OP Mainnet, Base | ~25 min |
+| [OP Batch Inbox](docs/op-batch-inbox.md) | `inbox`: a batcher blob that starts a channel names its parent L2 block | ~1 min | the batcher key (`SystemConfig.batcherHash()`) | Optimism, Base | ~25 min |
 
 [docs/registrar.md](docs/registrar.md) covers the registrar contract, its storage layouts, and why its storage can be rebuilt from events. ENSIP-19 coin types are `0x80000000 | chainId`.
 
@@ -86,19 +86,19 @@ cd packages/contracts && forge build
 ## Run
 
 ```sh
-bun run indexer:optimism # :8100 (bun run indexer / gateway: set INDEXER_CHAIN / GATEWAY_CHAIN yourself)
-bun run gateway:optimism # :8200, from INDEXER_URL=http://localhost:8100
-bun run indexer:linea    # :8101
-bun run gateway:linea    # :8201
-bun run indexer:base     # :8102
-bun run gateway:base     # :8202
+bun run indexer:optimism    # :8100 (bun run indexer / gateway: set INDEXER_CHAIN / GATEWAY_CHAIN yourself)
+bun run gateway:optimism    # :8200, from INDEXER_URL=http://localhost:8100
+bun run indexer:linea       # :8101
+bun run gateway:linea       # :8201
+bun run indexer:base        # :8102
+bun run gateway:base        # :8202
 bun run indexer:base-inbox  # :8103 (research: docs/op-batch-inbox.md)
 bun run gateway:base-inbox  # :8203
-bun run indexer:arbitrum # :8104
-bun run gateway:arbitrum # :8204
+bun run indexer:arbitrum    # :8104
+bun run gateway:arbitrum    # :8204
 ```
 
-Indexer API: `GET /status` (`l2ChainId`, `l1ChainId`, commit kind, L2 block time, `minAgeSec`, sync position, commit counts), `/commits?status=valid&limit=2`, `/commits/:id`, `/snapshot?commit=ID&after=KEY`, `/patch?from=A&to=B`, `/changes?after=&until=`. `/snapshot` and `/patch` serve rows in the layout their `x-row-format` header names (OP Stack: [chunks](docs/optimism.md#chunks)). Responses are JSON, gzipped when the client accepts it: a Base `/snapshot` page (50,000 nodes in about 700 chunks) is about 9 MB, or 3.9 MB gzipped.
+Indexer API: `GET /status` (commit kind, `l1ChainId`, `l2ChainId`, L2 block time, `minAgeSec` / `minAgeBlocks`, sync position, commit counts), `/commits?status=valid&limit=2`, `/commits/:id`, `/snapshot?commit=ID&after=KEY`, `/patch?from=A&to=B`, `/changes?after=&until=`. `/snapshot` and `/patch` serve rows in the layout their `x-row-format` header names (OP Stack: [chunks](docs/optimism.md#chunks)). Responses are JSON, gzipped when the client accepts it: a Base `/snapshot` page (50,000 nodes in about 700 chunks) is about 9 MB, or 3.9 MB gzipped.
 
 Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
 
@@ -141,6 +141,8 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
 - [ENSIP-19](https://docs.ens.domains/ensip/19) (multichain primary names), [ENSIP-10](https://docs.ens.domains/ensip/10) (wildcard resolution), [EIP-3668](https://eips.ethereum.org/EIPS/eip-3668) (CCIP-Read)
 - [merkle-builder](https://github.com/ensdomains/merkle-builder): rebuilds storage tries from events (Merkle-Patricia and Linea)
 - [ezccip.js](https://github.com/adraffy/ezccip.js): the CCIP-Read endpoint
+- [unruggable-labs/unruggable-gateways](https://github.com/unruggable-labs/unruggable-gateways): trustless gateways for any L2 storage (GatewayVM); `ArbitrumVerifier` follows its BoLD verifier, and the batch inbox research started from its `OPBatchInboxRollup`
+- [ensdomains/evmgateway](https://github.com/ensdomains/evmgateway): ENS's earlier gateway for L2 storage proofs over CCIP-Read
 
 ## License
 

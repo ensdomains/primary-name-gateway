@@ -32,7 +32,7 @@ For a chain with id `<id>` and a purpose, the first one that's set wins:
 
 4. the chain's public RPC, where there is one (none for Base)
 
-Chain ids: Ethereum `1`, OP Mainnet `10`, Base `8453`, Linea `59144`. Logs show URLs through `redactURL()`, which hides the key for all three providers.
+Chain ids: Ethereum `1`, Optimism `10`, Base `8453`, Linea `59144`. Logs show URLs through `redactURL()`, which hides the key for all three providers.
 
 ## Providers
 
@@ -52,7 +52,7 @@ Public RPCs:
 | chain | public RPC | notes |
 |---|---|---|
 | Ethereum | `https://ethereum-rpc.publicnode.com` | answers 403 to archive requests |
-| OP Mainnet | `https://mainnet.optimism.io` | |
+| Optimism | `https://mainnet.optimism.io` | |
 | Base | none | `mainnet.base.org` rate limits `eth_getLogs` |
 | Linea | `https://rpc.linea.build` | serves `linea_getProof` |
 

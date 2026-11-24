@@ -1,6 +1,6 @@
-# OP Mainnet
+# Optimism
 
-| chain | OP Mainnet |
+| chain | Optimism |
 |---|---|
 | chain id / coin type | 10 / `0x8000000a` |
 | registrar | `0x0000000000D8e504002cC26E3Ec46D81971C1664` (plain layout, see [registrar.md](registrar.md)) |
@@ -32,7 +32,7 @@ A game takes about 7 days to become a valid claim. `OPFaultVerifier` can optiona
 2. not lost (`status != CHALLENGER_WINS`), and
 3. either resolved for the defender (waiting for the airgap), or at least `minAgeSec` old and **unchallenged**: `claimDataLen() == 1` for OP's fault dispute games, `counteredByIntermediateRootIndexPlusOne() == 0` for Base's `AggregateVerifier` (type 621). Unknown game types are never accepted early.
 
-**Trust:** this assumes honest challengers respond within `minAgeSec`. A fraudulent proposal that nobody challenges in time is accepted until it is challenged, loses, or is blacklisted; from then on the verifier rejects it, the indexer marks it `invalid`, and gateways rewind to their newest acceptable commit. For calibration, 2 of OP Mainnet's last 200 games (as of 2026-11-22) had been challenged.
+**Trust:** this assumes honest challengers respond within `minAgeSec`. A fraudulent proposal that nobody challenges in time is accepted until it is challenged, loses, or is blacklisted; from then on the verifier rejects it, the indexer marks it `invalid`, and gateways rewind to their newest acceptable commit. For calibration, 2 of Optimism's last 200 games (as of 2026-11-22) had been challenged.
 
 The indexer has to apply the same rule as the deployed verifier, or a gateway serves commits the verifier rejects: set `INDEXER_MIN_AGE_SEC` to the verifier's `minAgeSec`. It then polls pending games from that age on, and keeps re-checking the valid games a gateway may hold (the newest `retainValid`). `/status` reports it as `minAgeSec`, and `test:mainnet` deploys its verifier with it; `bun run prove` takes it as `--min-age`, since it only talks to the gateway.
 

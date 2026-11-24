@@ -18,7 +18,7 @@ Channel data is `rlp(batch) ...` compressed, after a 1-byte channel version (`0x
 
 | chain | batch type | parent | measured 2026-11-23 |
 |---|---|---|---|
-| OP Mainnet | span (`0x01`): `rel_timestamp`, `l1_origin_num` (uvarints), `parent_check`, `l1_origin_check` (bytes20) | first 20 bytes of the parent L2 block hash | channel of 5 blobs, one 130 KB frame each |
+| Optimism | span (`0x01`): `rel_timestamp`, `l1_origin_num` (uvarints), `parent_check`, `l1_origin_check` (bytes20) | first 20 bytes of the parent L2 block hash | channel of 5 blobs, one 130 KB frame each |
 | Base | singular (`0x00`): `rlp([parent_hash, epoch_num, epoch_hash, timestamp, txs])` | full parent hash | channel continues over several transactions |
 
 Only frame 0 (the first blob of the channel's first transaction) is needed.
@@ -27,7 +27,7 @@ A span batch's first block is the one at `l2 genesis time + rel_timestamp` whose
 
 ## Verifier steps
 
-[OPBatchInboxVerifier.sol](../packages/contracts/src/op/OPBatchInboxVerifier.sol) implements `IL2StorageVerifier` with these steps. Its commit proof is `abi.encode(OPBatchInboxCommitProof)` (`encodeOPBatchInboxCommitProof` in [op-batch.ts](../packages/shared/src/op-batch.ts)); the account and storage proofs are the same as `OPFaultVerifier`'s. Parameters: the chain's `SystemConfig` (for `batcherHash()`), its batch inbox, `maxOriginLag` (below the sequencing window, 3600 L1 blocks on OP Mainnet and Base) and `maxBlockLag`.
+[OPBatchInboxVerifier.sol](../packages/contracts/src/op/OPBatchInboxVerifier.sol) implements `IL2StorageVerifier` with these steps. Its commit proof is `abi.encode(OPBatchInboxCommitProof)` (`encodeOPBatchInboxCommitProof` in [op-batch.ts](../packages/shared/src/op-batch.ts)); the account and storage proofs are the same as `OPFaultVerifier`'s. Parameters: the chain's `SystemConfig` (for `batcherHash()`), its batch inbox, `maxOriginLag` (below the sequencing window, 3600 L1 blocks on Optimism and Base) and `maxBlockLag`.
 
 1. L1 block header against `blockhash` / EIP-2935 (8,191 blocks, about 27 hours).
 2. The batcher transaction: MPT proof in the block's transaction trie, `to` = the batch inbox, sender recovered from the type-3 signature = `SystemConfig.batcherHash()`.
@@ -40,7 +40,7 @@ A span batch's first block is the one at `l2 genesis time + rel_timestamp` whose
 
 The prefix can't be read without the meta-block header: literals are Huffman-coded with trees defined up front, and the header is most of what's read. `bun scripts/op-batch-cost.ts` on the fixtures in `packages/contracts/test/fixtures/op-batch/`:
 
-| | Base | OP Mainnet |
+| | Base | Optimism |
 |---|---|---|
 | compressed bytes read (header) | 1,981 (1,868) | 1,169 (1,077) |
 | blob field elements to prove | 64 | 40 |
@@ -61,7 +61,7 @@ The static dictionary is not supported: a reference to it is refused (`BrotliUns
 
 | frame (bytes decoded) | gas |
 |---|---|
-| OP Mainnet (64) | 3.1M |
+| Optimism (64) | 3.1M |
 | Base (112) | 5.5M |
 
 Almost all of it is the header, mostly reading code lengths (`forge test --match-contract BrotliPrefixTest --flamegraph` profiles it). A code's symbol table is only built when the code is first used. With ~2–3M for the blob field elements, a whole proof would be around 10M gas, which fits an `eth_call`. A word-buffered bit reader in assembly is the next step if it needs to be cheaper.
@@ -78,7 +78,7 @@ The fixtures `packages/contracts/test/fixtures/op-batch/{op,base}-blob.json` hol
 
 | `readBatch` (64 field elements) | gas |
 |---|---|
-| OP Mainnet | 6.7M (3.4M KZG; 40 elements would do: ~5.4M) |
+| Optimism | 6.7M (3.4M KZG; 40 elements would do: ~5.4M) |
 | Base | 9.0M (3.4M KZG, 5.5M brotli) |
 
 ## End to end
@@ -90,7 +90,7 @@ The fixtures `packages/contracts/test/fixtures/op-batch/{op,base}-blob.json` hol
 
 | `verifyStorageRoot` | gas |
 |---|---|
-| OP Mainnet (64 field elements) | 7.6M |
+| Optimism (64 field elements) | 7.6M |
 | Base | 10.0M |
 
 ## Indexer and gateway

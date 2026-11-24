@@ -20,7 +20,7 @@ What this repo relies on is the standard `IDisputeGame` surface, which it keeps:
 
 - `rootClaim` is a standard (version 0) output root. Checked on mainnet: the latest game's root matched the output root recomputed from L2.
 - `extraData` is `l2BlockNumber (32) . parentGame (20) . intermediate roots (32 each)`. `decodeGameClaim` reads the first word as the L2 block, as for any output root game.
-- `l2SequenceNumber()` is the L2 block number, so `maxSequenceLag` is in **blocks**, not seconds as on OP Mainnet's super root games. Since Denim a block is 0.2 s ([below](#block-time)): 86,400 blocks is 4.8 hours, not 2 days.
+- `l2SequenceNumber()` is the L2 block number, so `maxSequenceLag` is in **blocks**, not seconds as on Optimism's super root games. Since Denim a block is 0.2 s ([below](#block-time)): 86,400 blocks is 4.8 hours, not 2 days.
 - `status()` uses the standard `GameStatus` (`CHALLENGER_WINS` = 1), and validity, blacklisting and retirement come from the `AnchorStateRegistry`.
 
 Games are created about every 20 minutes (6,000 blocks).
