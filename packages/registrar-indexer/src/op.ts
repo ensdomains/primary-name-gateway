@@ -67,7 +67,7 @@ export class OPCommitSource implements CommitSource {
 			db.db.transaction(() => {
 				for (const c of valid) db.putCommit({ ...c, status: "pending", validAt: undefined });
 			})();
-			indexer.log.warn(`minAgeSec ${prev} → ${minAgeSec}: checking ${valid.length} valid games again`);
+			indexer.log.warn(`minAgeSec changed from ${prev} to ${minAgeSec}: checking ${valid.length} valid games again`);
 		}
 		db.setState("minAgeSec", minAgeSec);
 	}

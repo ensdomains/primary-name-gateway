@@ -155,7 +155,7 @@ if (import.meta.main) {
 	process.once("exit", lockDatabase(dbPath));
 	const db = new IndexerDB(dbPath);
 	const log = createLog();
-	log(`${chain}: ${deployment.kind} commits, L1 ${deployment.l1.id} → L2 ${deployment.l2.id}, ${dbPath}`);
+	log(`${chain}: ${deployment.kind} commits, L1 ${deployment.l1.id}, L2 ${deployment.l2.id}, ${dbPath}`);
 	const providers: [string, string][] = [
 		["L1", rpcURL(deployment.l1)],
 		["L2", rpcURL(deployment.l2)],

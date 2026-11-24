@@ -71,7 +71,9 @@ export class ArbitrumCommitSource implements CommitSource {
 			db.db.transaction(() => {
 				for (const c of valid) db.putCommit({ ...c, status: "pending", validAt: undefined });
 			})();
-			indexer.log.warn(`minAgeBlocks ${prev} → ${minAge}: checking ${valid.length} valid assertions again`);
+			indexer.log.warn(
+				`minAgeBlocks changed from ${prev} to ${minAge}: checking ${valid.length} valid assertions again`,
+			);
 		}
 		db.setState("minAgeBlocks", minAge);
 	}

@@ -29,7 +29,7 @@ const gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(db)), {
 });
 const held = gateway.commits.length;
 log(
-	`${chain}: ${deployment.kind} commits, L1 ${deployment.l1.id} → L2 ${deployment.l2.id}, ${dbPath} (${held ? `resuming with ${held} held commits` : "empty"})`,
+	`${chain}: ${deployment.kind} commits, L1 ${deployment.l1.id}, L2 ${deployment.l2.id}, ${dbPath} (${held ? `resuming with ${held} held commits` : "empty"})`,
 );
 const pollMs = Number(env.GATEWAY_POLL_MS ?? 30_000);
 let timer: ReturnType<typeof setTimeout> | undefined;
