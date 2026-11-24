@@ -119,13 +119,33 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
   - Tries: [trie.test.ts](test/trie.test.ts) (the indexer's SQL row log against merkle-builder's `EthStorage` at every kept version: snapshots, patches, proofs, rebuilt out-of-order versions), [inline-node.test.ts](test/inline-node.test.ts) (nodes under 32 bytes, through to the verifier), [linea.test.ts](test/linea.test.ts) (Linea rows and multiproofs against merkle-builder's `LineaStorage`), [store.test.ts](test/store.test.ts) (both `NodeStore`s against an unpruned reference).
   - Tries, more: [chunks.test.ts](test/chunks.test.ts) (chunk rows against merkle-builder: paged snapshots, patches, proofs).
   - RPC: [l2.test.ts](test/l2.test.ts) (`eth_getLogs` range sizing, limits and rate limits), [raw-transaction.test.ts](test/raw-transaction.test.ts) (transactions re-encoded from a block), [block-schedule.test.ts](test/block-schedule.test.ts) (L2 block times, span batch parents).
-  - Services: [indexer-db.test.ts](test/indexer-db.test.ts) (commit sources sharing a database, the lock), [inbox-scan.test.ts](test/inbox-scan.test.ts) (the batch inbox scan), [commit-proofs.test.ts](test/commit-proofs.test.ts), [server.test.ts](test/server.test.ts) (gzip), [progress.test.ts](test/progress.test.ts), [log.test.ts](test/log.test.ts).
+  - Services: [indexer-db.test.ts](test/indexer-db.test.ts) (commit sources sharing a database, the lock), [inbox-scan.test.ts](test/inbox-scan.test.ts) (the batch inbox scan), [commit-proofs.test.ts](test/commit-proofs.test.ts), [server.test.ts](test/server.test.ts) (gzip), [progress.test.ts](test/progress.test.ts), [log.test.ts](test/log.test.ts), [rpc-url.test.ts](test/rpc-url.test.ts) (which URL each RPC purpose gets).
   - End to end: [offline.test.ts](test/offline.test.ts), [offline-base.test.ts](test/offline-base.test.ts), [offline-minage.test.ts](test/offline-minage.test.ts), [offline-linea.test.ts](test/offline-linea.test.ts) and [offline-arbitrum.test.ts](test/offline-arbitrum.test.ts) run mock L1 contracts and an in-memory L2 ([OP](test/fake-rollup.ts), [Linea](test/fake-linea.ts), [Arbitrum](test/fake-arbitrum.ts)) through the real indexer, gateway, verifier and resolver: name updates, invalid or skipped commits, stale commits, out-of-order games, and restarts.
   - Batch inbox: [brotli.test.ts](test/brotli.test.ts), [brotli-sol.test.ts](test/brotli-sol.test.ts), [op-batch-sol.test.ts](test/op-batch-sol.test.ts), [op-batch-verifier.test.ts](test/op-batch-verifier.test.ts) and [kzg.test.ts](test/kzg.test.ts) ([docs/op-batch-inbox.md](docs/op-batch-inbox.md)).
   - forge: unit tests, [LineaVerifier.t.sol](packages/contracts/test/LineaVerifier.t.sol) on real `linea_getProof` output, [ArbitrumVerifier.t.sol](packages/contracts/test/ArbitrumVerifier.t.sol) on a real assertion, and [BrotliPrefix.t.sol](packages/contracts/test/BrotliPrefix.t.sol) (gas).
 - `bun run test:mainnet` needs a running indexer (any chain, at `INDEXER_URL`, default `:8100`) with a valid commit and RPC keys. It deploys the chain's verifier and the resolver on an anvil fork of L1 mainnet, resolves names through CCIP-Read, and checks every indexed name (or a sample of `MAINNET_SAMPLE`, up to half of it long names) against the registrar.
 - `bun run test:fork` runs `OPBatchInboxVerifier` on L1 mainnet forks (archive RPC).
 - `bun run prove <address> <chain>` proves one address's primary name through a gateway (the port of `gateway:<chain>`, or `--gateway URL`). It never contacts the indexer, only the gateway as a client would (and L1 / L2 RPC), so it works against any gateway, including one whose indexer is stopped or out of reach. It deploys the chain's verifier and a resolver pointing at the gateway on a blocksmith fork of L1, resolves the name through CCIP-Read, reads the L2 block from the proof's commit proof, and prints:
+
+  ```
+  launching an L1 fork of https://mainnet.infura.io/v3/***... (1.6 s)
+  L1 fork at block 26,487,410 (2026-11-24T20:28:23.000Z)
+  deploying ArbitrumVerifier... 0x5C51…3f9F (867 ms)
+  deploying L2ReverseResolver... 0xa349…9aB8 (406 ms)
+  warming the fork (a first resolve loads the L1 state it reads)... (32.0 s)
+  resolving 629c26b50823872e561a721c0c2d5113edda4dd9.8000a4b1.reverse... (16 ms)
+  estimating verifyName gas... (279 ms)
+  reading the L2 at the proof's block... (343 ms)
+
+  name      "lillithh.eth"
+  gateway   7 ms, 16,384-byte response
+  verify    2,101,676 gas (verifyName on the L1 fork)
+  proof     L2 block 527,125,030 (arbitrum: assertion 0x10fd66f7…, 149 links from a confirmed one)
+  finalized L2 block 527,219,783: the proof is 94,753 blocks (7h08m) behind
+  L2        matches L2ReverseRegistrar.nameForAddr at L2 block 527,125,030
+  ```
+
+  The first resolve only warms the fork: it pulls the L1 state the verifier reads (the rollup, the assertion chain) over RPC, which takes tens of seconds. The second is the one timed, as a client would see it. Another run, on the Base batch inbox:
 
   ```
   name      "quelburr.base.eth"
@@ -137,6 +157,8 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
   ```
 
   If the indexer accepts commits early, pass its value as `--min-age`: seconds for OP Stack fault proofs (`INDEXER_MIN_AGE_SEC`), L1 blocks for Arbitrum (`INDEXER_MIN_AGE_L1_BLOCKS`). It defaults to that variable when set.
+
+  `--public` forks L1 from its public RPC (`rpcURL(chain, "public")`) and doesn't read the L2, so it needs no keys at all: it prints the name, the gateway's time and size, and the gas, but not the proof's L2 block or the comparison with the registrar.
 
 ## References
 
