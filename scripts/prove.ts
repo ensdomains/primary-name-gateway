@@ -5,10 +5,10 @@
 //
 //   bun run prove <address> <chain> [--gateway URL] [--min-age SEC]
 //
-// chain: a deployment (base, base-inbox, optimism, linea, ...); the gateway defaults to the port of
-// `bun run gateway:<chain>`. --min-age: the verifier's early acceptance, as the indexer's: OP Stack fault
-// proofs in seconds (INDEXER_MIN_AGE_SEC), Arbitrum in L1 blocks (INDEXER_MIN_AGE_BLOCKS); default that
-// variable, or 0. Needs .env RPC keys.
+// chain: a deployment (base, base-inbox, optimism, linea, ...). --gateway: its URL, default
+// http://localhost:<port> with the port of `bun run gateway:<chain>`. --min-age: the verifier's
+// early acceptance, as the indexer's: OP Stack fault proofs in seconds (INDEXER_MIN_AGE_SEC), Arbitrum in
+// L1 blocks (INDEXER_MIN_AGE_BLOCKS); default that variable, or 0. Needs .env RPC keys.
 
 import { Foundry } from "@adraffy/blocksmith";
 import {
