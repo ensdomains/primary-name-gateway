@@ -31,9 +31,9 @@ For a chain with id `<id>` and a purpose, the first one that's set wins:
    | `logs` | drpc, Infura, Alchemy |
    | `proof` | Alchemy, drpc, Infura |
 
-5. the chain's public RPC, where there is one (none for Base)
+5. the chain's public RPC, except Base's (`mainnet.base.org` rate limits `eth_getLogs`, so Base needs a key)
 
-`public` skips all of this: the chain's public RPC only, so no key is spent (and none can leak), or an error where there is none (Base). Nothing in the indexer or gateway asks for it; it's for scripts and tools.
+`public` skips all of this: the chain's public RPC only (Base's included), so no key is spent and none can leak. Nothing in the indexer or gateway asks for it; it's for scripts and tools such as `bun run prove --public`.
 
 Chain ids: Ethereum `1`, Optimism `10`, Base `8453`, Linea `59144`, Arbitrum One `42161`. Logs show URLs through `redactURL()`, which hides the key for all three providers.
 
@@ -56,7 +56,7 @@ Public RPCs:
 |---|---|---|
 | Ethereum | `https://ethereum-rpc.publicnode.com` | answers 403 to archive requests |
 | Optimism | `https://mainnet.optimism.io` | |
-| Base | none | `mainnet.base.org` rate limits `eth_getLogs` |
+| Base | `https://mainnet.base.org` | only for `public`: it rate limits `eth_getLogs`, so it's never a fallback |
 | Linea | `https://rpc.linea.build` | serves `linea_getProof` |
 | Arbitrum One | `https://arb1.arbitrum.io/rpc` | `eth_getLogs` over up to 10,000,000 blocks: preferred for logs |
 
@@ -131,6 +131,8 @@ Gateway (`bun run gateway:<chain>`, or `bun run gateway` with `GATEWAY_CHAIN`):
 |---|---|---|
 | `GATEWAY_URL` | the chain's gateway port on localhost | or `--gateway URL` |
 | `INDEXER_MIN_AGE_SEC` / `INDEXER_MIN_AGE_L1_BLOCKS` | `0` | the verifier's early acceptance (OP Stack seconds / Arbitrum L1 blocks), or `--min-age` |
+
+It forks L1 from its `default` URL and reads the L2 with `default` and `proof` clients. With `--public` it forks L1's public RPC and doesn't read the L2, so no keys are needed.
 
 Fork test (`bun run test:fork`, [op-batch-inbox.md](op-batch-inbox.md)): needs an archive L1 RPC (`ALCHEMY_KEY`, or `PROOF_RPC_URL_1` / `RPC_URL_1`).
 

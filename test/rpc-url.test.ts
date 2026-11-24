@@ -32,9 +32,12 @@ test("keys by purpose, explicit URLs first, the public RPC last", () => {
 	expect(rpcURL(ARBITRUM_MAINNET.l2, "logs")).toBe(ARBITRUM_MAINNET.l2.wideLogsRPC!);
 });
 
-test("public: the chain's public RPC whatever is set, or an error", () => {
+test("public: the chain's public RPC whatever is set", () => {
 	process.env.DRPC_KEY = "d";
 	process.env.RPC_URL_10 = "http://explicit";
 	expect(rpcURL(op, "public")).toBe(op.publicRPC!);
-	expect(() => rpcURL(BASE_MAINNET.l2, "public")).toThrow("no public rpc for base");
+	// Base's public RPC rate limits eth_getLogs: only "public" uses it, the others need a key
+	expect(rpcURL(BASE_MAINNET.l2, "public")).toBe("https://mainnet.base.org");
+	delete process.env.DRPC_KEY;
+	expect(() => rpcURL(BASE_MAINNET.l2)).toThrow("no rpc for base");
 });

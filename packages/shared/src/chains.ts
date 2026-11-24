@@ -7,7 +7,8 @@ export type ChainInfo = {
 	drpcSlug: string;
 	alchemySlug: string;
 	infuraSlug?: string;
-	publicRPC?: string;
+	publicRPC?: string; // keyless: what "public" returns, and the last resort for the other purposes
+	publicFallback?: false; // the public RPC is too limited to be that last resort: only "public" uses it
 	wideLogsRPC?: string; // a public endpoint with wide eth_getLogs, preferred for "logs" over keyed providers
 	logStep?: number; // eth_getLogs block range
 };
@@ -43,7 +44,8 @@ export const BASE: ChainInfo = {
 	drpcSlug: "base",
 	alchemySlug: "base-mainnet",
 	infuraSlug: "base-mainnet",
-	// no publicRPC: mainnet.base.org rate limits eth_getLogs
+	publicRPC: "https://mainnet.base.org",
+	publicFallback: false, // rate limits eth_getLogs: the indexer needs a key
 	logStep: 500000,
 };
 
@@ -261,7 +263,7 @@ export function rpcURL(chain: ChainInfo, purpose: RPCPurpose = "default"): strin
 		const url = urls[provider];
 		if (url) return url;
 	}
-	if (chain.publicRPC) return chain.publicRPC;
+	if (chain.publicRPC && chain.publicFallback !== false) return chain.publicRPC;
 	throw new Error(`no rpc for ${chain.name}: set RPC_URL_${chain.id}, DRPC_KEY, ALCHEMY_KEY or INFURA_KEY`);
 }
 

@@ -128,6 +128,26 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
 - `bun run prove <address> <chain>` proves one address's primary name through a gateway (the port of `gateway:<chain>`, or `--gateway URL`). It never contacts the indexer, only the gateway as a client would (and L1 / L2 RPC), so it works against any gateway, including one whose indexer is stopped or out of reach. It deploys the chain's verifier and a resolver pointing at the gateway on a blocksmith fork of L1, resolves the name through CCIP-Read, reads the L2 block from the proof's commit proof, and prints:
 
   ```
+  launching an L1 fork of https://mainnet.infura.io/v3/***... (1.6 s)
+  L1 fork at block 26,487,410 (2026-11-24T20:28:23.000Z)
+  deploying ArbitrumVerifier... 0x5C51…3f9F (867 ms)
+  deploying L2ReverseResolver... 0xa349…9aB8 (406 ms)
+  warming the fork (a first resolve loads the L1 state it reads)... (32.0 s)
+  resolving 629c26b50823872e561a721c0c2d5113edda4dd9.8000a4b1.reverse... (16 ms)
+  estimating verifyName gas... (279 ms)
+  reading the L2 at the proof's block... (343 ms)
+
+  name      "lillithh.eth"
+  gateway   7 ms, 16,384-byte response
+  verify    2,101,676 gas (verifyName on the L1 fork)
+  proof     L2 block 527,125,030 (arbitrum: assertion 0x10fd66f7…, 149 links from a confirmed one)
+  finalized L2 block 527,219,783: the proof is 94,753 blocks (7h08m) behind
+  L2        matches L2ReverseRegistrar.nameForAddr at L2 block 527,125,030
+  ```
+
+  The first resolve only warms the fork: it pulls the L1 state the verifier reads (the rollup, the assertion chain) over RPC, which takes tens of seconds. The second is the one timed, as a client would see it. Another run, on the Base batch inbox:
+
+  ```
   name      "quelburr.base.eth"
   gateway   23 ms, 25,088-byte response
   verify    12,975,804 gas (verifyName on the L1 fork)
@@ -137,6 +157,8 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
   ```
 
   If the indexer accepts commits early, pass its value as `--min-age`: seconds for OP Stack fault proofs (`INDEXER_MIN_AGE_SEC`), L1 blocks for Arbitrum (`INDEXER_MIN_AGE_L1_BLOCKS`). It defaults to that variable when set.
+
+  `--public` forks L1 from its public RPC (`rpcURL(chain, "public")`) and doesn't read the L2, so it needs no keys at all: it prints the name, the gateway's time and size, and the gas, but not the proof's L2 block or the comparison with the registrar.
 
 ## References
 
