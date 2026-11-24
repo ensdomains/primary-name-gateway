@@ -30,7 +30,7 @@ One object per served chain, for example named `base`, holds that chain's gatewa
 |---|---|
 | `NodeStore` (versioned trie rows) | `SqlNodeStore` over `ctx.storage.sql` |
 | `sync()` (poll the indexer, apply patches) | the `alarm()` handler, rescheduled every poll interval |
-| CCIP-Read requests (`proveName`), and JSON-RPC at `/rpc` ([gateway-rpc.md](gateway-rpc.md)) | the object's `fetch()`, served by `createGatewayHandler(gateway, { chainId, registrar })` (CCIP-Read through [`@adraffy/ezccip`](https://github.com/adraffy/ezccip.js)'s `createFetchHandler`) |
+| CCIP-Read requests (`proveName`), JSON-RPC at `/rpc` ([gateway-rpc.md](gateway-rpc.md)), and `/status` | the object's `fetch()`, served by `createGatewayHandler(gateway, { kind, l1ChainId, l2ChainId, registrar })` (CCIP-Read through [`@adraffy/ezccip`](https://github.com/adraffy/ezccip.js)'s `createFetchHandler`) |
 | gateway state (held commits, the store's head, a snapshot in progress) | the `gateway_meta` table in the same SQLite database |
 | the indexer | a normal server; the object reaches it over HTTP (`indexerURL`) |
 
@@ -75,12 +75,17 @@ export class Gateway extends DurableObject<Env> {
 		});
 		this.gateway = new RegistrarGateway(store, {
 			indexerURL: env.INDEXER_URL,
-			keep: 2,
-			marginSec: 120,
+			keepCommits: 2,
+			serveDelaySec: 0,
 			layout: DEPLOYMENTS[env.CHAIN].layout,
 		});
 		const d = DEPLOYMENTS[env.CHAIN];
-		this.handler = createGatewayHandler(this.gateway, { chainId: d.l2.id, registrar: d.L2ReverseRegistrar });
+		this.handler = createGatewayHandler(this.gateway, {
+			kind: d.kind,
+			l1ChainId: d.l1.id,
+			l2ChainId: d.l2.id,
+			registrar: d.L2ReverseRegistrar,
+		});
 		// start syncing on first use
 		ctx.blockConcurrencyWhile(async () => {
 			if ((await ctx.storage.getAlarm()) === null) await ctx.storage.setAlarm(Date.now());

@@ -82,8 +82,8 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 	beforeAll(async () => {
 		gateway = new RegistrarGateway(new MemoryNodeStore(), {
 			indexerURL: INDEXER_URL,
-			keep: 2,
-			marginSec: 0,
+			keepCommits: 2,
+			serveDelaySec: 0,
 			layout: d.layout,
 		});
 		await gateway.sync();

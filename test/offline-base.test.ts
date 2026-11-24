@@ -114,8 +114,8 @@ describe("offline e2e (base: output root games, Ownable layout)", () => {
 		gatewayDB = new Database(":memory:");
 		gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(gatewayDB)), {
 			indexerURL: indexerServer.url.origin,
-			keep: 2,
-			marginSec: 0,
+			keepCommits: 2,
+			serveDelaySec: 0,
 			layout: OWNABLE_LAYOUT,
 		});
 		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });

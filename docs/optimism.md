@@ -104,7 +104,7 @@ The indexer keeps the trie in its SQLite database as versioned rows ([sql-row-lo
 
 - **Archive state.** A game becomes valid about 7 days after creation (3.5d clock + 3.5d airgap), which is ~300k L2 blocks, past what pruned nodes keep. In steady state the indexer fetches the witness when a game is created, so recent state is enough. Bootstrapping with a lookback (`INDEXER_LOOKBACK_SEC`, default 8 days) needs an archive provider for proofs: proofs prefer Alchemy and logs prefer drpc.
 - `INDEXER_LOOKBACK_SEC` (default 8 days), `INDEXER_MIN_FINAL_AGE_SEC` (default 6 days).
-- The gateway serves the newest valid commit that has been valid for at least `GATEWAY_MARGIN_SEC`, so an L1 node that lags slightly still accepts it.
+- The gateway serves the newest valid commit. Validity is judged on finalized L1 and only grows with it, so a client reading at latest accepts it; `GATEWAY_SERVE_DELAY_SEC` (default 0) can hold it back for clients reading at finalized.
 
 ```sh
 bun run indexer:optimism   # :8100

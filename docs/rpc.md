@@ -116,8 +116,8 @@ Gateway (`bun run gateway:<chain>`, or `bun run gateway` with `GATEWAY_CHAIN`):
 | `INDEXER_URL` | `http://localhost:8100` | |
 | `GATEWAY_PORT` | `8200` | |
 | `GATEWAY_DB` | `data/gateway-<chain>.sqlite` | |
-| `GATEWAY_KEEP` | `2` | valid commits held |
-| `GATEWAY_MARGIN_SEC` | `120` | serve a commit once it has been valid this long |
+| `GATEWAY_KEEP_COMMITS` | `2` | valid commits held: the newest, and fallbacks while `GATEWAY_SERVE_DELAY_SEC` runs |
+| `GATEWAY_SERVE_DELAY_SEC` | `0` | serve a commit only once it has been valid this long. The indexer judges validity on finalized L1 and validity only grows, so clients reading at latest are already past it; a few seconds only help clients reading at finalized |
 | `GATEWAY_POLL_MS` | `30000` | |
 
 Fork test (`bun run test:fork`, [op-batch-inbox.md](op-batch-inbox.md)): needs an archive L1 RPC (`ALCHEMY_KEY`, or `PROOF_RPC_URL_1` / `RPC_URL_1`).
