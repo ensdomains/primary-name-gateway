@@ -9,6 +9,7 @@ import { KZG } from "./kzg.js";
 import { type ChangeReader, RPCInboxReader, RPCLineaReader, RPCOPReader } from "./l2.js";
 import { LineaCommitSource } from "./linea.js";
 import { lockDatabase } from "./lock.js";
+import { createLog } from "./log.js";
 import { OPCommitSource } from "./op.js";
 import { n } from "./progress.js";
 import { serveIndexer } from "./server.js";
@@ -35,6 +36,7 @@ export {
 } from "./l2.js";
 export { LINEA_ROLLUP_ABI, LineaCommitSource, type LineaSourceConfig } from "./linea.js";
 export { lockDatabase } from "./lock.js";
+export { createLog, lineColor, useColor } from "./log.js";
 export { OPCommitSource, type OPSourceConfig } from "./op.js";
 export { serveIndexer } from "./server.js";
 export { KeptVersions, SqlRowLog } from "./sql-row-log.js";
@@ -130,9 +132,14 @@ function createSource(deployment: Deployment, log: Log): { l2: ChangeReader; sou
 
 if (import.meta.main) {
 	const env = process.env;
-	const chain = env.INDEXER_CHAIN ?? "optimism";
-	const deployment = DEPLOYMENTS[chain];
-	if (!deployment) throw new Error(`unknown INDEXER_CHAIN: ${chain} (${Object.keys(DEPLOYMENTS).join(", ")})`);
+	const chain = env.INDEXER_CHAIN;
+	const deployment = chain && DEPLOYMENTS[chain];
+	if (!deployment) {
+		console.error(
+			`${chain ? `unknown INDEXER_CHAIN: ${chain}` : "set INDEXER_CHAIN"} (${Object.keys(DEPLOYMENTS).join(", ")}), or use bun run indexer:<chain>`,
+		);
+		process.exit(1);
+	}
 	const port = Number(env.INDEXER_PORT ?? 8100);
 	const pollMs = Number(env.INDEXER_POLL_MS ?? 30_000);
 	// one database per L2: base and base-inbox share their events and trie, one indexer at a time
@@ -141,11 +148,19 @@ if (import.meta.main) {
 	mkdirSync(dirname(dbPath), { recursive: true });
 	process.once("exit", lockDatabase(dbPath));
 	const db = new IndexerDB(dbPath);
-	const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
-	log(`${chain}: L1 ${redactURL(rpcURL(deployment.l1))}`);
-	log(`${chain}: L2 ${redactURL(rpcURL(deployment.l2))}`);
-	log(`${chain}: L2 proofs ${redactURL(rpcURL(deployment.l2, "proof"))}`);
-	if (deployment.kind === "inbox") log(`${chain}: L1 beacon ${redactURL(beaconURL(deployment.l1))}`);
+	const log = createLog();
+	log(`${chain}: ${deployment.kind} commits, L1 ${deployment.l1.id} → L2 ${deployment.l2.id}, ${dbPath}`);
+	const providers: [string, string][] = [
+		["L1", rpcURL(deployment.l1)],
+		["L2", rpcURL(deployment.l2)],
+		["L2 logs", rpcURL(deployment.l2, "logs")],
+		["L2 proofs", rpcURL(deployment.l2, "proof")],
+	];
+	if (deployment.kind === "inbox") providers.push(["L1 beacon", beaconURL(deployment.l1)]);
+	for (const [what, url] of providers) {
+		if (what === "L2 logs" && url === providers[1][1]) continue; // the same as L2
+		log(`  ${what.padEnd(9)} ${redactURL(url)}`);
+	}
 	const config: IndexerConfig = {
 		deployment,
 		db,

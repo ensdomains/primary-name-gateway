@@ -107,8 +107,8 @@ The indexer keeps the trie in its SQLite database as versioned rows ([sql-row-lo
 - The gateway serves the newest valid commit that has been valid for at least `GATEWAY_MARGIN_SEC`, so an L1 node that lags slightly still accepts it.
 
 ```sh
-bun run indexer   # :8100
-bun run gateway   # :8200
+bun run indexer:optimism   # :8100
+bun run gateway:optimism   # :8200
 ```
 
 ## References

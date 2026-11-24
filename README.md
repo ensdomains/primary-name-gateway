@@ -86,14 +86,16 @@ cd packages/contracts && forge build
 ## Run
 
 ```sh
-bun run indexer          # INDEXER_CHAIN=optimism, :8100
-bun run gateway          # GATEWAY_CHAIN=optimism, :8200, from INDEXER_URL=http://localhost:8100
+bun run indexer:optimism # :8100 (bun run indexer / gateway: set INDEXER_CHAIN / GATEWAY_CHAIN yourself)
+bun run gateway:optimism # :8200, from INDEXER_URL=http://localhost:8100
 bun run indexer:linea    # :8101
 bun run gateway:linea    # :8201
 bun run indexer:base     # :8102
 bun run gateway:base     # :8202
 bun run indexer:base-inbox  # :8103 (research: docs/op-batch-inbox.md)
 bun run gateway:base-inbox  # :8203
+bun run indexer:arbitrum # :8104
+bun run gateway:arbitrum # :8204
 ```
 
 Indexer API: `GET /status` (`l2ChainId`, `l1ChainId`, commit kind, L2 block time, `minAgeSec`, sync position, commit counts), `/commits?status=valid&limit=2`, `/commits/:id`, `/snapshot?commit=ID&after=KEY`, `/patch?from=A&to=B`, `/changes?after=&until=`. `/snapshot` and `/patch` serve rows in the layout their `x-row-format` header names (OP Stack: [chunks](docs/optimism.md#chunks)). Responses are JSON, gzipped when the client accepts it: a Base `/snapshot` page (50,000 nodes in about 700 chunks) is about 9 MB, or 3.9 MB gzipped.
