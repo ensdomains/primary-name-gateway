@@ -18,9 +18,9 @@ The gateway's HTTP side ([index.ts](../packages/registrar-gateway/src/index.ts),
 }
 ```
 
-- `served`: the commit CCIP-Read proofs come from (the newest held one, once valid for `serveDelaySec`); `held`: the commits in the store.
+- `served`: the commit CCIP-Read proofs come from: the newest held one that has been valid for `serveDelaySec`, else the oldest held one (absent before the first commit); `held`: the commits in the store.
 - `lastSync`: when the last sync with the indexer ended and how long it took, with `error` if it failed: a gateway that can't reach its indexer keeps serving its held commits, and this is where that shows.
-- `stats`: snapshots, patches and rows loaded since `startedAt`.
+- `stats`: snapshots, patches and rows loaded since `startedAt` (zero above: a restart that resumed from its store).
 
 ## JSON-RPC
 
@@ -37,6 +37,7 @@ Rules:
 
 - **Blocks:** only the L2 blocks of the held commits (`GATEWAY_KEEP_COMMITS`, 2 by default). `latest`, `safe`, `finalized` and `pending` mean the commit the gateway serves to CCIP-Read (the newest valid, after `GATEWAY_SERVE_DELAY_SEC`). Any other block is an error that lists the held ones: answering for a nearby block would mislead. Blocks by hash aren't served.
 - **Accounts:** only the registrar. Another address is an error, never an empty proof (which would claim the account doesn't exist).
+- Errors: `-32000` for a block that isn't held, another account, or no commit yet; `-32602` for bad parameters or a block by hash; `-32601` for an unknown method, or `eth_getProof` on Linea. A missing block parameter means `latest`.
 - JSON-RPC 2.0, batches included, with CORS.
 - Like proofs for CCIP-Read, answers only copy rows: the gateway still hashes nothing but slot keys.
 

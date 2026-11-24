@@ -10,7 +10,7 @@ export { createRPCHandler, type RPCConfig } from "./rpc.js";
 export { MemoryNodeStore, type NodeStore, type SqlAdapter, SqlNodeStore } from "./store.js";
 
 // CCIP-Read endpoint for L2ReverseResolver: proveName(address) returns (bytes), unsigned ("raw")
-// serve with serveEZCCIP() (bun/node) or createFetchHandler() (workers, Durable Objects)
+// served by createGatewayHandler() below (CCIP-Read on every path but /status and /rpc)
 export function createEZCCIP(gateway: RegistrarGateway): EZCCIP {
 	const ezccip = new EZCCIP({ protocol: "raw" });
 	ezccip.addFunctionHandler("function proveName(address addr) returns (bytes)", async ([addr], _ctx, history) => {

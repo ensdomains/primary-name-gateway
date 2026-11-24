@@ -1,4 +1,4 @@
-// bun entry: SQLite-backed gateway (state survives restarts) + ezccip HTTP server
+// bun entry: SQLite-backed gateway (state survives restarts), served with Bun.serve (createGatewayHandler)
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -16,7 +16,8 @@ if (!deployment) {
 	);
 	process.exit(1);
 }
-const dbPath = env.GATEWAY_DB ?? `data/gateway-${deployment.l2.name}.sqlite`;
+// one store per deployment: base and base-inbox gateways hold different commits (and can run side by side)
+const dbPath = env.GATEWAY_DB ?? `data/gateway-${chain}.sqlite`;
 mkdirSync(dirname(dbPath), { recursive: true });
 const db = new Database(dbPath, { create: true, strict: true });
 db.run("PRAGMA journal_mode = WAL");

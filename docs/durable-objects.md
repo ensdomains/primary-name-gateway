@@ -73,13 +73,13 @@ export class Gateway extends DurableObject<Env> {
 			exec: (query, ...params) => ctx.storage.sql.exec(query, ...params).toArray(),
 			transaction: (fn) => ctx.storage.transactionSync(fn),
 		});
+		const d = DEPLOYMENTS[env.CHAIN];
 		this.gateway = new RegistrarGateway(store, {
 			indexerURL: env.INDEXER_URL,
 			keepCommits: 2,
 			serveDelaySec: 0,
-			layout: DEPLOYMENTS[env.CHAIN].layout,
+			layout: d.layout,
 		});
-		const d = DEPLOYMENTS[env.CHAIN];
 		this.handler = createGatewayHandler(this.gateway, {
 			kind: d.kind,
 			l1ChainId: d.l1.id,
@@ -134,7 +134,7 @@ The indexer doesn't fit a Durable Object, and doesn't need to:
 - It needs archive RPC.
 - For the batch inbox, it computes KZG proofs, at about 0.25 seconds each.
 
-It runs as a normal process. Gateways only read `/commits`, `/snapshot` and `/patch` from it, and they check every commit they load against its storage root.
+It runs as a normal process. Gateways only read `/commits`, `/commits/:id`, `/snapshot` and `/patch` from it, and they check every commit they load against its storage root.
 
 ## Open
 
