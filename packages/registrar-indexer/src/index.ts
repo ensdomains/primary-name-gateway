@@ -6,6 +6,7 @@ import {
 	createLog,
 	DEPLOYMENTS,
 	type Deployment,
+	errorLine,
 	redactURL,
 	rpcURL,
 } from "@primary-name-gateway/shared";
@@ -198,7 +199,7 @@ if (import.meta.main) {
 		try {
 			await indexer.tick();
 		} catch (err) {
-			log.error("tick failed:", err);
+			log.error(`tick failed: ${errorLine(err)}`);
 		}
 		await Bun.sleep(pollMs);
 	}
