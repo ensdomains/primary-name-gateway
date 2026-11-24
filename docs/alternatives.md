@@ -17,7 +17,7 @@ So ZK helps most when the L2 itself settles with validity proofs. Our design (a 
 
 | approach | trust | delay | cost and status (2026-11-24) |
 |---|---|---|---|
-| **The L2 adopts ZK settlement** (OP Succinct, Base Azul's ZK proof, Arbitrum with SP1) | math and L1 | ~1 h to 1 day | Free for us: the rollup pays. OP Mainnet chose Succinct in Feb 2026, not live yet. Base's `AggregateVerifier` has a 1-day path when a game has both TEE and ZK proofs, but games carry only the TEE proof in practice (hence ~5 days, [base.md](base.md)). Arbitrum proves mainnet blocks in SP1, not yet in BoLD settlement. |
+| **The L2 adopts ZK settlement** (OP Succinct, Base Azul's ZK proof, Arbitrum with SP1) | math and L1 | ~1 h to 1 day | Free for us: the rollup pays. OP Mainnet chose Succinct in Feb 2026, not live yet. Base's `AggregateVerifier` has a 1-day path when a game has both TEE and ZK proofs, but no mainnet game has had a ZK proof or a challenge since Azul: all are TEE-only and resolve after 5 days (checked on chain, [base.md](base.md#game-type-621-aggregateverifier)). Arbitrum proves mainnet blocks in SP1, not yet in BoLD settlement. |
 | **Prove the L2 ourselves**: derive and execute from the batches on L1 since the last finalized root, as OP Succinct does | math and L1, **no sequencer trust** | L1 finality plus proving, ~20–30 min | Launch-era OP Succinct cost about 0.6¢ per transaction on Base (claimed 10× cheaper since). That is every Base transaction, not just the registrar's: likely thousands of dollars a day. Fine for a quiet L2, too much for Base or Arbitrum. |
 | **ZK coprocessors** (Axiom, Brevis, Herodotus) | whatever their input root is | same as part 1 | They only compress part 2 and the gas (a Groth16 check is ~250–300k gas). They don't change trust or delay. Axiom covers L1 only; Brevis covers EVM L2s. |
 | **Batch inbox** | the sequencer | ~25 min | Built ([op-batch-inbox.md](op-batch-inbox.md)). Cheap. The same path as proving the L2 ourselves, minus execution and derivation, so the sequencer is trusted instead. |
@@ -37,7 +37,7 @@ ENSIP-19 reverse registrars accept a name set by the user's signature, and a sig
 ## What it means here
 
 - **OP Mainnet:** once OP Succinct is the respected game type, add it to `OPFaultVerifier` (a game type and how to tell it's unchallenged) and the OP source. Validity would follow ZK finality (~1 hour) instead of the 7-day window.
-- **Base:** games that carry a ZK proof as well as the TEE one resolve after 1 day instead of about 5; nothing to change, but re-measure the delay.
+- **Base:** games that carry a ZK proof as well as the TEE one resolve after 1 day instead of about 5; nothing to change, but re-measure the delay. We can't make it happen ourselves: a game resolves only after its parent, so every game back to the anchor would need a ZK proof, which only Base's proposer can arrange.
 - **Arbitrum:** when BoLD gets a ZK-settled path, a verifier for it.
 - **Proving a chain ourselves** only makes sense for a quiet L2, or for a future ENS chain such as Namechain, where proving every block is cheap.
 
@@ -46,7 +46,7 @@ ENSIP-19 reverse registrars accept a name set by the user's signature, and a sig
 When retrying this research, start here:
 
 - [ ] Is OP Succinct the respected game type on OP Mainnet? What's its finality?
-- [ ] Do Base games carry ZK proofs routinely (1-day finality instead of ~5)?
+- [ ] Do Base games carry ZK proofs routinely (1-day finality instead of ~5)? On 2026-11-24: none, ever. To re-check, read `zkProver()` and `expectedResolution()` on recent games of the factory, or count `Proved(address,uint8)` logs whose second topic is 1 (ZK).
 - [ ] Is ZK settlement live in Arbitrum's BoLD? With what delay?
 - [ ] Current ZK proving cost per transaction (OP Succinct, SP1, RISC Zero / Boundless and Kailua) and latency.
 - [ ] Do ZK coprocessors (Brevis, Herodotus, Axiom) prove L2 state on L1 natively now?
