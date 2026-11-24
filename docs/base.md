@@ -16,6 +16,12 @@ Base is an OP Stack chain, so it uses the OP path ([optimism.md](optimism.md)) e
 
 Base's respected game type is not one of OP's (0/1 output root, 9 super root). Type 621 is Base's [`AggregateVerifier`](https://github.com/base/contracts/blob/main/src/L1/proofs/AggregateVerifier.sol): a multiproof game that resolves with TEE and ZK proofs, with a 1-day fast and a 5-day slow finalization delay. In practice games become valid about 120 hours after creation.
 
+How the two delays work, and what mainnet does (checked 2026-11-24):
+
+- A game is created with one proof (in practice the TEE one), which sets its resolution to `SLOW_FINALIZATION_DELAY` (5 days). Anyone can add the other proof kind (`verifyProposalProof`); with two proofs the resolution moves to `FAST_FINALIZATION_DELAY` (1 day). A ZK proof that disagrees is a `challenge()` instead. `PROOF_THRESHOLD` is 1.
+- A game resolves only after its parent game has, so the 1-day path only helps if every game back to the anchor has both proofs. Adding a ZK proof to a single game (it's permissionless) doesn't make that game final sooner.
+- On mainnet no game uses it: the last 400 games (about 5.5 days) all had a TEE prover and no ZK prover, none was challenged, and each resolves exactly 5.0 days after creation. L1 had no ZK `Proved` event and no `Challenged` event from any contract over the ~187 days since Azul (L1 blocks 25,137,865 to 26,487,865), while the same query finds about 73 TEE proofs a day.
+
 What this repo relies on is the standard `IDisputeGame` surface, which it keeps:
 
 - `rootClaim` is a standard (version 0) output root. Checked on mainnet: the latest game's root matched the output root recomputed from L2.
