@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Notes for coding agents working in this repo. Read [README.md](README.md) first for the architecture, [docs/registrar.md](docs/registrar.md) for the registrar contract, [docs/optimism.md](docs/optimism.md) / [docs/base.md](docs/base.md) / [docs/linea.md](docs/linea.md) / [docs/arbitrum.md](docs/arbitrum.md) for the chain-specific parts, [docs/op-batch-inbox.md](docs/op-batch-inbox.md) for the batch inbox research, [docs/durable-objects.md](docs/durable-objects.md) for running the gateway in a Cloudflare Durable Object, and [docs/rpc.md](docs/rpc.md) for RPC providers and environment variables.
+Notes for coding agents working in this repo. Read [README.md](README.md) first for the architecture, [docs/registrar.md](docs/registrar.md) for the registrar contract, [docs/optimism.md](docs/optimism.md) / [docs/base.md](docs/base.md) / [docs/linea.md](docs/linea.md) / [docs/arbitrum.md](docs/arbitrum.md) for the chain-specific parts, [docs/op-batch-inbox.md](docs/op-batch-inbox.md) for the batch inbox research, [docs/durable-objects.md](docs/durable-objects.md) for running the gateway in a Cloudflare Durable Object, [docs/rpc.md](docs/rpc.md) for RPC providers and environment variables, and [docs/alternatives.md](docs/alternatives.md) for other ways to prove L2 state on L1 (dated research).
 
 ## Layout
 

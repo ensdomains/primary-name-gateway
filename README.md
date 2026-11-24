@@ -166,6 +166,7 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
 - [ezccip.js](https://github.com/adraffy/ezccip.js): the CCIP-Read endpoint
 - [unruggable-labs/unruggable-gateways](https://github.com/unruggable-labs/unruggable-gateways): trustless gateways for any L2 storage (GatewayVM); `ArbitrumVerifier` follows its BoLD verifier, and the batch inbox research started from its `OPBatchInboxRollup`
 - [ensdomains/evmgateway](https://github.com/ensdomains/evmgateway): ENS's earlier gateway for L2 storage proofs over CCIP-Read
+- [docs/alternatives.md](docs/alternatives.md): other ways to prove L2 state on L1 (ZK settlement, proving the L2 ourselves, coprocessors, native rollups), researched 2026-11-24
 
 ## License
 
