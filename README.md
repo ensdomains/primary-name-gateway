@@ -128,33 +128,31 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
 - `bun run prove <address> <chain>` proves one address's primary name through a gateway (the port of `gateway:<chain>`, or `--gateway URL`). It never contacts the indexer, only the gateway as a client would (and L1 / L2 RPC), so it works against any gateway, including one whose indexer is stopped or out of reach. It deploys the chain's verifier and a resolver pointing at the gateway on a blocksmith fork of L1, resolves the name through CCIP-Read, reads the L2 block from the proof's commit proof, and prints:
 
   ```
-  launching an L1 fork of https://mainnet.infura.io/v3/***... (1.6 s)
-  L1 fork at block 26,487,410 (2026-11-24T20:28:23.000Z)
-  deploying ArbitrumVerifier... (867 ms)
-  deploying L2ReverseResolver... (406 ms)
-  warming the fork with ffffffffffffffffffffffffffffffffffffffff.8000a4b1.reverse (it loads the L1 state the verifier reads)... (32.8 s)
-  resolving 629c26b50823872e561a721c0c2d5113edda4dd9.8000a4b1.reverse... (16 ms)
-  estimating verifyName gas... (279 ms)
-  reading the L2 at the proof's block... (343 ms)
+  arbitrum: arbitrum commits, L1 1, L2 42161, assertions accepted unchallenged after 1800 L1 blocks
+  gateway http://localhost:8204
 
-  name      "lillithh.eth"
-  gateway   7 ms, 16,384-byte response
-  verify    2,101,676 gas (verifyName on the L1 fork)
-  proof     L2 block 527,125,030 (arbitrum: assertion 0x10fd66f7…, 149 links from a confirmed one)
-  finalized L2 block 527,219,783: the proof is 94,753 blocks (7h08m) behind
-  L2        matches L2ReverseRegistrar.nameForAddr at L2 block 527,125,030
+  ✓ launching an L1 fork of https://mainnet.infura.io/v3/***  1.5 s
+    L1 block 26,487,486, 2026-11-24T20:43:35.000Z
+  ✓ deploying ArbitrumVerifier  711 ms
+  ✓ deploying L2ReverseResolver  340 ms
+  ✓ warming the fork  37.4 s
+  ✓ resolving 0x629c26b50823872E561a721c0C2d5113edDa4DD9  16 ms
+  ✓ estimating verifyName gas  274 ms
+  ✓ reading the L2 at the proof's block  318 ms
+
+  ┌───────────┬───────────────────────────────────────────────────────┐
+  │ name      │ lillithh.eth                                          │
+  │ gateway   │ 5 ms, 16,384 bytes                                    │
+  │ verify    │ 2,101,526 gas                                         │
+  │ proof     │ L2 block 527,125,030                                  │
+  │ commit    │ assertion 0x10fd66f7…, 149 links from a confirmed one │
+  │ finalized │ L2 block 527,222,258                                  │
+  │ behind    │ 7h20m (97,228 blocks)                                 │
+  │ L2        │ ✓ matches nameForAddr                                 │
+  └───────────┴───────────────────────────────────────────────────────┘
   ```
 
-  The first resolve only warms the fork: it resolves an address with no name, which pulls the L1 state the verifier reads (the rollup, the assertion chain) over RPC and takes tens of seconds. The real name's resolve is the one timed, as a client would see it. Another run, on the Base batch inbox:
-
-  ```
-  name      "quelburr.base.eth"
-  gateway   23 ms, 25,088-byte response
-  verify    12,975,804 gas (verifyName on the L1 fork)
-  proof     L2 block 61,419,983 (inbox: batch in L1 block 26,480,951)
-  finalized L2 block 61,421,724: the proof is 1,741 blocks (6m) behind
-  L2        matches L2ReverseRegistrar.nameForAddr at L2 block 61,419,983
-  ```
+  The first resolve only warms the fork: it resolves an address with no name, which pulls the L1 state the verifier reads (the rollup, the assertion chain) over RPC and takes tens of seconds; the real name's resolve is the one timed, as a client would see it. On a terminal the steps and the table are colored.
 
   If the indexer accepts commits early, pass its value as `--min-age`: seconds for OP Stack fault proofs (`INDEXER_MIN_AGE_SEC`), L1 blocks for Arbitrum (`INDEXER_MIN_AGE_L1_BLOCKS`). It defaults to that variable when set.
 

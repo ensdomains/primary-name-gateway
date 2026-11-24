@@ -24,6 +24,7 @@ import {
 	decodeOPFaultCommitProof,
 	redactURL,
 	rpcURL,
+	useColor,
 } from "@primary-name-gateway/shared";
 import {
 	type Address,
@@ -104,18 +105,37 @@ function parseArgs() {
 
 const n = (x: number | bigint) => x.toLocaleString("en-US");
 
-// "label... (time)" on one line, so a slow step shows what it's waiting on
+// colors on a terminal (NO_COLOR turns them off), plain text when piped
+const color = useColor();
+const paint = (code: number) => (s: string) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
+const [bold, dim, red, green, yellow] = [1, 2, 31, 32, 33].map(paint);
+
+// A step shows what it's waiting on while it runs, then becomes "✓ label  time" (or "✗ label").
 async function step<T>(label: string, f: () => Promise<T>): Promise<T> {
-	process.stdout.write(`${label}... `);
 	const t0 = performance.now();
+	process.stdout.write(color ? dim(`… ${label}`) : `${label}... `);
+	const done = (mark: string, rest: string) =>
+		process.stdout.write(color ? `\r\x1b[2K${mark} ${label}${rest}\n` : `${rest.trim()}\n`);
 	try {
 		const r = await f();
-		console.log(`(${ms(performance.now() - t0)})`);
+		done(green("✓"), `  ${dim(ms(performance.now() - t0))}`);
 		return r;
 	} catch (err) {
-		console.log("failed");
+		done(red("✗"), color ? "" : " failed");
 		throw err;
 	}
+}
+
+// key / value rows in a box; `paint` colors a value after it is padded
+function table(rows: [string, string, ((s: string) => string)?][]) {
+	const kw = Math.max(...rows.map(([k]) => k.length));
+	const vw = Math.max(...rows.map(([, v]) => v.length));
+	const rule = (l: string, m: string, r: string) => dim(`${l}${"─".repeat(kw + 2)}${m}${"─".repeat(vw + 2)}${r}`);
+	const bar = dim("│");
+	console.log(rule("┌", "┬", "┐"));
+	for (const [k, v, p] of rows)
+		console.log(`${bar} ${bold(k.padEnd(kw))} ${bar} ${(p ?? String)(v.padEnd(vw))} ${bar}`);
+	console.log(rule("└", "┴", "┘"));
 }
 const ms = (x: number) => (x < 1000 ? `${Math.round(x)} ms` : `${(x / 1000).toFixed(1)} s`);
 function duration(sec: number): string {
@@ -165,7 +185,8 @@ const early = !minAgeSec
 	: d.kind === "arbitrum"
 		? `, assertions accepted unchallenged after ${minAgeSec} L1 blocks`
 		: `, games accepted unchallenged after ${minAgeSec}s`;
-console.log(`${chain} (${d.kind}, L1 ${d.l1.id}, L2 ${d.l2.id}${blockMs}${early}): gateway ${gateway}`);
+console.log(`${bold(chain)}: ${dim(`${d.kind} commits, L1 ${d.l1.id}, L2 ${d.l2.id}${blockMs}${early}`)}`);
+console.log(`${dim("gateway")} ${gateway}\n`);
 
 const forkURL = rpcURL(d.l1, publicRPC ? "public" : "default");
 const foundry = await step(`launching an L1 fork of ${redactURL(forkURL)}`, () =>
@@ -193,7 +214,7 @@ try {
 		},
 	});
 	const fork = await l1.getBlock();
-	console.log(`L1 fork at block ${n(fork.number)} (${new Date(Number(fork.timestamp) * 1000).toISOString()})`);
+	console.log(dim(`  L1 block ${n(fork.number)}, ${new Date(Number(fork.timestamp) * 1000).toISOString()}`));
 	const { contract, args } = verifierContract(d, minAgeSec);
 	const verifier = await step(`deploying ${contract}`, () => foundry.deploy({ file: contract, args }));
 	const coinType = coinTypeFromChainId(d.l2.id);
@@ -219,9 +240,8 @@ try {
 	// The first resolve pulls the rollup's and the verifier's L1 state into the fork over RPC: slow, and
 	// not what a client sees. It's for an address with no name, so nothing about the real one is warm.
 	const warmup = reverseName("0xffffffffffffffffffffffffffffffffffffffff");
-	await step(`warming the fork with ${warmup} (it loads the L1 state the verifier reads)`, () => resolve(warmup));
-	const name = reverseName(addr);
-	const result = await step(`resolving ${name}`, () => resolve(name));
+	await step("warming the fork", () => resolve(warmup));
+	const result = await step(`resolving ${addr}`, () => resolve(reverseName(addr)));
 	const primary = decodeFunctionResult({ abi: RESOLVER_ABI, functionName: "name", data: result });
 	const [proof] = decodeAbiParameters([{ type: "bytes" }], response!);
 	const gas = await step("estimating verifyName gas", () =>
@@ -233,10 +253,10 @@ try {
 		}),
 	);
 
-	const rows: [string, string][] = [
-		["name", JSON.stringify(primary)],
-		["gateway", `${ms(gatewayMs)}, ${n((response!.length - 2) / 2)}-byte response`],
-		["verify", `${n(gas)} gas (verifyName on the L1 fork)`],
+	const rows: [string, string, ((s: string) => string)?][] = [
+		primary ? ["name", primary, (s) => bold(green(s))] : ["name", "(none)", yellow],
+		["gateway", `${ms(gatewayMs)}, ${n((response!.length - 2) / 2)} bytes`],
+		["verify", `${n(gas)} gas`],
 	];
 	if (!publicRPC) {
 		// the L2 block the proof is for, from the proof, and the registrar there
@@ -260,28 +280,24 @@ try {
 		if (actual !== primary) process.exitCode = 1;
 		const behind = Number(finalized.number) - block;
 		rows.push(
-			["proof", `L2 block ${n(block)} (${d.kind}: ${commit})`],
-			[
-				"finalized",
-				`L2 block ${n(finalized.number)}: the proof is ${n(behind)} blocks (${duration(Number(finalized.timestamp - header.timestamp))}) behind`,
-			],
-			[
-				"L2",
-				actual === primary
-					? `matches L2ReverseRegistrar.nameForAddr at L2 block ${n(block)}`
-					: `differs: L2ReverseRegistrar.nameForAddr at L2 block ${n(block)} is ${JSON.stringify(actual)}`,
-			],
+			["proof", `L2 block ${n(block)}`],
+			["commit", commit],
+			["finalized", `L2 block ${n(finalized.number)}`],
+			["behind", `${duration(Number(finalized.timestamp - header.timestamp))} (${n(behind)} blocks)`],
+			actual === primary
+				? ["L2", "✓ matches nameForAddr", green]
+				: ["L2", `✗ nameForAddr is ${JSON.stringify(actual)}`, red],
 		);
 	}
 	console.log();
-	for (const [k, v] of rows) console.log(`${k.padEnd(10)}${v}`);
+	table(rows);
 } catch (err) {
 	// viem's errors repeat the call: the first cause that isn't viem's wrapper says what failed
 	const e = err as BaseError;
-	console.error(e.walk?.((x) => !(x instanceof BaseError))?.message ?? e.shortMessage ?? e.message);
+	console.error(red(e.walk?.((x) => !(x instanceof BaseError))?.message ?? e.shortMessage ?? e.message));
 	if ((d.kind === "op" || d.kind === "arbitrum") && !minAgeSec) {
 		const env = d.kind === "arbitrum" ? "INDEXER_MIN_AGE_L1_BLOCKS" : "INDEXER_MIN_AGE_SEC";
-		console.error(`(if the indexer accepts commits early, pass --min-age with its ${env})`);
+		console.error(dim(`(if the indexer accepts commits early, pass --min-age with its ${env})`));
 	}
 	process.exitCode = 1;
 } finally {
