@@ -14,8 +14,8 @@ Proven from what the rollup itself commits to L1. **Delay** is how far behind th
 
 | chain | kind | frequency | trust | delay |
 |---|---|---|---|---|
-| [OP Mainnet](docs/optimism.md)<br>(10) | `op`: dispute games (super roots) | 1 h | fault proofs | `minAgeSec`<br>• `0`: ~7 days (finalized)<br>• `X`: X + ~40 min–1.5 h |
-| [Base](docs/base.md)<br>(8453) | `op`: dispute games (output roots, `AggregateVerifier`) | ~20 min | TEE proofs, challengeable with ZK | `minAgeSec`<br>• `0`: ~5 days (finalized)<br>• `X`: X + ~1 h |
+| [OP Mainnet](docs/optimism.md)<br>(10) | `op`: dispute games (super roots) | 1 h | fault proofs | `minAgeSec`<br>• `0`: ~7 days (finalized)<br>• `T`: T + ~40 min–1.5 h |
+| [Base](docs/base.md)<br>(8453) | `op`: dispute games (output roots, `AggregateVerifier`) | ~20 min | TEE proofs, challengeable with ZK | `minAgeSec`<br>• `0`: ~5 days (finalized)<br>• `T`: T + ~1 h |
 | [Arbitrum One](docs/arbitrum.md)<br>(42161) | `arbitrum`: BoLD assertions | 1 h | fault proofs (BoLD) | `minAgeBlocks`<br>• `0`: ~6.5 days (confirmed)<br>• `N`: N × 12 s + ~1.2–2.2 h (1,800: 7.7 h measured) |
 | [Linea](docs/linea.md)<br>(59144) | `linea`: ZK finalizations | a few hours | validity proofs | ~2–4 h (final when posted) |
 
