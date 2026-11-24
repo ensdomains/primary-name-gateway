@@ -70,8 +70,8 @@ Rows are keyed by a string: a [chunk](docs/optimism.md#chunks) key for OP Stack 
 | store | use |
 |---|---|
 | `MemoryNodeStore` | tests, ephemeral |
-| `SqlNodeStore` + `bunSqliteAdapter(db)` | the bun server (`GATEWAY_DB`, default `data/gateway-<chain>.sqlite`) |
-| `SqlNodeStore` + a Durable Object adapter | a Cloudflare Durable Object per chain: `ctx.storage.sql` as the store, `sync()` on an alarm, requests through `createGatewayHandler(gateway, …)`. See [docs/durable-objects.md](docs/durable-objects.md) for how it fits, a sketch, and the limits that matter. |
+| `SqlNodeStore` + `bunSqliteAdapter(db)` | the bun server (`GATEWAY_DB`, default `data/gateway-<port>.sqlite`): a cache that survives restarts, and starts over when its indexer serves another deployment |
+| `SqlNodeStore` + a Durable Object adapter | a Cloudflare Durable Object per chain: `ctx.storage.sql` as the store, `sync()` on an alarm, requests through `createGatewayHandler(gateway)`. See [docs/durable-objects.md](docs/durable-objects.md) for how it fits, a sketch, and the limits that matter. |
 
 ## Setup
 
@@ -86,8 +86,8 @@ cd packages/contracts && forge build
 ## Run
 
 ```sh
-bun run indexer:optimism    # :8100 (bun run indexer / gateway: set INDEXER_CHAIN / GATEWAY_CHAIN yourself)
-bun run gateway:optimism    # :8200, from INDEXER_URL=http://localhost:8100
+bun run indexer:optimism    # :8100 (bun run indexer: set INDEXER_CHAIN yourself)
+bun run gateway:optimism    # :8200, serves what INDEXER_URL=http://localhost:8100 indexes
 bun run indexer:linea       # :8101
 bun run gateway:linea       # :8201
 bun run indexer:base        # :8102
@@ -98,7 +98,7 @@ bun run indexer:arbitrum    # :8104
 bun run gateway:arbitrum    # :8204
 ```
 
-Indexer API: `GET /status` (commit kind, `l1ChainId`, `l2ChainId`, L2 block time, `minAgeSec` / `minAgeL1Blocks`, sync position, commit counts), `/commits?status=valid&limit=2`, `/commits/:id`, `/snapshot?commit=ID&after=KEY`, `/patch?from=A&to=B`, `/changes?after=&until=`. `/snapshot` and `/patch` serve rows in the layout their `x-row-format` header names (OP Stack: [chunks](docs/optimism.md#chunks)). Responses are JSON, gzipped when the client accepts it: a Base `/snapshot` page (50,000 nodes in about 700 chunks) is about 9 MB, or 3.9 MB gzipped.
+Indexer API: `GET /status` (the deployment's name and commit kind, `l1ChainId`, `l2ChainId`, the registrar and its layout, L2 block time, `minAgeSec` / `minAgeL1Blocks`, sync position, commit counts), `/commits?status=valid&limit=2`, `/commits/:id`, `/snapshot?commit=ID&after=KEY`, `/patch?from=A&to=B`, `/changes?after=&until=`. `/snapshot` and `/patch` serve rows in the layout their `x-row-format` header names (OP Stack: [chunks](docs/optimism.md#chunks)). Responses are JSON, gzipped when the client accepts it: a Base `/snapshot` page (50,000 nodes in about 700 chunks) is about 9 MB, or 3.9 MB gzipped.
 
 Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
 

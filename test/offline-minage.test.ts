@@ -20,7 +20,12 @@ import {
 	parseAbi,
 	zeroAddress,
 } from "viem";
-import { createEZCCIP, RegistrarGateway, SqlNodeStore } from "../packages/registrar-gateway/src/index.js";
+import {
+	createEZCCIP,
+	MemoryNodeStore,
+	RegistrarGateway,
+	SqlNodeStore,
+} from "../packages/registrar-gateway/src/index.js";
 import { bunSqliteAdapter } from "../packages/registrar-gateway/src/sqlite.js";
 import { FakeOPRollup } from "./fake-rollup.js";
 
@@ -192,6 +197,10 @@ describe.each([
 		await sync();
 		expect(db.getCommit(game.gameIndex)?.status).toBe("valid"); // early
 		expect(indexer.status().minAgeSec).toBe(MIN_AGE);
+		// a gateway holding only that game: nothing older to fall back on
+		const lone = new RegistrarGateway(new MemoryNodeStore(), { ...gateway.config, keepCommits: 1 });
+		await lone.sync();
+		expect(lone.commits.map((c) => c.id)).toEqual([game.gameIndex]);
 
 		// the same database, finalized games only; it keeps one valid trie, so the finalized game's goes
 		const source = indexer.config.source as OPCommitSource;
@@ -205,6 +214,13 @@ describe.each([
 		expect(strict.status().minAgeSec).toBe(0);
 		expect(db.getCommit(game.gameIndex)?.status).toBe("pending"); // not invalid
 		expect(db.getCommit(finalized.id)?.status).toBe("valid");
+		// its game is pending now, not invalid: it goes back to the finalized game rather than serving nothing
+		await lone.sync();
+		expect(lone.commits.map((c) => c.id)).toEqual([finalized.id]);
+		const { proof } = lone.proveName(ADDR);
+		expect(
+			await l1.readContract({ address: finalOnly, abi: RESOLVER_ABI, functionName: "verifyName", args: [ADDR, proof] }),
+		).toBe("next.eth");
 		expect(strict.trie.has(finalized.id)).toBeTrue(); // rebuilt from the newest trie
 		expect(strict.snapshot(finalized.id, undefined, 1e6)?.rows).toEqual(
 			indexer.snapshot(finalized.id, undefined, 1e6)?.rows,

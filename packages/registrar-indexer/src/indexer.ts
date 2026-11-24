@@ -28,6 +28,7 @@ export class NotFinalizedError extends Error {}
 export class SyncError extends Error {}
 
 export type IndexerConfig = {
+	chain?: string; // the deployment's name, reported by /status (gateways take their deployment from it)
 	deployment: Deployment;
 	l2: ChangeReader;
 	source: CommitSource;
@@ -100,13 +101,16 @@ export class RegistrarIndexer {
 	status(): IndexerStatus {
 		const { db, deployment } = this.config;
 		const [latest] = db.getCommits("valid", 1);
+		const { namesSlot, ownerSlot } = deployment.layout;
 		return {
+			chain: this.config.chain,
 			kind: deployment.kind,
 			l1ChainId: deployment.l1.id,
 			l2ChainId: deployment.l2.id,
 			l2BlockMs: "l2Blocks" in deployment ? deployment.l2Blocks[deployment.l2Blocks.length - 1].ms : undefined,
 			...this.config.source.status?.(),
 			registrar: deployment.L2ReverseRegistrar,
+			layout: { namesSlot: Number(namesSlot), ownerSlot: ownerSlot === undefined ? undefined : Number(ownerSlot) },
 			syncedBlock: this.syncedBlock,
 			syncingTo: this.syncingTo,
 			changeSeq: this.changeSeq,

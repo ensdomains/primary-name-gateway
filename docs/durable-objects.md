@@ -30,7 +30,7 @@ One object per served chain, for example named `base`, holds that chain's gatewa
 |---|---|
 | `NodeStore` (versioned trie rows) | `SqlNodeStore` over `ctx.storage.sql` |
 | `sync()` (poll the indexer, apply patches) | the `alarm()` handler, rescheduled every poll interval |
-| CCIP-Read requests (`proveName`), JSON-RPC at `/rpc` ([gateway-rpc.md](gateway-rpc.md)), and `/status` | the object's `fetch()`, served by `createGatewayHandler(gateway, { kind, l1ChainId, l2ChainId, registrar })` (CCIP-Read through [`@adraffy/ezccip`](https://github.com/adraffy/ezccip.js)'s `createFetchHandler`) |
+| CCIP-Read requests (`proveName`), JSON-RPC at `/rpc` ([gateway-rpc.md](gateway-rpc.md)), and `/status` | the object's `fetch()`, served by `createGatewayHandler(gateway)`, which takes the deployment from the indexer (CCIP-Read through [`@adraffy/ezccip`](https://github.com/adraffy/ezccip.js)'s `createFetchHandler`) |
 | gateway state (held commits, the store's head, a snapshot in progress) | the `gateway_meta` table in the same SQLite database |
 | the indexer | a normal server; the object reaches it over HTTP (`indexerURL`) |
 
@@ -58,7 +58,6 @@ A Worker routes requests to the chain's object, and the object syncs on an alarm
 
 ```ts
 import { DurableObject } from "cloudflare:workers";
-import { DEPLOYMENTS } from "@primary-name-gateway/shared";
 import { createGatewayHandler, RegistrarGateway, SqlNodeStore } from "@primary-name-gateway/registrar-gateway";
 
 const POLL_MS = 30_000;
@@ -73,19 +72,12 @@ export class Gateway extends DurableObject<Env> {
 			exec: (query, ...params) => ctx.storage.sql.exec(query, ...params).toArray(),
 			transaction: (fn) => ctx.storage.transactionSync(fn),
 		});
-		const d = DEPLOYMENTS[env.CHAIN];
 		this.gateway = new RegistrarGateway(store, {
 			indexerURL: env.INDEXER_URL,
 			keepCommits: 2,
 			serveDelaySec: 0,
-			layout: d.layout,
 		});
-		this.handler = createGatewayHandler(this.gateway, {
-			kind: d.kind,
-			l1ChainId: d.l1.id,
-			l2ChainId: d.l2.id,
-			registrar: d.L2ReverseRegistrar,
-		});
+		this.handler = createGatewayHandler(this.gateway); // the deployment comes from the indexer
 		// start syncing on first use
 		ctx.blockConcurrencyWhile(async () => {
 			if ((await ctx.storage.getAlarm()) === null) await ctx.storage.setAlarm(Date.now());
