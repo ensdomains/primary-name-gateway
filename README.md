@@ -12,12 +12,12 @@ Each L2 has a reverse registrar holding its [ENSIP-19](https://docs.ens.domains/
 
 Proven from what the rollup itself commits to L1. **Delay** is how far behind the L2's tip the newest provable state is. Rollups with fault proofs can accept a commitment before it's final, once it has gone unchallenged for a while (`minAgeSec` / `minAgeBlocks`, set on the verifier and the indexer alike), which trusts an honest challenger to act within that time.
 
-| chain | chain id | kind | trust | delay |
-|---|---|---|---|---|
-| [OP Mainnet](docs/optimism.md) | 10 | `op`: dispute games (super roots), one an hour | fault proofs | `minAgeSec = 0`: ~7 days (finalized)<br>`minAgeSec = X`: X + ~40 min–1.5 h |
-| [Base](docs/base.md) | 8453 | `op`: dispute games (output roots, `AggregateVerifier`), one every ~20 min | TEE proofs, challengeable with ZK | `minAgeSec = 0`: ~5 days (finalized)<br>`minAgeSec = X`: X + ~1 h |
-| [Arbitrum One](docs/arbitrum.md) | 42161 | `arbitrum`: BoLD assertions, one an hour | fault proofs (BoLD) | `minAgeBlocks = 0`: ~6.5 days (confirmed)<br>`minAgeBlocks = N`: N × 12 s + ~1.2–2.2 h (1,800: 7.7 h measured) |
-| [Linea](docs/linea.md) | 59144 | `linea`: ZK finalizations, every few hours | validity proofs | ~2–4 h (final when posted) |
+| chain | kind | trust | delay |
+|---|---|---|---|
+| [OP Mainnet](docs/optimism.md)<br>(10) | `op`: dispute games (super roots), one an hour | fault proofs | `minAgeSec = 0`: ~7 days (finalized)<br>`minAgeSec = X`: X + ~40 min–1.5 h |
+| [Base](docs/base.md)<br>(8453) | `op`: dispute games (output roots, `AggregateVerifier`), one every ~20 min | TEE proofs, challengeable with ZK | `minAgeSec = 0`: ~5 days (finalized)<br>`minAgeSec = X`: X + ~1 h |
+| [Arbitrum One](docs/arbitrum.md)<br>(42161) | `arbitrum`: BoLD assertions, one an hour | fault proofs (BoLD) | `minAgeBlocks = 0`: ~6.5 days (confirmed)<br>`minAgeBlocks = N`: N × 12 s + ~1.2–2.2 h (1,800: 7.7 h measured) |
+| [Linea](docs/linea.md)<br>(59144) | `linea`: ZK finalizations, every few hours | validity proofs | ~2–4 h (final when posted) |
 
 The early delays add up the time between commitments, the age of the L2 block a commitment names when it's posted (measured 2026-11-23: OP Mainnet ~20 min, Base ~35 min, Arbitrum ~1 h), and L1 finality (~13 min: the indexer only reads finalized L1). An early Arbitrum proof is a chain of assertions from the last confirmed one (about 6.4 days back), so it costs more the smaller `minAgeBlocks` is: 2.1M gas at 1,800 blocks, against ~600k confirmed-only.
 
