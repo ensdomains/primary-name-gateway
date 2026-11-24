@@ -156,6 +156,7 @@ describe.each([
 		await sync();
 		expect(db.getCommit(game.gameIndex)?.status).toBe("valid");
 		expect(gateway.commits.map((c) => c.id)).toEqual([game.gameIndex]);
+		expect(gateway.info?.minAgeSec).toBe(MIN_AGE); // passed on to the gateway's /status (bun run prove)
 		expect(await verify(early)).toBe("early.eth");
 		await expect(verify(finalOnly)).rejects.toThrow(/InvalidGame/); // not finalized
 	}, 60_000);

@@ -5,11 +5,11 @@
 //
 //   bun run prove <address> <chain> [--gateway URL] [--min-age SEC] [--public]
 //
-// chain: a deployment (base, base-inbox, optimism, linea, ...). --gateway: its URL, default
-// http://localhost:<port> with the port of `bun run gateway:<chain>`. --min-age: the verifier's
-// early acceptance, as the indexer's: OP Stack fault proofs in seconds (INDEXER_MIN_AGE_SEC), Arbitrum in
-// L1 blocks (INDEXER_MIN_AGE_L1_BLOCKS); default that variable, or 0. Needs .env RPC keys, unless
-// --public: the L1 fork runs on the public RPC (rpcURL "public"), and the L2 isn't read, so the
+// chain: a deployment (base, base-inbox, optimism, linea, ...). --gateway: its URL (or GATEWAY_URL),
+// default http://localhost:<port> with the port of `bun run gateway:<chain>`. --min-age: the verifier's
+// early acceptance (OP Stack fault proofs in seconds, Arbitrum in L1 blocks); default what the
+// gateway's /status reports from its indexer, which the commits it serves assume. Needs .env RPC keys,
+// unless --public: the L1 fork runs on the public RPC (rpcURL "public"), and the L2 isn't read, so the
 // proof's L2 block and the comparison with the registrar are left out.
 
 import { Foundry } from "@adraffy/blocksmith";
@@ -98,11 +98,10 @@ function parseArgs() {
 	const d = (chain && DEPLOYMENTS[chain]) || usage(chain ? `unknown chain: ${chain}` : "which chain?");
 	const port = GATEWAY_PORTS[chain];
 	gateway ??= port ? `http://localhost:${port}` : usage(`no default gateway for ${chain}: pass --gateway`);
-	minAge ??= d.kind === "arbitrum" ? process.env.INDEXER_MIN_AGE_L1_BLOCKS : process.env.INDEXER_MIN_AGE_SEC;
-	const minAgeSec = Number(minAge ?? 0);
-	if (!Number.isInteger(minAgeSec) || minAgeSec < 0)
+	const minAgeArg = minAge === undefined ? undefined : Number(minAge);
+	if (minAgeArg !== undefined && (!Number.isInteger(minAgeArg) || minAgeArg < 0))
 		usage(`--min-age: not a whole number of ${d.kind === "arbitrum" ? "L1 blocks" : "seconds"}: ${minAge}`);
-	return { addr: getAddress(addr), chain, d, gateway, minAgeSec, publicRPC };
+	return { addr: getAddress(addr), chain, d, gateway, minAgeArg, publicRPC };
 }
 
 const n = (x: number | bigint) => x.toLocaleString("en-US");
@@ -179,15 +178,46 @@ async function proofBlock(d: Deployment, commitProof: Hex): Promise<{ block: num
 	}
 }
 
-const { addr, chain, d, gateway, minAgeSec, publicRPC } = parseArgs();
+const { addr, chain, d, gateway, minAgeArg, publicRPC } = parseArgs();
 const blockMs = "l2Blocks" in d ? `, ${d.l2Blocks[d.l2Blocks.length - 1].ms} ms blocks` : "";
-const early = !minAgeSec
-	? ""
-	: d.kind === "arbitrum"
-		? `, assertions accepted unchallenged after ${minAgeSec} L1 blocks`
-		: `, games accepted unchallenged after ${minAgeSec}s`;
-console.log(`${bold(chain)}: ${dim(`${d.kind} commits, L1 ${d.l1.id}, L2 ${d.l2.id}${blockMs}${early}`)}`);
+console.log(`${bold(chain)}: ${dim(`${d.kind} commits, L1 ${d.l1.id}, L2 ${d.l2.id}${blockMs}`)}`);
 console.log(`${dim("gateway")} ${gateway}\n`);
+
+// the gateway's /status (gatewayStatus): what it serves, and the early acceptance its commits assume
+type GatewayStatus = {
+	chain?: string;
+	minAgeSec?: number;
+	minAgeL1Blocks?: number;
+	served?: { id: number; l2Block: number };
+};
+const status = await step("reading the gateway's status", async () => {
+	const res = await fetch(new URL("status", gateway.endsWith("/") ? gateway : `${gateway}/`)).catch((err) => {
+		throw new Error(`gateway ${gateway}: ${err instanceof Error ? err.message : err} (is it running?)`);
+	});
+	if (!res.ok) throw new Error(`gateway ${gateway}/status: ${res.status}`);
+	return (await res.json()) as GatewayStatus;
+}).catch((err: Error) => {
+	console.error(red(err.message));
+	process.exit(1);
+});
+if (status.chain && status.chain !== chain) {
+	console.error(red(`the gateway at ${gateway} serves ${status.chain}, not ${chain}`));
+	process.exit(1);
+}
+if (!status.served) {
+	console.error(red(`the gateway at ${gateway} has no commit yet`));
+	process.exit(1);
+}
+const fromGateway = d.kind === "arbitrum" ? status.minAgeL1Blocks : status.minAgeSec;
+const minAgeSec = minAgeArg ?? fromGateway ?? 0;
+const unit = d.kind === "arbitrum" ? " L1 blocks" : "s";
+console.log(
+	dim(
+		`  serving commit ${status.served.id} (L2 block ${n(status.served.l2Block)}); ${
+			minAgeSec ? `accepted unchallenged after ${minAgeSec}${unit}` : "finalized commits only"
+		}${minAgeArg === undefined ? "" : fromGateway === minAgeArg ? "" : ` (--min-age; the gateway says ${fromGateway ?? 0})`}`,
+	),
+);
 
 const forkURL = rpcURL(d.l1, publicRPC ? "public" : "default");
 const foundry = await step(`launching an L1 fork of ${redactURL(forkURL)}`, () =>
@@ -296,10 +326,6 @@ try {
 	// viem's errors repeat the call: the first cause that isn't viem's wrapper says what failed
 	const e = err as BaseError;
 	console.error(red(e.walk?.((x) => !(x instanceof BaseError))?.message ?? e.shortMessage ?? e.message));
-	if ((d.kind === "op" || d.kind === "arbitrum") && !minAgeSec) {
-		const env = d.kind === "arbitrum" ? "INDEXER_MIN_AGE_L1_BLOCKS" : "INDEXER_MIN_AGE_SEC";
-		console.error(dim(`(if the indexer accepts commits early, pass --min-age with its ${env})`));
-	}
 	process.exitCode = 1;
 } finally {
 	await foundry.shutdown();

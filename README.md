@@ -127,9 +127,11 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
 - `bun run prove <address> <chain>` proves one address's primary name through a gateway (`--gateway URL` or `GATEWAY_URL`; by default the port of `gateway:<chain>`). It only talks to the gateway, as a client would, and to L1 / L2 RPC, never to the indexer. It deploys the chain's verifier and a resolver pointing at the gateway on a blocksmith fork of L1, resolves the name through CCIP-Read, reads the L2 block from the proof's commit proof, and prints:
 
   ```
-  arbitrum: arbitrum commits, L1 1, L2 42161, assertions accepted unchallenged after 1800 L1 blocks
+  arbitrum: arbitrum commits, L1 1, L2 42161
   gateway http://localhost:8204
 
+  ✓ reading the gateway's status  4 ms
+    serving commit 264855060030 (L2 block 527,125,030); accepted unchallenged after 1800 L1 blocks
   ✓ launching an L1 fork of https://mainnet.infura.io/v3/***  1.5 s
     L1 block 26,487,486, 2026-11-24T20:43:35.000Z
   ✓ deploying ArbitrumVerifier  711 ms
@@ -153,7 +155,7 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
 
   The first resolve only warms the fork: it resolves an address with no name, which pulls the L1 state the verifier reads (the rollup, the assertion chain) over RPC and takes tens of seconds; the real name's resolve is the one timed, as a client would see it. On a terminal the steps and the table are colored.
 
-  If the indexer accepts commits early, pass its value as `--min-age`: seconds for OP Stack fault proofs (`INDEXER_MIN_AGE_SEC`), L1 blocks for Arbitrum (`INDEXER_MIN_AGE_L1_BLOCKS`). It defaults to that variable when set.
+  It reads the gateway's `/status` first: the chain must match, and the verifier's early acceptance (`minAgeSec` / `minAgeL1Blocks`) is the one the gateway's indexer applies. `--min-age` overrides it (seconds for OP Stack fault proofs, L1 blocks for Arbitrum).
 
   `--public` forks L1 from its public RPC (`rpcURL(chain, "public")`) and doesn't read the L2, so it needs no keys at all: it prints the name, the gateway's time and size, and the gas, but not the proof's L2 block or the comparison with the registrar.
 

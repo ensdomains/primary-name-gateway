@@ -131,7 +131,8 @@ Gateway (`bun run gateway:<chain>`, or `bun run gateway`). It uses no RPC: every
 | variable | default | |
 |---|---|---|
 | `GATEWAY_URL` | the chain's gateway port on localhost | or `--gateway URL` |
-| `INDEXER_MIN_AGE_SEC` / `INDEXER_MIN_AGE_L1_BLOCKS` | `0` | the verifier's early acceptance (OP Stack seconds / Arbitrum L1 blocks), or `--min-age` |
+
+The verifier's early acceptance comes from the gateway's `/status` (`minAgeSec` / `minAgeL1Blocks`, from its indexer), or `--min-age`.
 
 It forks L1 from its `default` URL and reads the L2 with `default` and `proof` clients. With `--public` it forks L1's public RPC and doesn't read the L2, so no keys are needed.
 
