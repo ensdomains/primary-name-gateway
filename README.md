@@ -14,10 +14,10 @@ Proven from what the rollup itself commits to L1. **Delay** is how far behind th
 
 | chain | kind | every | trust | delay |
 |---|---|---|---|---|
-| [Optimism](docs/optimism.md)<br>(10) | `op`: dispute games (super roots) | 1 h | fault proofs | `minAgeSec`<br>• `0`: ~7 days (finalized)<br>• `T`: T + ~40 min–1.5 h |
-| [Base](docs/base.md)<br>(8453) | `op`: dispute games (output roots, `AggregateVerifier`) | ~20 min | TEE proofs, challengeable with ZK | `minAgeSec`<br>• `0`: ~5 days (finalized)<br>• `T`: T + ~1 h |
-| [Arbitrum One](docs/arbitrum.md)<br>(42161) | `arbitrum`: BoLD assertions | 1 h | fault proofs (BoLD) | `minAgeL1Blocks`<br>• `0`: ~6.5 days (confirmed)<br>• `N`: N × 12 s + ~1.2–2.2 h (1,800: 7.7 h measured) |
-| [Linea](docs/linea.md)<br>(59144) | `linea`: ZK finalizations | a few hours | validity proofs | ~2–4 h (final when posted) |
+| [Optimism](docs/optimism.md)<br>(10) | `op`<br>dispute games<br>(super roots) | 1 h | fault proofs | `minAgeSec`<br>• `0`: ~7 days (finalized)<br>• `T`: T + ~40 min–1.5 h |
+| [Base](docs/base.md)<br>(8453) | `op`<br>dispute games<br>(output roots) | ~20 min | TEE proofs, challengeable with ZK | `minAgeSec`<br>• `0`: ~5 days (finalized)<br>• `T`: T + ~1 h |
+| [Arbitrum One](docs/arbitrum.md)<br>(42161) | `arbitrum`<br>BoLD assertions | 1 h | fault proofs (BoLD) | `minAgeL1Blocks`<br>• `0`: ~6.5 days (confirmed)<br>• `N`: N × 12 s + ~1.2–2.2 h (1,800: 7.7 h measured) |
+| [Linea](docs/linea.md)<br>(59144) | `linea`<br>ZK finalizations | a few hours | validity proofs | ~2–4 h (final when posted) |
 
 The early delays add up the time between commitments (every), the age of the L2 block a commitment names when it's posted (measured 2026-11-23: Optimism ~20 min, Base ~35 min, Arbitrum ~1 h), and L1 finality (~13 min: the indexer only reads finalized L1). An early Arbitrum proof is a chain of assertions from the last confirmed one (about 6.4 days back), so it costs more the smaller `minAgeL1Blocks` is: 2.1M gas at 1,800 blocks, against ~600k confirmed-only.
 
@@ -27,7 +27,7 @@ Proven from something other than the rollup's own commitments to L1, with a diff
 
 | name | kind | every | trust | chains | delay |
 |---|---|---|---|---|---|
-| [OP Batch Inbox](docs/op-batch-inbox.md) | `inbox`: a batcher blob that starts a channel names its parent L2 block | ~1 min | sequencer | Optimism, Base | ~25 min |
+| [OP Batch Inbox](docs/op-batch-inbox.md) | `inbox`<br>batcher blob parent L2 block | ~1 min | sequencer | Optimism, Base | ~25 min |
 
 [docs/registrar.md](docs/registrar.md) covers the registrar contract, its storage layouts, and why its storage can be rebuilt from events. ENSIP-19 coin types are `0x80000000 | chainId`.
 
