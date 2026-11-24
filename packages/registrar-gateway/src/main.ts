@@ -2,9 +2,8 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { type EZCCIPServer, serveEZCCIP } from "@adraffy/ezccip/serve";
 import { DEPLOYMENTS } from "@primary-name-gateway/shared";
-import { createEZCCIP, RegistrarGateway, SqlNodeStore } from "./index.js";
+import { createGatewayHandler, RegistrarGateway, SqlNodeStore } from "./index.js";
 import { bunSqliteAdapter } from "./sqlite.js";
 
 const env = process.env;
@@ -31,7 +30,7 @@ const gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(db)), {
 log(`${chain}: resuming with ${gateway.commits.length} held commits from ${dbPath}`);
 const pollMs = Number(env.GATEWAY_POLL_MS ?? 30_000);
 let timer: ReturnType<typeof setTimeout> | undefined;
-let ccip: EZCCIPServer | undefined;
+let server: ReturnType<typeof Bun.serve> | undefined;
 
 // A signal is handled at an await, so a sync step's writes (rows, then the head or the snapshot cursor)
 // are never split. Every write is a transaction, so a hard kill is safe too: it can redo a snapshot.
@@ -39,7 +38,7 @@ let ccip: EZCCIPServer | undefined;
 const stop = async (signal: string) => {
 	log(`${signal}: stopping`);
 	clearTimeout(timer);
-	await ccip?.shutdown();
+	await server?.stop(true);
 	db.close();
 	process.exit(0);
 };
@@ -55,5 +54,12 @@ const poll = async () => {
 	timer = setTimeout(poll, pollMs);
 };
 await poll();
-ccip = await serveEZCCIP(createEZCCIP(gateway), { port: Number(env.GATEWAY_PORT ?? 8200) });
-log(`ccip-read endpoint: ${ccip.endpoint}`);
+server = Bun.serve({
+	port: Number(env.GATEWAY_PORT ?? 8200),
+	fetch: createGatewayHandler(
+		gateway,
+		{ chainId: deployment.l2.id, registrar: deployment.L2ReverseRegistrar },
+		{ log: true },
+	),
+});
+log(`CCIP-Read: ${server.url}, JSON-RPC: ${server.url}rpc`);

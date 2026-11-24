@@ -30,7 +30,7 @@ One object per served chain, for example named `base`, holds that chain's gatewa
 |---|---|
 | `NodeStore` (versioned trie rows) | `SqlNodeStore` over `ctx.storage.sql` |
 | `sync()` (poll the indexer, apply patches) | the `alarm()` handler, rescheduled every poll interval |
-| CCIP-Read requests (`proveName`) | the object's `fetch()`, served by `createFetchHandler(createEZCCIP(gateway))` from [`@adraffy/ezccip`](https://github.com/adraffy/ezccip.js) |
+| CCIP-Read requests (`proveName`), and JSON-RPC at `/rpc` ([gateway-rpc.md](gateway-rpc.md)) | the object's `fetch()`, served by `createGatewayHandler(gateway, { chainId, registrar })` (CCIP-Read through [`@adraffy/ezccip`](https://github.com/adraffy/ezccip.js)'s `createFetchHandler`) |
 | gateway state (held commits, the store's head, a snapshot in progress) | the `gateway_meta` table in the same SQLite database |
 | the indexer | a normal server; the object reaches it over HTTP (`indexerURL`) |
 
@@ -58,9 +58,8 @@ A Worker routes requests to the chain's object, and the object syncs on an alarm
 
 ```ts
 import { DurableObject } from "cloudflare:workers";
-import { createFetchHandler } from "@adraffy/ezccip";
 import { DEPLOYMENTS } from "@primary-name-gateway/shared";
-import { createEZCCIP, RegistrarGateway, SqlNodeStore } from "@primary-name-gateway/registrar-gateway";
+import { createGatewayHandler, RegistrarGateway, SqlNodeStore } from "@primary-name-gateway/registrar-gateway";
 
 const POLL_MS = 30_000;
 
@@ -80,7 +79,8 @@ export class Gateway extends DurableObject<Env> {
 			marginSec: 120,
 			layout: DEPLOYMENTS[env.CHAIN].layout,
 		});
-		this.handler = createFetchHandler(createEZCCIP(this.gateway));
+		const d = DEPLOYMENTS[env.CHAIN];
+		this.handler = createGatewayHandler(this.gateway, { chainId: d.l2.id, registrar: d.L2ReverseRegistrar });
 		// start syncing on first use
 		ctx.blockConcurrencyWhile(async () => {
 			if ((await ctx.storage.getAlarm()) === null) await ctx.storage.setAlarm(Date.now());

@@ -20,18 +20,23 @@ import {
 	type Deployment,
 	type OPDeployment,
 	PLAIN_LAYOUT,
+	primarySlot,
 	type TrieRow,
 } from "@primary-name-gateway/shared";
 import {
 	type Address,
+	bytesToHex,
 	createPublicClient,
 	decodeFunctionResult,
 	encodeFunctionData,
 	type Hex,
+	hexToBigInt,
 	http,
 	keccak256,
 	namehash,
+	numberToHex,
 	type PublicClient,
+	padHex,
 	parseAbi,
 	stringToHex,
 	toHex,
@@ -39,6 +44,7 @@ import {
 import { packetToBytes } from "viem/ens";
 import {
 	createEZCCIP,
+	createGatewayHandler,
 	type GatewayConfig,
 	RegistrarGateway,
 	SqlNodeStore,
@@ -285,6 +291,49 @@ describe("offline e2e", () => {
 		await expect(
 			l1.readContract({ address: resolver, abi: RESOLVER_ABI, functionName: "verifyName", args: [A.short, proof] }),
 		).rejects.toThrow();
+	}, 30_000);
+
+	test("the gateway's JSON-RPC answers eth_getProof and eth_getStorageAt as the L2 would", async () => {
+		const handler = createGatewayHandler(gateway, { chainId: CHAIN_ID, registrar: REGISTRAR });
+		const call = async (body: unknown): Promise<any> =>
+			(await handler(new Request("http://gateway/rpc", { method: "POST", body: JSON.stringify(body) }))).json();
+		const commit = gateway.pick();
+		const block = rollup.blocks[commit.l2Block];
+		const slots = [A.short, A.long, A.never].map((a) => primarySlot(a, 0n));
+		const keys = slots.map((s) => bytesToHex(s));
+		const { result } = await call({
+			jsonrpc: "2.0",
+			id: 1,
+			method: "eth_getProof",
+			params: [REGISTRAR, keys, "latest"],
+		});
+		// what the L2 itself would answer: its trie (EthStorage.getProof) and its account proof
+		expect(result.storageHash).toBe(block.witness.storageHash);
+		expect(result.accountProof).toEqual(block.witness.accountProof);
+		expect(result.storageProof.map((p: { proof: Hex[] }) => p.proof)).toEqual(
+			slots.map((s) => block.storage.getProof(s).proof),
+		);
+		expect(result.storageProof.map((p: { value: Hex }) => p.value)).toEqual(
+			slots.map((s) => {
+				const v = block.storage.getStorage(s);
+				return numberToHex(v.length ? hexToBigInt(bytesToHex(v)) : 0n);
+			}),
+		);
+
+		const replies: { result?: Hex; error?: { code: number; message: string } }[] = await call([
+			{ jsonrpc: "2.0", id: 1, method: "eth_chainId" },
+			{ jsonrpc: "2.0", id: 2, method: "eth_blockNumber" },
+			{ jsonrpc: "2.0", id: 3, method: "eth_getStorageAt", params: [REGISTRAR, keys[0], numberToHex(commit.l2Block)] },
+			{ jsonrpc: "2.0", id: 4, method: "eth_getStorageAt", params: [A.short, keys[0], "latest"] },
+			{ jsonrpc: "2.0", id: 5, method: "eth_getStorageAt", params: [REGISTRAR, keys[0], numberToHex(10_000)] },
+			{ jsonrpc: "2.0", id: 6, method: "eth_call", params: [] },
+		]);
+		expect(replies[0].result).toBe(numberToHex(CHAIN_ID));
+		expect(replies[1].result).toBe(numberToHex(commit.l2Block));
+		expect(replies[2].result).toBe(padHex(bytesToHex(block.storage.getStorage(slots[0])), { size: 32 }));
+		expect(replies[3].error?.message).toContain("only the registrar"); // another account
+		expect(replies[4].error?.message).toContain("isn't available"); // a block the gateway doesn't hold
+		expect(replies[5].error?.code).toBe(-32601);
 	}, 30_000);
 
 	test("a restarted gateway resumes from its store with patches only", async () => {
