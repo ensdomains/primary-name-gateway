@@ -6,7 +6,7 @@ import {OPBatchPrefix} from "./OPBatchPrefix.sol";
 import {OPBlob} from "./OPBlob.sol";
 
 /// @notice The first batch of a channel that starts in a batcher's blob: from the blob's first field
-///         elements, through frame 0 and brotli, to the batch prefix (research: docs/op-batch-inbox.md).
+///         elements, through frame 0 and brotli, to the batch prefix (docs/op-batch-inbox.md).
 /// @dev Mirrors blobDataPrefix, channelStart and decodeBatchPrefix in packages/shared/src/op-batch.ts.
 library OPBatchInbox {
     error NotChannelStart();

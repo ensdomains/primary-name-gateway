@@ -74,7 +74,7 @@ export async function spanBatchParent(
 	throw new Error(`no L2 block at timestamp ${timestamp} has the parent ${parentCheck}`);
 }
 
-// Commits from the batcher's posts (OPBatchInboxVerifier, research: docs/op-batch-inbox.md): a blob
+// Commits from the batcher's posts (OPBatchInboxVerifier, docs/op-batch-inbox.md): a blob
 // that starts a channel names its first batch's parent L2 block. Each commit carries everything the
 // verifier needs: the L1 header, the transaction's trie proof, the blob's first field elements with
 // KZG proofs, the parent L2 header and the registrar's account proof.

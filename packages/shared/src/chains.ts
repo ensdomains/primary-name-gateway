@@ -119,7 +119,7 @@ export type LineaDeployment = DeploymentBase & {
 	LineaRollup: Address;
 };
 
-// an OP Stack L2 proven from its batcher's posts (OPBatchInboxVerifier, research: docs/op-batch-inbox.md)
+// an OP Stack L2 proven from its batcher's posts (OPBatchInboxVerifier, docs/op-batch-inbox.md)
 export type InboxDeployment = DeploymentBase & {
 	kind: "inbox";
 	SystemConfig: Address; // batcherHash()

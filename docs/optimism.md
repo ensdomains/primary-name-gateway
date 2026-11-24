@@ -12,7 +12,7 @@
 | verifier | [`OPFaultVerifier`](../packages/contracts/src/op/OPFaultVerifier.sol)`(AnchorStateRegistry, l2ChainId, maxL2SequenceLag, minAgeSec)`, one per OP Stack chain |
 | `verifyName` gas | ~0.2M |
 
-A faster alternative that trusts the batcher instead of waiting for games is researched in [op-batch-inbox.md](op-batch-inbox.md).
+A faster alternative that trusts the batcher instead of waiting for games: [op-batch-inbox.md](op-batch-inbox.md).
 
 ## Commits
 
