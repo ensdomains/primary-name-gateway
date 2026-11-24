@@ -57,6 +57,7 @@ const STORE_FORMAT = "chunks-4";
 export class RegistrarGateway {
 	readonly stats: GatewayStats = { snapshots: 0, patches: 0, rows: 0 };
 	lastSync: SyncResult | undefined;
+	private waiting = false; // the indexer had no valid commit at the last sync
 
 	constructor(
 		readonly store: NodeStore,
@@ -111,6 +112,9 @@ export class RegistrarGateway {
 
 		const targets: Commit[] = await this.fetchJSON(`/commits?status=valid&limit=${keep}`);
 		targets.sort((a, b) => a.l2Block - b.l2Block || a.id - b.id);
+		// said once, not on every poll
+		if (!targets.length && !this.waiting) this.log("the indexer has no valid commit yet: waiting");
+		this.waiting = !targets.length;
 		const valid = new Set(targets.map((c) => c.id));
 		// drop held commits that are no longer valid (blacklisted/retired); their rows get pruned
 		let held = this.commits.filter((c) => valid.has(c.id));
@@ -168,7 +172,13 @@ export class RegistrarGateway {
 			this.setHead(undefined);
 		}
 		this.store.setMeta(META_BOOTSTRAP, JSON.stringify({ commit, after }));
+		this.log(
+			`${after === null ? "loading" : "resuming"} the snapshot of commit ${commit.id} (L2 block ${commit.l2Block})`,
+		);
+		const t0 = Date.now();
 		let rows = 0;
+		let pages = 0;
+		let shown = t0;
 		for (;;) {
 			const query = after === null ? "" : `&after=${after}`;
 			const res = await this.fetchRaw(`/snapshot?commit=${commit.id}${query}`);
@@ -177,6 +187,13 @@ export class RegistrarGateway {
 			const page = (await res.json()) as SnapshotPage;
 			this.store.put(commit.l2Block, page.rows);
 			rows += page.rows.length;
+			pages++;
+			if (Date.now() - shown >= 10_000) {
+				shown = Date.now();
+				this.log(
+					`snapshot of commit ${commit.id}: ${rows.toLocaleString("en-US")} rows in ${pages} pages so far (${Math.round((shown - t0) / 1000)}s)`,
+				);
+			}
 			if (page.next === null) break;
 			after = page.next;
 			this.store.setMeta(META_BOOTSTRAP, JSON.stringify({ commit, after }));
@@ -187,7 +204,10 @@ export class RegistrarGateway {
 		this.setHead(commit);
 		this.stats.snapshots++;
 		this.stats.rows += rows;
-		this.log(`holding commit ${commit.id}: L2 block ${commit.l2Block} (snapshot, ${rows} rows)`);
+		const sec = Math.round((Date.now() - t0) / 1000);
+		this.log(
+			`holding commit ${commit.id}: L2 block ${commit.l2Block} (snapshot, ${rows.toLocaleString("en-US")} rows, ${sec}s)`,
+		);
 	}
 
 	private async isInvalid(commit: Commit): Promise<boolean> {

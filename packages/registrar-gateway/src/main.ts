@@ -27,7 +27,10 @@ const gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(db)), {
 	serveDelaySec: Number(env.GATEWAY_SERVE_DELAY_SEC ?? 0),
 	log,
 });
-log(`${chain}: resuming with ${gateway.commits.length} held commits from ${dbPath}`);
+const held = gateway.commits.length;
+log(
+	`${chain}: ${deployment.kind} commits, L1 ${deployment.l1.id} → L2 ${deployment.l2.id}, ${dbPath} (${held ? `resuming with ${held} held commits` : "empty"})`,
+);
 const pollMs = Number(env.GATEWAY_POLL_MS ?? 30_000);
 let timer: ReturnType<typeof setTimeout> | undefined;
 let server: ReturnType<typeof Bun.serve> | undefined;
@@ -45,15 +48,8 @@ const stop = async (signal: string) => {
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);
 
-const poll = async () => {
-	try {
-		await gateway.sync();
-	} catch (err) {
-		log("sync failed:", err);
-	}
-	timer = setTimeout(poll, pollMs);
-};
-await poll();
+// listening first: /status answers during the first sync, and CCIP-Read / JSON-RPC say there's no
+// commit yet until one is held
 server = Bun.serve({
 	port: Number(env.GATEWAY_PORT ?? 8200),
 	fetch: createGatewayHandler(
@@ -67,4 +63,21 @@ server = Bun.serve({
 		{ log: true },
 	),
 });
-log(`CCIP-Read: ${server.url}, JSON-RPC: ${server.url}rpc, status: ${server.url}status`);
+log(`listening: CCIP-Read ${server.url}, JSON-RPC ${server.url}rpc, status ${server.url}status`);
+log(`syncing from the indexer at ${gateway.config.indexerURL}, every ${pollMs / 1000}s`);
+
+let ready = false;
+const poll = async () => {
+	try {
+		await gateway.sync();
+		if (!ready && gateway.commits.length) {
+			ready = true;
+			const c = gateway.pick();
+			log(`ready: serving commit ${c.id} (L2 block ${c.l2Block})`);
+		}
+	} catch (err) {
+		log("sync failed:", err);
+	}
+	timer = setTimeout(poll, pollMs);
+};
+await poll();
