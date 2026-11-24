@@ -236,8 +236,10 @@ try {
 			// the gateway call, timed
 			async request(params) {
 				const t0 = performance.now();
-				response = await ccipRequest(params).catch((err: BaseError) => {
-					throw new Error(`gateway ${params.urls.join(", ")}: ${err.details ?? err.shortMessage} (is it running?)`);
+				response = await ccipRequest(params).catch((err: BaseError & { status?: number }) => {
+					// an HTTP status means it answered (e.g. 503 while it syncs); without one it's unreachable
+					const hint = err.status ? "" : " (is it running?)";
+					throw new Error(`gateway ${params.urls.join(", ")}: ${err.details ?? err.shortMessage}${hint}`);
 				});
 				gatewayMs = performance.now() - t0;
 				return response;
