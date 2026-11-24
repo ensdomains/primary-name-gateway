@@ -2,7 +2,7 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { createLog, DEPLOYMENTS } from "@primary-name-gateway/shared";
+import { createLog, DEPLOYMENTS, errorLine } from "@primary-name-gateway/shared";
 import { createGatewayHandler, RegistrarGateway, SqlNodeStore } from "./index.js";
 import { bunSqliteAdapter } from "./sqlite.js";
 
@@ -77,7 +77,7 @@ const poll = async () => {
 			log.ok(`ready: serving commit ${c.id} (L2 block ${c.l2Block})`);
 		}
 	} catch (err) {
-		log.error("sync failed:", err);
+		log.error(`sync failed: ${errorLine(err)}`);
 	}
 	timer = setTimeout(poll, pollMs);
 };

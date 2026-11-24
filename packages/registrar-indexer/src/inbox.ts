@@ -29,7 +29,7 @@ import {
 } from "viem";
 import { type CommitSource, errorMessage, NotFinalizedError, type RegistrarIndexer, SyncError } from "./indexer.js";
 import { KZG } from "./kzg.js";
-import type { InboxL2Reader } from "./l2.js";
+import { type InboxL2Reader, retryNotFound } from "./l2.js";
 
 export type InboxSourceConfig = {
 	deployment: InboxDeployment;
@@ -296,19 +296,6 @@ export class InboxCommitSource implements CommitSource {
 		const [blob] = ((await res.json()) as { data: Hex[] }).data;
 		if (!blob) throw new Error(`beacon: no blob ${versionedHash} in slot ${slot}`);
 		return hexToBytes(blob);
-	}
-}
-
-// Infura sometimes answers a finalized block with nothing (a backend behind the others): ask again
-// before failing the tick
-async function retryNotFound<T>(get: () => Promise<T>): Promise<T> {
-	for (let i = 1; ; i++) {
-		try {
-			return await get();
-		} catch (err) {
-			if (!(err instanceof BlockNotFoundError) || i === 4) throw err;
-			await new Promise((resolve) => setTimeout(resolve, 500 * i));
-		}
 	}
 }
 

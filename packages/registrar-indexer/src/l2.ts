@@ -11,7 +11,15 @@ import {
 	type RpcBlockHeader,
 	toLog,
 } from "@primary-name-gateway/shared";
-import { type Address, decodeAbiParameters, getAbiItem, type Hex, numberToHex, type PublicClient } from "viem";
+import {
+	type Address,
+	BlockNotFoundError,
+	decodeAbiParameters,
+	getAbiItem,
+	type Hex,
+	numberToHex,
+	type PublicClient,
+} from "viem";
 
 // a registrar event before it gets a sequence number
 export type RegistrarChange = Omit<Change, "seq">;
@@ -160,7 +168,7 @@ export class RPCOPReader extends RPCChangeReader implements OPL2Reader {
 	}
 
 	async finalizedBlock(): Promise<L2BlockRef> {
-		const b = await this.logsClient.getBlock({ blockTag: "finalized" });
+		const b = await retryNotFound(() => this.logsClient.getBlock({ blockTag: "finalized" }));
 		return { number: Number(b.number), timestamp: Number(b.timestamp) };
 	}
 
@@ -232,7 +240,7 @@ export class RPCInboxReader extends RPCChangeReader implements InboxL2Reader {
 	}
 
 	async finalizedBlock(): Promise<L2BlockRef> {
-		const b = await this.logsClient.getBlock({ blockTag: "finalized" });
+		const b = await retryNotFound(() => this.logsClient.getBlock({ blockTag: "finalized" }));
 		return { number: Number(b.number), timestamp: Number(b.timestamp) };
 	}
 
@@ -253,5 +261,18 @@ export class RPCInboxReader extends RPCChangeReader implements InboxL2Reader {
 			blockNumber: BigInt(block),
 		});
 		return { accountProof, storageHash };
+	}
+}
+
+// Some providers (Infura, public RPCs) answer eth_getBlockByNumber with null now and then, for a block
+// that exists: viem's BlockNotFoundError. Ask again a few times before failing.
+export async function retryNotFound<T>(get: () => Promise<T>): Promise<T> {
+	for (let i = 1; ; i++) {
+		try {
+			return await get();
+		} catch (err) {
+			if (!(err instanceof BlockNotFoundError) || i === 4) throw err;
+			await new Promise((resolve) => setTimeout(resolve, 500 * i));
+		}
 	}
 }
