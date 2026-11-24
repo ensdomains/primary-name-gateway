@@ -1,6 +1,6 @@
-# OP Stack batch inbox (research)
+# OP Stack batch inbox
 
-An alternative to dispute games for OP Stack chains: prove an L2 block from the batch data the batcher posts to L1, minutes after the block is made instead of days. Nothing here is deployed. This page records what a verifier would need and what we measured. The hard part is a partial brotli decoder: [brotli.ts](../packages/shared/src/brotli.ts) (TypeScript reference) and [BrotliPrefix.sol](../packages/contracts/src/brotli/BrotliPrefix.sol) (its port). [op-batch.ts](../packages/shared/src/op-batch.ts) reads blob data, frame 0 and the batch prefix; [OPBlob.sol](../packages/contracts/src/op/OPBlob.sol), [OPBatchPrefix.sol](../packages/contracts/src/op/OPBatchPrefix.sol) and [OPBatchInbox.sol](../packages/contracts/src/op/OPBatchInbox.sol) are their ports. Keep each pair in step.
+An alternative to dispute games for OP Stack chains: prove an L2 block from the batch data the batcher posts to L1, minutes after the block is made instead of days. This page covers the trust, what the verifier checks, the indexer, and what we measured. The hard part is a partial brotli decoder: [brotli.ts](../packages/shared/src/brotli.ts) (TypeScript reference) and [BrotliPrefix.sol](../packages/contracts/src/brotli/BrotliPrefix.sol) (its port). [op-batch.ts](../packages/shared/src/op-batch.ts) reads blob data, frame 0 and the batch prefix; [OPBlob.sol](../packages/contracts/src/op/OPBlob.sol), [OPBatchPrefix.sol](../packages/contracts/src/op/OPBatchPrefix.sol) and [OPBatchInbox.sol](../packages/contracts/src/op/OPBatchInbox.sol) are their ports. Keep each pair in step.
 
 ## Trust
 

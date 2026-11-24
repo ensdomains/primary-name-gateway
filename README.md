@@ -61,7 +61,7 @@ The serving rules are the same on every chain: the gateway serves the newest val
 | [`shared`](packages/shared) | Chain config and deployments, registrar layouts and events, row formats and provers for each trie kind ([trie.ts](packages/shared/src/trie.ts): Merkle-Patricia, [linea.ts](packages/shared/src/linea.ts): Linea), the indexer ↔ gateway JSON types, the batch inbox references ([brotli.ts](packages/shared/src/brotli.ts), [op-batch.ts](packages/shared/src/op-batch.ts)), Arbitrum assertions ([arbitrum.ts](packages/shared/src/arbitrum.ts)), and the services' log ([log.ts](packages/shared/src/log.ts)). |
 | [`registrar-indexer`](packages/registrar-indexer) | `RegistrarIndexer` (event replay, commits, tries of retained commits, kept as versioned rows in SQLite for OP Stack chains), a `CommitSource` per chain family (dispute games, Linea finalizations, batcher blobs, Arbitrum assertions), HTTP API. |
 | [`registrar-gateway`](packages/registrar-gateway) | `NodeStore`, `RegistrarGateway` (sync + `proveName`), `createGatewayHandler`: `GET /status`, JSON-RPC at `/rpc`, and CCIP-Read ([ezccip](https://github.com/adraffy/ezccip.js)) on every other path. The library (`src/index.ts`) is runtime-agnostic; `src/main.ts` is the bun server. |
-| [`contracts`](packages/contracts) | `L2ReverseResolver`, `IL2StorageVerifier`, and one verifier per chain family (`OPFaultVerifier`, `LineaVerifier`, `ArbitrumVerifier`; research: `OPBatchInboxVerifier`), deployed per chain and shareable by other resolvers. |
+| [`contracts`](packages/contracts) | `L2ReverseResolver`, `IL2StorageVerifier`, and one verifier per chain family (`OPFaultVerifier`, `LineaVerifier`, `ArbitrumVerifier`, `OPBatchInboxVerifier`), deployed per chain and shareable by other resolvers. |
 
 ## Gateway storage (`NodeStore`)
 
@@ -92,7 +92,7 @@ bun run indexer:linea       # :8101
 bun run gateway:linea       # :8201
 bun run indexer:base        # :8102
 bun run gateway:base        # :8202
-bun run indexer:base-inbox  # :8103 (research: docs/op-batch-inbox.md)
+bun run indexer:base-inbox  # :8103 (docs/op-batch-inbox.md)
 bun run gateway:base-inbox  # :8203
 bun run indexer:arbitrum    # :8104
 bun run gateway:arbitrum    # :8204

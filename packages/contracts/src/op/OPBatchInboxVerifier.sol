@@ -24,8 +24,8 @@ struct OPBatchInboxCommitProof {
     bytes l2Header; // RLP header of the L2 block the batch names as its parent
 }
 
-/// @notice IL2StorageVerifier for an OP Stack chain from its batcher's posts (research:
-///         docs/op-batch-inbox.md). It trusts the batcher key: a batch's parent is a block the batcher
+/// @notice IL2StorageVerifier for an OP Stack chain from its batcher's posts
+///         (docs/op-batch-inbox.md). It trusts the batcher key: a batch's parent is a block the batcher
 ///         says it built on. That's only as safe as the batcher, but it's minutes behind the L2
 ///         instead of days.
 /// @dev The commit proof shows: an L1 block (by hash: BLOCKHASH or EIP-2935 history), a type-3
