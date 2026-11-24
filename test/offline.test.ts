@@ -356,11 +356,7 @@ describe("offline e2e", () => {
 		expect(status.stats.rows).toBeGreaterThan(0);
 	}, 30_000);
 
-	test("the deployment comes from the indexer: a pinned gateway refuses another, a store of another starts over", async () => {
-		const pinned = new RegistrarGateway(new MemoryNodeStore(), { ...gatewayConfig, chain: "base" });
-		await expect(pinned.sync()).rejects.toThrow(/serves a deployment \(op commits of L2 \d+\), not base/);
-		expect(pinned.commits).toEqual([]);
-
+	test("the deployment comes from the indexer; a store of another deployment starts over", async () => {
 		const logs: string[] = [];
 		const other = new RegistrarGateway(new MemoryNodeStore(), {
 			...gatewayConfig,

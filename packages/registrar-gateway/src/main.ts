@@ -1,5 +1,5 @@
 // bun entry: SQLite-backed gateway (state survives restarts), served with Bun.serve (createGatewayHandler).
-// The deployment comes from the indexer's /status; GATEWAY_CHAIN, if set, pins it.
+// The deployment comes from the indexer's /status.
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -10,7 +10,6 @@ import { bunSqliteAdapter } from "./sqlite.js";
 const env = process.env;
 const log = createLog();
 const indexerURL = env.INDEXER_URL ?? "http://localhost:8100";
-const pinned = env.GATEWAY_CHAIN; // optional: refuse an indexer serving another deployment
 const pollMs = Number(env.GATEWAY_POLL_MS ?? 30_000);
 const startedAt = Math.floor(Date.now() / 1000);
 let db: Database | undefined;
@@ -63,18 +62,15 @@ async function indexerStatus(): Promise<IndexerStatus> {
 	}
 }
 
-// The store is named after the deployment, so it needs the name first: GATEWAY_CHAIN, or what the indexer
-// serves. One store per deployment: base and base-inbox gateways hold different commits (and can run side
-// by side).
-const status = pinned ? undefined : await indexerStatus();
-const chain = pinned ?? status?.chain;
-const dbPath = env.GATEWAY_DB ?? `data/gateway-${chain ?? `${status?.kind}-${status?.l2ChainId}`}.sqlite`;
+// The store is named after the indexer's deployment, so the indexer has to answer first. One store per
+// deployment: base and base-inbox gateways hold different commits (and can run side by side).
+const status = await indexerStatus();
+const dbPath = env.GATEWAY_DB ?? `data/gateway-${status.chain ?? `${status.kind}-${status.l2ChainId}`}.sqlite`;
 mkdirSync(dirname(dbPath), { recursive: true });
 db = new Database(dbPath, { create: true, strict: true });
 db.run("PRAGMA journal_mode = WAL");
 const gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(db)), {
 	indexerURL,
-	chain, // the store holds this deployment's rows: refuse an indexer that switched to another
 	keepCommits: Number(env.GATEWAY_KEEP_COMMITS ?? 2),
 	serveDelaySec: Number(env.GATEWAY_SERVE_DELAY_SEC ?? 0),
 	log,

@@ -23,7 +23,6 @@ import type { NodeStore } from "./store.js";
 
 export type GatewayConfig = {
 	indexerURL: string;
-	chain?: string; // the deployment to serve (base, base-inbox, ...): an indexer serving another is refused
 	keepCommits: number; // valid commits to hold (the newest, and fallbacks while serveDelaySec runs)
 	// Serve a commit only once it has been valid this long (default 0). The indexer judges validity on
 	// finalized L1, and validity only grows with L1, so a client reading at latest is already past it; a
@@ -222,8 +221,7 @@ export class RegistrarGateway {
 		);
 	}
 
-	// The indexer says which deployment it serves. A store holding another one's rows starts over; a
-	// gateway pinned to a deployment (config.chain) refuses another.
+	// The indexer says which deployment it serves; a store holding another one's rows starts over.
 	private async checkIndexer() {
 		const s: IndexerStatus = await this.fetchJSON("/status");
 		if (!s.layout) throw new Error(`the indexer at ${this.config.indexerURL} doesn't report its layout: update it`);
@@ -235,10 +233,6 @@ export class RegistrarGateway {
 			registrar: s.registrar,
 			layout: s.layout,
 		};
-		const { chain, indexerURL } = this.config;
-		if (chain && info.chain !== chain) {
-			throw new Error(`the indexer at ${indexerURL} serves ${describe(info)}, not ${chain}`);
-		}
 		const held = this.info;
 		if (held && !sameDeployment(held, info)) {
 			this.log.warn(`the indexer serves ${describe(info)}, the store has ${describe(held)}: starting over`);
