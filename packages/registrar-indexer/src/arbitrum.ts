@@ -3,6 +3,7 @@ import {
 	type ArbitrumDeployment,
 	ASSERTION_CONFIRMED,
 	ASSERTION_PENDING,
+	assertionHash,
 	assertionStateHash,
 	BOLD_ROLLUP_ABI,
 	decodeArbitrumCommitProof,
@@ -192,7 +193,7 @@ export class ArbitrumCommitSource implements CommitSource {
 	}
 
 	private async refreshStatuses(indexer: RegistrarIndexer, head: number) {
-		const { l1, deployment, minAgeL1Blocks = 0 } = this.config;
+		const { minAgeL1Blocks = 0 } = this.config;
 		const { db } = indexer;
 		const all = db.getCommits(undefined, 100_000) as ArbitrumCommit[];
 		const byHash = new Map(all.map((c) => [c.assertionHash, c]));
@@ -205,28 +206,11 @@ export class ArbitrumCommitSource implements CommitSource {
 				(minAgeL1Blocks > 0 && c.status === "valid"),
 		);
 		if (!due.length) return;
-		// the rollup's view on finalized L1, in batches of 25 (Infura answers part of a large batch with nothing)
+		// the rollup's view on finalized L1
 		const hashes = minAgeL1Blocks
 			? [...new Set(all.flatMap((c) => [c.assertionHash, c.parentAssertionHash]))]
 			: due.map((c) => c.assertionHash);
-		const nodes = new Map<Hex, Node>();
-		for (let i = 0; i < hashes.length; i += 25) {
-			const batch = hashes.slice(i, i + 25);
-			const got = await retry(() =>
-				Promise.all(
-					batch.map((h) =>
-						l1.readContract({
-							address: deployment.Rollup,
-							abi: BOLD_ROLLUP_ABI,
-							functionName: "getAssertion",
-							args: [h],
-							blockTag: this.config.l1BlockTag ?? "finalized",
-						}),
-					),
-				),
-			);
-			for (const [j, h] of batch.entries()) nodes.set(h, got[j]);
-		}
+		const nodes = await this.readNodes(hashes, this.config.l1BlockTag ?? "finalized");
 		// From the last confirmed ancestor to `c`, if every pending link's parent has no rival.
 		const chainOf = (c: ArbitrumCommit): { anchor: Hex; chain: Hex[] } | undefined => {
 			const chain: Hex[] = [];
@@ -255,13 +239,65 @@ export class ArbitrumCommitSource implements CommitSource {
 					db.putCommit({ ...c, status: "valid", validAt: now, commitProof });
 					indexer.log.ok(`assertion ${c.id}: valid, unchallenged ${link.chain.length / 2} links from a confirmed one`);
 				}
-			} else if (c.status === "valid" && !confirmed && !chainOf(c)) {
-				// accepted early, then challenged on the way
-				db.putCommit({ ...c, status: "invalid" });
-				indexer.log.error(`assertion ${c.id}: invalid (challenged before confirmation)`);
 			}
 		}
+		// Accepted early: walk each proof's chain on latest L1, as the verifier does, so a rival is seen
+		// within a tick rather than after L1 finality (validity itself is only judged on finalized L1).
+		const early = due.filter((c) => c.status === "valid" && nodes.get(c.assertionHash)?.status !== ASSERTION_CONFIRMED);
+		if (!early.length) return;
+		const links = new Map(early.map((c) => [c.id, proofLinks(c)]));
+		const latest = await this.readNodes([...new Set([...links.values()].flat())], "latest");
+		for (const c of early) {
+			if (chainAccepted(links.get(c.id)!, latest)) continue;
+			db.putCommit({ ...c, status: "invalid" });
+			indexer.log.error(`assertion ${c.id}: invalid (challenged before confirmation)`);
+		}
 	}
+
+	// the rollup's view of these assertions, in batches of 25 (Infura answers part of a large batch with nothing)
+	private async readNodes(hashes: Hex[], blockTag: BlockTag): Promise<Map<Hex, Node>> {
+		const { l1, deployment } = this.config;
+		const nodes = new Map<Hex, Node>();
+		for (let i = 0; i < hashes.length; i += 25) {
+			const batch = hashes.slice(i, i + 25);
+			const got = await retry(() =>
+				Promise.all(
+					batch.map((h) =>
+						l1.readContract({
+							address: deployment.Rollup,
+							abi: BOLD_ROLLUP_ABI,
+							functionName: "getAssertion",
+							args: [h],
+							blockTag,
+						}),
+					),
+				),
+			);
+			for (const [j, h] of batch.entries()) nodes.set(h, got[j]);
+		}
+		return nodes;
+	}
+}
+
+// the assertions a commit's proof walks: its anchor, then each link's
+function proofLinks(c: ArbitrumCommit): Hex[] {
+	const { anchor, chain } = decodeArbitrumCommitProof(c.commitProof);
+	const hashes = [anchor];
+	for (let i = 0; i < chain.length; i += 2)
+		hashes.push(assertionHash(hashes[hashes.length - 1], chain[i], chain[i + 1]));
+	return hashes;
+}
+
+// ArbitrumVerifier._verifyChain with minAgeL1Blocks: a confirmed anchor, then each link confirmed, or
+// pending with a parent that has no rival child
+function chainAccepted(hashes: Hex[], nodes: Map<Hex, Node>): boolean {
+	if (nodes.get(hashes[0])?.status !== ASSERTION_CONFIRMED) return false;
+	for (let i = 1; i < hashes.length; i++) {
+		const node = nodes.get(hashes[i]);
+		if (node?.status === ASSERTION_CONFIRMED) continue;
+		if (node?.status !== ASSERTION_PENDING || nodes.get(hashes[i - 1])?.secondChildBlock !== 0n) return false;
+	}
+	return true;
 }
 
 // Infura sometimes answers eth_getLogs with nothing: ask again before failing the tick

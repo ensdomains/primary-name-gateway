@@ -47,6 +47,7 @@ export type InboxCommit = CommitBase & {
 	kind: "inbox";
 	l1Block: number;
 	tx: Hex;
+	batcher: Address; // the transaction's sender, lowercase (the verifier checks it against batcherHash)
 	blobIndex: number;
 	l2Hash: Hex;
 	batch: "singular" | "span";
