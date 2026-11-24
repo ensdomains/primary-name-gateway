@@ -24,6 +24,7 @@ import {
 	decodeOPFaultCommitProof,
 	redactURL,
 	rpcURL,
+	styles,
 	useColor,
 } from "@primary-name-gateway/shared";
 import {
@@ -107,8 +108,7 @@ const n = (x: number | bigint) => x.toLocaleString("en-US");
 
 // colors on a terminal (NO_COLOR turns them off), plain text when piped
 const color = useColor();
-const paint = (code: number) => (s: string) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
-const [bold, dim, red, green, yellow] = [1, 2, 31, 32, 33].map(paint);
+const { bold, dim, red, green, yellow } = styles(color);
 
 // A step shows what it's waiting on while it runs, then becomes "✓ label  time" (or "✗ label").
 async function step<T>(label: string, f: () => Promise<T>): Promise<T> {
