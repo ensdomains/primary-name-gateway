@@ -16,6 +16,7 @@ import {
 	transactionsTrieProof,
 } from "@primary-name-gateway/shared";
 import {
+	type Address,
 	BlockNotFoundError,
 	bytesToHex,
 	type Hex,
@@ -81,7 +82,7 @@ export async function spanBatchParent(
 // Only finalized L1 blocks are used, and the parent must be at or below the L2's finalized head, so
 // nothing stored can reorg. The newest batch's parent often isn't final yet (L2 finality follows L1's
 // in 6.4 minute epochs), so the scan passes it over for the newest batch whose parent is. Commits are valid when found (the verifier trusts the batcher) until
-// they're too old for the verifier.
+// they're too old for the verifier, or the batcher is replaced.
 export class InboxCommitSource implements CommitSource {
 	private readonly attempts = new Map<number, number>();
 	private beaconGenesis: bigint | undefined;
@@ -91,12 +92,13 @@ export class InboxCommitSource implements CommitSource {
 	async tick(indexer: RegistrarIndexer) {
 		const { l1, intervalSec, scanBlocks, firstScanBlocks } = this.config;
 		const head = await l1.getBlock({ blockTag: "finalized" });
-		this.expire(indexer, Number(head.number));
+		const batcher = await this.batcher();
+		this.invalidate(indexer, Number(head.number), batcher);
 		const [last] = indexer.db.getCommits(undefined, 1);
 		if (last && Number(head.timestamp) - last.createdAt < intervalSec) return;
 		const depth = last ? scanBlocks : Math.max(scanBlocks, firstScanBlocks);
 		let notFinal = 0;
-		for await (const batch of this.channelStarts(indexer, head.number, depth)) {
+		for await (const batch of this.channelStarts(indexer, head.number, depth, batcher)) {
 			if (batch === "known") return; // nothing newer to commit
 			const result = await this.tryCommit(indexer, batch);
 			if (result !== "not final") return;
@@ -115,15 +117,9 @@ export class InboxCommitSource implements CommitSource {
 		indexer: RegistrarIndexer,
 		head: bigint,
 		depth: number,
+		batcher: Address,
 	): AsyncGenerator<InboxBatch | "known"> {
 		const { l1, deployment } = this.config;
-		const batcherHash = await l1.readContract({
-			address: deployment.SystemConfig,
-			abi: SYSTEM_CONFIG_ABI,
-			functionName: "batcherHash",
-			blockTag: "finalized",
-		});
-		const batcher = `0x${batcherHash.slice(-40)}`;
 		const inbox = deployment.BatchInbox.toLowerCase();
 		for (let n = head; n > head - BigInt(depth); n--) {
 			const block = await retryNotFound(() => l1.getBlock({ blockNumber: n, includeTransactions: true }));
@@ -250,6 +246,7 @@ export class InboxCommitSource implements CommitSource {
 			accountProof: encodeMPTProof(account.accountProof),
 			l1Block: Number(block.number),
 			tx: tx.hash,
+			batcher: tx.from.toLowerCase() as Address,
 			blobIndex,
 			l2Hash: l2Raw.hash,
 			batch: batch.type,
@@ -257,13 +254,32 @@ export class InboxCommitSource implements CommitSource {
 		await indexer.addCommit(commit, account.storageHash);
 	}
 
-	// commits too old for the verifier
-	private expire(indexer: RegistrarIndexer, l1Head: number) {
+	// The verifier checks the sender against SystemConfig.batcherHash when it's called, so the batcher is
+	// read at latest L1: after a rotation, the old batcher's commits stop verifying at once.
+	private async batcher(): Promise<Address> {
+		const { l1, deployment } = this.config;
+		const batcherHash = await l1.readContract({
+			address: deployment.SystemConfig,
+			abi: SYSTEM_CONFIG_ABI,
+			functionName: "batcherHash",
+			blockTag: "latest",
+		});
+		return `0x${batcherHash.slice(-40)}`;
+	}
+
+	// commits the verifier would refuse: too old, or posted by a batcher that has since been replaced
+	private invalidate(indexer: RegistrarIndexer, l1Head: number, batcher: Address) {
 		for (const c of indexer.db.getCommits("valid", 1000)) {
-			if (c.kind === "inbox" && l1Head - c.l1Block > this.config.maxL1BlockLag) {
-				indexer.db.putCommit({ ...c, status: "invalid" });
-				indexer.log.error(`batch ${c.id}: invalid (L1 block ${c.l1Block} is too old)`);
-			}
+			if (c.kind !== "inbox") continue;
+			const reason =
+				l1Head - c.l1Block > this.config.maxL1BlockLag
+					? `L1 block ${c.l1Block} is too old`
+					: c.batcher !== batcher
+						? `the batcher is now ${batcher}`
+						: undefined;
+			if (!reason) continue;
+			indexer.db.putCommit({ ...c, status: "invalid" });
+			indexer.log.error(`batch ${c.id}: invalid (${reason})`);
 		}
 	}
 

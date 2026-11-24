@@ -55,7 +55,7 @@ The verifier walks it: each step recomputes the child's hash and reads its node.
 - **Status**, each tick, from `getAssertion` on finalized L1 (batches of 25), only for assertions whose status can change: confirmed-only, the pending ones a confirm period old; with `INDEXER_MIN_AGE_L1_BLOCKS`, the pending ones that old and the valid unconfirmed ones, with every assertion back to a confirmed one:
   - confirmed: valid;
   - with `INDEXER_MIN_AGE_L1_BLOCKS` (must equal the verifier's `minAgeL1Blocks`): a pending assertion that old, with an unchallenged chain back to a confirmed one, is valid, and its proof is rebuilt with that chain;
-  - a valid but unconfirmed assertion whose chain gets a rival becomes invalid.
+  - a valid but unconfirmed assertion becomes invalid when its proof's chain stops passing the verifier's walk (a rival on the way). That check reads **latest** L1, so a rival takes the commit out within a tick, not after L1 finality (about 13 minutes) during which every proof of it would revert.
 - **`minAgeL1Blocks` changes:** the indexer records it (`/status` shows `minAgeL1Blocks`); on a change every valid assertion goes back to pending and is checked again under the new rule, and the indexer's tick rebuilds the tries of the newest valid commits (`keepTries`).
 - **Events:** the registrar's history is 177M L2 blocks. Arbitrum's public RPC answers `eth_getLogs` over 10,000,000 blocks (Infura 10,000, drpc's free plan 100), so `ARBITRUM.wideLogsRPC` is preferred for logs: the whole replay is about 30 calls (the range starts at 5,000 blocks and doubles up to 10M).
 

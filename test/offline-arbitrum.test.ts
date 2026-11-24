@@ -200,12 +200,17 @@ describe("offline e2e: Arbitrum (BoLD)", () => {
 	}, 60_000);
 
 	test("a rival on the way makes the early commit invalid; the one before it is served", async () => {
+		await mineL1(64); // so the rollup is on anvil's finalized L1 (64 blocks back), but the rival won't be
 		const { proof } = gateway.proveName(ADDR);
 		await assert(second); // a second child of `second`: a challenge
 		await expect(
 			l1.readContract({ address: early, abi: RESOLVER_ABI, functionName: "verifyName", args: [ADDR, proof] }),
 		).rejects.toThrow(/Challenged/);
-		await sync();
+		// an indexer on finalized L1 (anvil's is 64 blocks back) can't see the rival yet, and still drops
+		// the commit: valid early commits are re-checked on latest
+		const finalized = new ArbitrumCommitSource({ ...source(MIN_AGE).config, l1BlockTag: "finalized" });
+		await new RegistrarIndexer({ ...indexer.config, source: finalized }).tick();
+		await gateway.sync();
 		expect(status(third)).toBe("invalid");
 		expect(status(second)).toBe("valid"); // its parent `first` has no rival
 		expect(await verify(early)).toBe("second.eth");
