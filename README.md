@@ -21,13 +21,13 @@ Proven from what the rollup itself commits to L1. **Delay** is how far behind th
 
 The early delays add up the time between commitments (every), the age of the L2 block a commitment names when it's posted (measured 2026-11-23: Optimism ~20 min, Base ~35 min, Arbitrum ~1 h), and L1 finality (~13 min: the indexer only reads finalized L1). An early Arbitrum proof is a chain of assertions from the last confirmed one (about 6.4 days back), so it costs more the smaller `minAgeBlocks` is: 2.1M gas at 1,800 blocks, against ~600k confirmed-only.
 
-### Sequencer
+### Other
 
-Proven from what the L2's sequencer or batcher posts, before the rollup commits to it: much fresher, trusting the batcher key instead of fault or validity proofs. Research: nothing is deployed.
+Proven from something other than the rollup's own commitments to L1, with a different trust assumption, usually for freshness.
 
 | name | kind | every | trust | chains | delay |
 |---|---|---|---|---|---|
-| [OP Batch Inbox](docs/op-batch-inbox.md) | `inbox`: a batcher blob that starts a channel names its parent L2 block | ~1 min | the batcher key (`SystemConfig.batcherHash()`) | Optimism, Base | ~25 min |
+| [OP Batch Inbox](docs/op-batch-inbox.md) | `inbox`: a batcher blob that starts a channel names its parent L2 block | ~1 min | sequencer | Optimism, Base | ~25 min |
 
 [docs/registrar.md](docs/registrar.md) covers the registrar contract, its storage layouts, and why its storage can be rebuilt from events. ENSIP-19 coin types are `0x80000000 | chainId`.
 
