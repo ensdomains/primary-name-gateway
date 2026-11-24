@@ -113,14 +113,14 @@ Indexer (`bun run indexer:<chain>`, or `bun run indexer` with `INDEXER_CHAIN`):
 | `INDEXER_CACHE_MB` | `64` | SQLite page cache |
 | `NO_COLOR` / `FORCE_COLOR` | | log colors (indexer and gateway): on a terminal by default |
 
-Gateway (`bun run gateway:<chain>`, or `bun run gateway` with `GATEWAY_CHAIN`):
+Gateway (`bun run gateway:<chain>`, or `bun run gateway`). It uses no RPC: everything comes from its indexer, the deployment included (its `/status`: the name, commit kind, chain ids, registrar and layout).
 
 | variable | default | |
 |---|---|---|
-| `GATEWAY_CHAIN` | required | the deployment: registrar layout, chain ids and registrar (`/status`, `/rpc`), and the default DB name |
 | `INDEXER_URL` | `http://localhost:8100` | the `:<chain>` scripts point at that chain's indexer port |
+| `GATEWAY_CHAIN` | the indexer's | optional: pins the deployment, so an indexer serving another one is refused |
 | `GATEWAY_PORT` | `8200` | the `:optimism` / `:linea` / `:base` / `:base-inbox` / `:arbitrum` scripts use 8200 / 8201 / 8202 / 8203 / 8204 |
-| `GATEWAY_DB` | `data/gateway-<chain>.sqlite` | one per deployment: `base` and `base-inbox` gateways hold different commits |
+| `GATEWAY_DB` | `data/gateway-<chain>.sqlite` | one per deployment (`base` and `base-inbox` gateways hold different commits), named after the indexer's deployment, so the gateway waits for the indexer before opening it. The store records the deployment and starts over if it's given another one's indexer. |
 | `GATEWAY_KEEP_COMMITS` | `2` | valid commits held: the newest, and fallbacks while `GATEWAY_SERVE_DELAY_SEC` runs |
 | `GATEWAY_SERVE_DELAY_SEC` | `0` | serve a commit only once it has been valid this long. The indexer judges validity on finalized L1 and validity only grows, so clients reading at latest are already past it; a few seconds only help clients reading at finalized |
 | `GATEWAY_POLL_MS` | `30000` | |

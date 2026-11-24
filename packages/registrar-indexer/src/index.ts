@@ -169,6 +169,7 @@ if (import.meta.main) {
 		log(`  ${what.padEnd(9)} ${redactURL(url)}`);
 	}
 	const config: IndexerConfig = {
+		chain,
 		deployment,
 		db,
 		log,

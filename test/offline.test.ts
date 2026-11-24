@@ -47,6 +47,7 @@ import {
 	createGatewayHandler,
 	type GatewayConfig,
 	type gatewayStatus,
+	MemoryNodeStore,
 	RegistrarGateway,
 	SqlNodeStore,
 } from "../packages/registrar-gateway/src/index.js";
@@ -295,12 +296,7 @@ describe("offline e2e", () => {
 	}, 30_000);
 
 	test("the gateway's JSON-RPC answers eth_getProof and eth_getStorageAt as the L2 would; /status", async () => {
-		const handler = createGatewayHandler(gateway, {
-			kind: "op",
-			l1ChainId: 31337,
-			l2ChainId: CHAIN_ID,
-			registrar: REGISTRAR,
-		});
+		const handler = createGatewayHandler(gateway); // the deployment comes from the indexer
 		const call = async (body: unknown): Promise<any> =>
 			(await handler(new Request("http://gateway/rpc", { method: "POST", body: JSON.stringify(body) }))).json();
 		const commit = gateway.pick();
@@ -350,12 +346,36 @@ describe("offline e2e", () => {
 			l1ChainId: 31337,
 			l2ChainId: CHAIN_ID,
 			registrar: REGISTRAR,
+			layout: { namesSlot: 0 },
+			indexerURL: gatewayConfig.indexerURL,
 			keepCommits: 2,
 		});
 		expect(status.served?.id).toBe(commit.id);
 		expect(status.held.map((c: { id: number }) => c.id)).toEqual(gateway.commits.map((c) => c.id));
 		expect(status.lastSync?.error).toBeUndefined();
 		expect(status.stats.rows).toBeGreaterThan(0);
+	}, 30_000);
+
+	test("the deployment comes from the indexer: a pinned gateway refuses another, a store of another starts over", async () => {
+		const pinned = new RegistrarGateway(new MemoryNodeStore(), { ...gatewayConfig, chain: "base" });
+		await expect(pinned.sync()).rejects.toThrow(/serves a deployment \(op commits of L2 \d+\), not base/);
+		expect(pinned.commits).toEqual([]);
+
+		const logs: string[] = [];
+		const other = new RegistrarGateway(new MemoryNodeStore(), {
+			...gatewayConfig,
+			log: (...a: unknown[]) => logs.push(a.join(" ")),
+		});
+		await other.sync();
+		expect(other.info).toMatchObject({ kind: "op", l2ChainId: CHAIN_ID, registrar: REGISTRAR });
+		expect(other.stats.snapshots).toBe(1);
+		// as if the store had been another chain's
+		other.store.setMeta("info", JSON.stringify({ ...other.info, l2ChainId: 1 }));
+		await other.sync();
+		expect(logs.some((l) => l.includes("the store has a deployment (op commits of L2 1): starting over"))).toBeTrue();
+		expect(other.stats.snapshots).toBe(2);
+		expect(other.info?.l2ChainId).toBe(CHAIN_ID);
+		expect(other.proveName(A.short).proof).toBe(gateway.proveName(A.short).proof);
 	}, 30_000);
 
 	test("a restarted gateway resumes from its store with patches only", async () => {

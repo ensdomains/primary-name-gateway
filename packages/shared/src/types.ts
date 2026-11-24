@@ -77,7 +77,11 @@ export type Change = {
 	name: Hex; // raw bytes (not necessarily valid UTF-8)
 };
 
+// the registrar's storage layout in JSON (RegistrarLayout's slots are bigints)
+export type LayoutJSON = { namesSlot: number; ownerSlot?: number };
+
 export type IndexerStatus = {
+	chain?: string; // the deployment's name (INDEXER_CHAIN): base, base-inbox, ...
 	kind: CommitKind;
 	l1ChainId: number; // where its commits are
 	l2ChainId: number;
@@ -85,6 +89,7 @@ export type IndexerStatus = {
 	minAgeSec?: number; // OP: unchallenged games this old are accepted before finality; the verifier must match
 	minAgeL1Blocks?: number; // Arbitrum: unchallenged assertions this many L1 blocks old, likewise
 	registrar: Address;
+	layout: LayoutJSON;
 	syncedBlock: number; // changes are complete through this L2 block
 	changeSeq: number; // latest change
 	syncingTo?: number; // while it syncs events: the L2 block it's syncing to

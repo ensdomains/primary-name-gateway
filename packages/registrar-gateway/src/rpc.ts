@@ -19,11 +19,6 @@ import {
 } from "viem";
 import type { RegistrarGateway } from "./gateway.js";
 
-export type RPCConfig = {
-	chainId: number; // the L2's
-	registrar: Address; // the only account served
-};
-
 type RPCRequest = { jsonrpc?: string; id?: unknown; method?: unknown; params?: unknown };
 type Reply = { jsonrpc: "2.0"; id: unknown } & ({ result: unknown } | { error: { code: number; message: string } });
 
@@ -38,21 +33,25 @@ class RPCError extends Error {
 
 const CORS = { "access-control-allow-origin": "*" };
 
-export function createRPCHandler(
-	gateway: RegistrarGateway,
-	config: RPCConfig,
-): (request: Request) => Promise<Response> {
+// the L2's chain id and the registrar (the only account served) come from the gateway's indexer
+export function createRPCHandler(gateway: RegistrarGateway): (request: Request) => Promise<Response> {
+	const info = () => {
+		const i = gateway.info;
+		if (!i) throw new RPCError(-32000, "no commit yet");
+		return i;
+	};
 	const methods: Record<string, (params: unknown[]) => unknown> = {
-		eth_chainId: () => numberToHex(config.chainId),
+		eth_chainId: () => numberToHex(info().l2ChainId),
 		eth_blockNumber: () => numberToHex(servedCommit(gateway).l2Block),
 		eth_getStorageAt: ([address, slot, block]) => {
 			const commit = commitAt(gateway, block);
-			checkAddress(address, config);
+			checkAddress(address, info().registrar);
 			return padHex(bytesToHex(readSlots(gateway, commit, [slotBytes(slot)])[0].value), { size: 32 });
 		},
 		eth_getProof: ([address, keys, block]) => {
 			const commit = commitAt(gateway, block);
-			checkAddress(address, config);
+			const { registrar } = info();
+			checkAddress(address, registrar);
 			if (!Array.isArray(keys)) throw new RPCError(-32602, "storage keys: expected an array");
 			if (commit.kind === "linea") {
 				throw new RPCError(-32601, "eth_getProof: Linea's state isn't a Merkle-Patricia trie (linea_getProof)");
@@ -63,7 +62,7 @@ export function createRPCHandler(
 			const [nonce, balance, storageHash, codeHash] = fromRlp(leaf[1]) as Hex[];
 			const proofs = readSlots(gateway, commit, keys.map(slotBytes));
 			return {
-				address: config.registrar.toLowerCase(), // as nodes answer it
+				address: registrar.toLowerCase(), // as nodes answer it
 				balance: quantity(balance),
 				codeHash,
 				nonce: quantity(nonce),
@@ -153,12 +152,12 @@ function commitAt(gateway: RegistrarGateway, block: unknown) {
 	return commit;
 }
 
-function checkAddress(address: unknown, config: RPCConfig) {
+function checkAddress(address: unknown, registrar: Address) {
 	if (typeof address !== "string" || !isAddress(address, { strict: false })) {
 		throw new RPCError(-32602, "address: expected an address");
 	}
-	if (address.toLowerCase() !== config.registrar.toLowerCase()) {
-		throw new RPCError(-32000, `only the registrar ${config.registrar} is served`);
+	if (address.toLowerCase() !== registrar.toLowerCase()) {
+		throw new RPCError(-32000, `only the registrar ${registrar} is served`);
 	}
 }
 

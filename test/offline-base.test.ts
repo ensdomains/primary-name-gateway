@@ -116,7 +116,6 @@ describe("offline e2e (base: output root games, Ownable layout)", () => {
 			indexerURL: indexerServer.url.origin,
 			keepCommits: 2,
 			serveDelaySec: 0,
-			layout: OWNABLE_LAYOUT,
 		});
 		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });
 

@@ -116,7 +116,7 @@ describe("offline e2e (linea)", () => {
 		indexerServer = serveIndexer(indexer, db, 0);
 
 		gatewayDB = new Database(":memory:");
-		gatewayConfig = { indexerURL: indexerServer.url.origin, keepCommits: 2, serveDelaySec: 0, layout: LAYOUT };
+		gatewayConfig = { indexerURL: indexerServer.url.origin, keepCommits: 2, serveDelaySec: 0 };
 		gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(gatewayDB)), gatewayConfig);
 		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });
 

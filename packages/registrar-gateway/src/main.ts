@@ -1,40 +1,21 @@
-// bun entry: SQLite-backed gateway (state survives restarts), served with Bun.serve (createGatewayHandler)
+// bun entry: SQLite-backed gateway (state survives restarts), served with Bun.serve (createGatewayHandler).
+// The deployment comes from the indexer's /status; GATEWAY_CHAIN, if set, pins it.
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { createLog, DEPLOYMENTS, errorLine } from "@primary-name-gateway/shared";
+import { createLog, errorLine, type IndexerStatus } from "@primary-name-gateway/shared";
 import { createGatewayHandler, RegistrarGateway, SqlNodeStore } from "./index.js";
 import { bunSqliteAdapter } from "./sqlite.js";
 
 const env = process.env;
 const log = createLog();
-const chain = env.GATEWAY_CHAIN;
-const deployment = chain && DEPLOYMENTS[chain];
-if (!deployment) {
-	console.error(
-		`${chain ? `unknown GATEWAY_CHAIN: ${chain}` : "set GATEWAY_CHAIN"} (${Object.keys(DEPLOYMENTS).join(", ")}), or use bun run gateway:<chain>`,
-	);
-	process.exit(1);
-}
-// one store per deployment: base and base-inbox gateways hold different commits (and can run side by side)
-const dbPath = env.GATEWAY_DB ?? `data/gateway-${chain}.sqlite`;
-mkdirSync(dirname(dbPath), { recursive: true });
-const db = new Database(dbPath, { create: true, strict: true });
-db.run("PRAGMA journal_mode = WAL");
-const gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(db)), {
-	indexerURL: env.INDEXER_URL ?? "http://localhost:8100",
-	layout: deployment.layout,
-	keepCommits: Number(env.GATEWAY_KEEP_COMMITS ?? 2),
-	serveDelaySec: Number(env.GATEWAY_SERVE_DELAY_SEC ?? 0),
-	log,
-});
-const held = gateway.commits.length;
-log(
-	`${chain}: ${deployment.kind} commits, L1 ${deployment.l1.id}, L2 ${deployment.l2.id}, ${dbPath} (${held ? `resuming with ${held} held commits` : "empty"})`,
-);
+const indexerURL = env.INDEXER_URL ?? "http://localhost:8100";
+const pinned = env.GATEWAY_CHAIN; // optional: refuse an indexer serving another deployment
 const pollMs = Number(env.GATEWAY_POLL_MS ?? 30_000);
+const startedAt = Math.floor(Date.now() / 1000);
+let db: Database | undefined;
+let handler: ((request: Request) => Promise<Response>) | undefined;
 let timer: ReturnType<typeof setTimeout> | undefined;
-let server: ReturnType<typeof Bun.serve> | undefined;
 
 // A signal is handled at an await, so a sync step's writes (rows, then the head or the snapshot cursor)
 // are never split. Every write is a transaction, so a hard kill is safe too: it can redo a snapshot.
@@ -42,33 +23,66 @@ let server: ReturnType<typeof Bun.serve> | undefined;
 const stop = async (signal: string) => {
 	log(`${signal}: stopping`);
 	clearTimeout(timer);
-	await server?.stop(true);
-	db.close();
+	await server.stop(true);
+	db?.close();
 	process.exit(0);
 };
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);
 
-// listening first: /status answers during the first sync, and CCIP-Read / JSON-RPC say there's no
-// commit yet until one is held
-server = Bun.serve({
+// listening first: /status answers while it waits for the indexer and during the first sync, and
+// CCIP-Read / JSON-RPC say there's no commit yet until one is held
+const server = Bun.serve({
 	port: Number(env.GATEWAY_PORT ?? 8200),
-	fetch: createGatewayHandler(
-		gateway,
-		{
-			kind: deployment.kind,
-			l1ChainId: deployment.l1.id,
-			l2ChainId: deployment.l2.id,
-			registrar: deployment.L2ReverseRegistrar,
-		},
-		{ log: true },
-	),
+	fetch: (request) => handler?.(request) ?? waiting(request),
 });
 log("listening:");
 log(`  CCIP-Read  ${server.url}`);
 log(`  JSON-RPC   ${server.url}rpc`);
 log(`  status     ${server.url}status`);
-log(`syncing from the indexer at ${gateway.config.indexerURL}, every ${pollMs / 1000}s`);
+
+// before the store is open
+async function waiting(request: Request): Promise<Response> {
+	if (new URL(request.url).pathname === "/status") {
+		return Response.json({ indexerURL, waiting: "for the indexer", startedAt });
+	}
+	return new Response("starting: waiting for the indexer", { status: 503 });
+}
+
+// the indexer's /status, retried until it answers
+async function indexerStatus(): Promise<IndexerStatus> {
+	for (let warned = false; ; warned = true) {
+		try {
+			const res = await fetch(`${indexerURL}/status`);
+			if (!res.ok) throw new Error(`/status: ${res.status}`);
+			return (await res.json()) as IndexerStatus;
+		} catch (err) {
+			if (!warned) log.warn(`waiting for the indexer at ${indexerURL}: ${errorLine(err)}`);
+			await Bun.sleep(5000);
+		}
+	}
+}
+
+// The store is named after the deployment, so it needs the name first: GATEWAY_CHAIN, or what the indexer
+// serves. One store per deployment: base and base-inbox gateways hold different commits (and can run side
+// by side).
+const status = pinned ? undefined : await indexerStatus();
+const chain = pinned ?? status?.chain;
+const dbPath = env.GATEWAY_DB ?? `data/gateway-${chain ?? `${status?.kind}-${status?.l2ChainId}`}.sqlite`;
+mkdirSync(dirname(dbPath), { recursive: true });
+db = new Database(dbPath, { create: true, strict: true });
+db.run("PRAGMA journal_mode = WAL");
+const gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(db)), {
+	indexerURL,
+	chain, // the store holds this deployment's rows: refuse an indexer that switched to another
+	keepCommits: Number(env.GATEWAY_KEEP_COMMITS ?? 2),
+	serveDelaySec: Number(env.GATEWAY_SERVE_DELAY_SEC ?? 0),
+	log,
+});
+handler = createGatewayHandler(gateway, { log: true });
+const held = gateway.commits.length;
+log(`${dbPath} (${held ? `resuming with ${held} held commits` : "empty"})`);
+log(`syncing from the indexer at ${indexerURL}, every ${pollMs / 1000}s`);
 
 let ready = false;
 const poll = async () => {

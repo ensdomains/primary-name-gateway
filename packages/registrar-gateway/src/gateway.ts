@@ -4,14 +4,13 @@ import {
 	dataSlots,
 	encodeLineaMultiProof,
 	encodeMPTStorageProofs,
+	type IndexerStatus,
 	LINEA_ROOT_PATH,
 	type Log,
 	lineaRootHash,
-	PLAIN_LAYOUT,
 	primarySlot,
 	proveLineaSlots,
 	proveSlot,
-	type RegistrarLayout,
 	ROW_FORMAT_LINEA,
 	ROW_FORMAT_MPT,
 	rootHash,
@@ -24,7 +23,7 @@ import type { NodeStore } from "./store.js";
 
 export type GatewayConfig = {
 	indexerURL: string;
-	layout?: RegistrarLayout; // registrar storage layout (default: names at slot 0), see docs/registrar.md
+	chain?: string; // the deployment to serve (base, base-inbox, ...): an indexer serving another is refused
 	keepCommits: number; // valid commits to hold (the newest, and fallbacks while serveDelaySec runs)
 	// Serve a commit only once it has been valid this long (default 0). The indexer judges validity on
 	// finalized L1, and validity only grows with L1, so a client reading at latest is already past it; a
@@ -33,6 +32,10 @@ export type GatewayConfig = {
 	log?: Log | ((...args: unknown[]) => void);
 	fetch?: typeof fetch;
 };
+
+// What a gateway serves, from its indexer's /status: the deployment, its chains and commit kind, the
+// registrar and its storage layout (docs/registrar.md).
+export type GatewayInfo = Pick<IndexerStatus, "chain" | "kind" | "l1ChainId" | "l2ChainId" | "registrar" | "layout">;
 
 export type GatewayStats = { snapshots: number; patches: number; rows: number };
 
@@ -45,6 +48,7 @@ const META_HELD = "held"; // commits we serve
 const META_HEAD = "head"; // newest commit whose rows are in the store (patches start here)
 const META_BOOTSTRAP = "bootstrap";
 const META_FORMAT = "format"; // how the store's rows are laid out
+const META_INFO = "info"; // the deployment the rows are from (GatewayInfo)
 // OP Stack rows are chunks (shared/trie.ts); a store from before that starts over with a snapshot
 const STORE_FORMAT = "chunks-4";
 
@@ -71,6 +75,12 @@ export class RegistrarGateway {
 		return this.#log;
 	}
 	#log: Log | undefined;
+
+	// the deployment it serves, as the indexer last said (kept in the store, so it's known on a restart)
+	get info(): GatewayInfo | undefined {
+		const json = this.store.getMeta(META_INFO);
+		return json ? JSON.parse(json) : undefined;
+	}
 
 	// held commits, ascending by L2 block
 	get commits(): Commit[] {
@@ -105,12 +115,10 @@ export class RegistrarGateway {
 		const { keepCommits: keep } = this.config;
 		if (this.store.getMeta(META_FORMAT) !== STORE_FORMAT) {
 			if (this.store.getMeta(META_HEAD)) this.log.warn("the store's rows are in an older layout: starting over");
-			this.store.clear();
-			this.setHeld([]);
-			this.setHead(undefined);
-			this.store.setMeta(META_BOOTSTRAP, undefined);
+			this.startOver();
 			this.store.setMeta(META_FORMAT, STORE_FORMAT);
 		}
+		await this.checkIndexer();
 		const resume = this.store.getMeta(META_BOOTSTRAP);
 		if (resume) await this.bootstrap(JSON.parse(resume));
 
@@ -214,6 +222,41 @@ export class RegistrarGateway {
 		);
 	}
 
+	// The indexer says which deployment it serves. A store holding another one's rows starts over; a
+	// gateway pinned to a deployment (config.chain) refuses another.
+	private async checkIndexer() {
+		const s: IndexerStatus = await this.fetchJSON("/status");
+		if (!s.layout) throw new Error(`the indexer at ${this.config.indexerURL} doesn't report its layout: update it`);
+		const info: GatewayInfo = {
+			chain: s.chain,
+			kind: s.kind,
+			l1ChainId: s.l1ChainId,
+			l2ChainId: s.l2ChainId,
+			registrar: s.registrar,
+			layout: s.layout,
+		};
+		const { chain, indexerURL } = this.config;
+		if (chain && info.chain !== chain) {
+			throw new Error(`the indexer at ${indexerURL} serves ${describe(info)}, not ${chain}`);
+		}
+		const held = this.info;
+		if (held && !sameDeployment(held, info)) {
+			this.log.warn(`the indexer serves ${describe(info)}, the store has ${describe(held)}: starting over`);
+			this.startOver();
+		}
+		if (JSON.stringify(held) !== JSON.stringify(info)) {
+			this.store.setMeta(META_INFO, JSON.stringify(info));
+			this.log(`${info.chain ?? "the indexer"}: ${info.kind} commits, L1 ${info.l1ChainId}, L2 ${info.l2ChainId}`);
+		}
+	}
+
+	private startOver() {
+		this.store.clear();
+		this.setHeld([]);
+		this.setHead(undefined);
+		this.store.setMeta(META_BOOTSTRAP, undefined);
+	}
+
 	private async isInvalid(commit: Commit): Promise<boolean> {
 		const res = await this.fetchRaw(`/commits/${commit.id}`);
 		if (res.status === 404) return true;
@@ -253,7 +296,7 @@ export class RegistrarGateway {
 		if (!commit) throw new Error(`not holding commit ${id}`);
 		const version = commit.l2Block;
 		const get = (path: string) => this.store.get(path, version);
-		const slot = primarySlot(addr, (this.config.layout ?? PLAIN_LAYOUT).namesSlot);
+		const slot = primarySlot(addr, BigInt(this.info?.layout.namesSlot ?? 0));
 		let storageProof: Hex;
 		let count: number;
 		if (commit.kind === "linea") {
@@ -302,4 +345,18 @@ export class RegistrarGateway {
 		if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
 		return res.json() as Promise<T>;
 	}
+}
+
+const describe = (i: GatewayInfo) => `${i.chain ?? "a deployment"} (${i.kind} commits of L2 ${i.l2ChainId})`;
+
+// the same rows: the same commit kind, chains, registrar and slots
+function sameDeployment(a: GatewayInfo, b: GatewayInfo): boolean {
+	return (
+		a.kind === b.kind &&
+		a.l1ChainId === b.l1ChainId &&
+		a.l2ChainId === b.l2ChainId &&
+		a.registrar.toLowerCase() === b.registrar.toLowerCase() &&
+		a.layout.namesSlot === b.layout.namesSlot &&
+		a.layout.ownerSlot === b.layout.ownerSlot
+	);
 }

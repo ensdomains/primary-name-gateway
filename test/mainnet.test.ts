@@ -84,7 +84,6 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 			indexerURL: INDEXER_URL,
 			keepCommits: 2,
 			serveDelaySec: 0,
-			layout: d.layout,
 		});
 		await gateway.sync();
 		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });
