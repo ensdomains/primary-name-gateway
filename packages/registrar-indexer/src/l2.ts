@@ -63,9 +63,20 @@ const OWNERSHIP_TRANSFERRED = getAbiItem({ abi: REGISTRAR_ABI, name: "OwnershipT
 // logs per block, so each range is sized from the last one's density.
 const TARGET_LOGS = 5000;
 
+// A rate limit (HTTP 429, Infura's "Too Many Requests"), or viem choking on a reply without a result
+// (a throttled provider's answer): the same range again later, not a smaller one.
+export function isRateLimited(err: unknown): boolean {
+	if (err instanceof TypeError) return true;
+	for (let e = err as { status?: number; message?: string; cause?: unknown } | undefined; e; e = e.cause as typeof e) {
+		if (e.status === 429 || /too many requests|rate limit/i.test(e.message ?? "")) return true;
+	}
+	return false;
+}
+
 export class RPCChangeReader implements ChangeReader {
 	private logStep: number;
 	private maxLogStep: number;
+	rateLimitWaitMs = 2000; // the first wait; doubles, 5 times, then the tick fails
 	constructor(
 		readonly deployment: Deployment,
 		readonly logsClient: PublicClient, // eth_getLogs (large ranges)
@@ -83,7 +94,7 @@ export class RPCChangeReader implements ChangeReader {
 	async getChanges(fromBlock: number, toBlock: number) {
 		const events =
 			this.deployment.layout.ownerSlot === undefined ? [NAME_CHANGED] : [NAME_CHANGED, OWNERSHIP_TRANSFERRED];
-		for (;;) {
+		for (let waits = 0; ; ) {
 			const end = Math.min(toBlock, fromBlock + this.logStep - 1);
 			const t0 = Date.now();
 			try {
@@ -109,6 +120,13 @@ export class RPCChangeReader implements ChangeReader {
 				this.logStep = Math.max(1, Math.min(this.maxLogStep, 2 * this.logStep, fit));
 				return { changes, toBlock: end };
 			} catch (err) {
+				if (isRateLimited(err)) {
+					if (waits === 5) throw err;
+					const ms = this.rateLimitWaitMs * 2 ** waits++;
+					this.log?.(`getLogs rate limited: retrying the same ${end - fromBlock + 1} blocks in ${ms / 1000}s`);
+					await new Promise((resolve) => setTimeout(resolve, ms));
+					continue;
+				}
 				// range too large or too many results (providers cap results, eg. drpc at 20000): shrink and retry.
 				// By 8: a refusal is slow, and a jump into a dense stretch can be 1000x; the next success resizes.
 				if (this.logStep <= 1) throw err;

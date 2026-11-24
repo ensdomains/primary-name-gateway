@@ -23,6 +23,7 @@ export {
 	type BlockWitness,
 	type ChangeReader,
 	type InboxL2Reader,
+	isRateLimited,
 	type L2BlockRef,
 	type LineaL2Reader,
 	type OPL2Reader,
