@@ -22,7 +22,9 @@ import { encodeAbiParameters, type Hex } from "viem";
 import type { NodeStore } from "./store.js";
 
 export type GatewayConfig = {
-	indexerURL: string;
+	// Indexers in priority order: each sync uses the first that answers with this store's deployment and
+	// settings, so the rest are backups. They serve the same deployment, so commits and rows match.
+	indexerURLs: string[];
 	keepCommits: number; // valid commits to hold (the newest, and fallbacks while serveDelaySec runs)
 	// Serve a commit only once it has been valid this long (default 0). The indexer judges validity on
 	// finalized L1, and validity only grows with L1, so a client reading at latest is already past it; a
@@ -42,8 +44,8 @@ export type GatewayInfo = Pick<
 
 export type GatewayStats = { snapshots: number; patches: number; rows: number };
 
-// the last sync: when it ended (unix seconds), how long it took, and its error if it failed
-export type SyncResult = { at: number; ms: number; error?: string };
+// the last sync: when it ended (unix seconds), how long it took, the indexer it used, and its error if it failed
+export type SyncResult = { at: number; ms: number; indexerURL?: string; error?: string };
 
 type Bootstrap = { commit: Commit; after: string | null };
 
@@ -52,6 +54,7 @@ const META_HEAD = "head"; // newest commit whose rows are in the store (patches 
 const META_BOOTSTRAP = "bootstrap";
 const META_FORMAT = "format"; // how the store's rows are laid out
 const META_INFO = "info"; // the deployment the rows are from (GatewayInfo)
+const STATUS_TIMEOUT_MS = 10_000; // an indexer that doesn't answer /status by then counts as down
 // OP Stack rows are chunks (shared/trie.ts); a store from before that starts over with a snapshot
 const STORE_FORMAT = "chunks-4";
 
@@ -66,6 +69,7 @@ const STORE_FORMAT = "chunks-4";
 export class RegistrarGateway {
 	readonly stats: GatewayStats = { snapshots: 0, patches: 0, rows: 0 };
 	lastSync: SyncResult | undefined;
+	indexerURL: string | undefined; // the indexer the last sync used
 	private waiting = false; // the indexer had no valid commit at the last sync
 
 	constructor(
@@ -106,10 +110,10 @@ export class RegistrarGateway {
 		const t0 = Date.now();
 		try {
 			await this.syncOnce();
-			this.lastSync = { at: Math.floor(Date.now() / 1000), ms: Date.now() - t0 };
+			this.lastSync = { at: Math.floor(Date.now() / 1000), ms: Date.now() - t0, indexerURL: this.indexerURL };
 		} catch (err) {
 			const error = err instanceof Error ? err.message.split("\n")[0] : String(err);
-			this.lastSync = { at: Math.floor(Date.now() / 1000), ms: Date.now() - t0, error };
+			this.lastSync = { at: Math.floor(Date.now() / 1000), ms: Date.now() - t0, indexerURL: this.indexerURL, error };
 			throw err;
 		}
 	}
@@ -121,7 +125,7 @@ export class RegistrarGateway {
 			this.startOver();
 			this.store.setMeta(META_FORMAT, STORE_FORMAT);
 		}
-		await this.checkIndexer();
+		await this.chooseIndexer();
 		const resume = this.store.getMeta(META_BOOTSTRAP);
 		if (resume) await this.bootstrap(JSON.parse(resume));
 
@@ -131,15 +135,19 @@ export class RegistrarGateway {
 		if (!targets.length && !this.waiting) this.log.warn("the indexer has no valid commit yet: waiting");
 		this.waiting = !targets.length;
 		const valid = new Set(targets.map((c) => c.id));
-		// drop held commits that are no longer valid (blacklisted/retired); their rows get pruned
-		let held = this.commits.filter((c) => valid.has(c.id));
+		// A held commit the indexer doesn't list is dropped only if the indexer knows it isn't valid
+		// (invalid: blacklisted, retired, challenged; or pending again under stricter settings). One it
+		// doesn't know is kept: a backup indexer that's behind, or a rebuilt one, says nothing about it.
+		let held: Commit[] = [];
+		for (const c of this.commits) {
+			if (valid.has(c.id) || !(await this.knowsNotValid(c))) held.push(c);
+		}
 		for (const target of targets) {
 			if (held.some((c) => c.id === target.id)) continue;
 			let head = this.head;
-			// The indexer lists its newest valid commits: one older than the store's newest, without that one,
-			// means the newest isn't valid there (invalid, pending again under stricter settings, or unknown
-			// to a rebuilt indexer). Rewind to the newest held commit, or start over from `target`.
-			if (head && !valid.has(head.id) && target.l2Block < head.l2Block) {
+			// The store's newest rows are from a commit that was just dropped: rewind to the newest held
+			// commit, or start over from `target`.
+			if (head && !held.some((c) => c.id === head?.id) && target.l2Block < head.l2Block) {
 				head = held.at(-1);
 				if (head) {
 					this.store.truncate(head.l2Block);
@@ -227,29 +235,72 @@ export class RegistrarGateway {
 		);
 	}
 
-	// The indexer says which deployment it serves; a store holding another one's rows starts over.
-	private async checkIndexer() {
-		const s: IndexerStatus = await this.fetchJSON("/status");
-		if (!s.layout) throw new Error(`the indexer at ${this.config.indexerURL} doesn't report its layout: update it`);
-		const info: GatewayInfo = {
-			chain: s.chain,
-			kind: s.kind,
-			l1ChainId: s.l1ChainId,
-			l2ChainId: s.l2ChainId,
-			registrar: s.registrar,
-			layout: s.layout,
-			minAgeSec: s.minAgeSec,
-			minAgeL1Blocks: s.minAgeL1Blocks,
-		};
-		const held = this.info;
-		if (held && !sameDeployment(held, info)) {
-			this.log.warn(`the indexer serves ${describe(info)}, the store has ${describe(held)}: starting over`);
-			this.startOver();
+	// The first indexer, in priority order, whose /status answers. The primary (the first) decides the
+	// deployment: a store holding another one's rows starts over. A backup is skipped unless it serves
+	// the store's deployment with the same early acceptance, since the gateway mixes their commits.
+	private async chooseIndexer() {
+		const { indexerURLs } = this.config;
+		if (!indexerURLs.length) throw new Error("no indexer URL");
+		const down: string[] = [];
+		for (const [i, url] of indexerURLs.entries()) {
+			let s: IndexerStatus;
+			try {
+				const res = await (this.config.fetch ?? fetch)(`${url}/status`, {
+					signal: AbortSignal.timeout(STATUS_TIMEOUT_MS),
+				});
+				if (!res.ok) throw new Error(`/status: ${res.status}`);
+				s = (await res.json()) as IndexerStatus;
+			} catch (err) {
+				// the first sentence: Bun's "ECONNREFUSED: Unable to connect. Is the computer able to ..."
+				down.push(`${url}: ${err instanceof Error ? err.message.split("\n")[0].split(". ")[0] : err}`);
+				continue;
+			}
+			if (!s.layout) {
+				down.push(`${url} doesn't report its layout: update it`);
+				continue;
+			}
+			const info: GatewayInfo = {
+				chain: s.chain,
+				kind: s.kind,
+				l1ChainId: s.l1ChainId,
+				l2ChainId: s.l2ChainId,
+				registrar: s.registrar,
+				layout: s.layout,
+				minAgeSec: s.minAgeSec,
+				minAgeL1Blocks: s.minAgeL1Blocks,
+			};
+			const held = this.info;
+			if (held && !sameDeployment(held, info)) {
+				if (i > 0) {
+					down.push(`${url} serves ${describe(info)}, the store has ${describe(held)}`);
+					continue;
+				}
+				this.log.warn(`the indexer serves ${describe(info)}, the store has ${describe(held)}: starting over`);
+				this.startOver();
+			} else if (held && i > 0 && !sameSettings(held, info)) {
+				down.push(`${url} accepts commits early differently from the store's`);
+				continue;
+			}
+			if (JSON.stringify(held) !== JSON.stringify(info)) {
+				this.store.setMeta(META_INFO, JSON.stringify(info));
+				this.log(`${info.chain ?? "the indexer"}: ${info.kind} commits, L1 ${info.l1ChainId}, L2 ${info.l2ChainId}`);
+			}
+			if (url !== this.indexerURL) {
+				if (i > 0) this.log.warn(`syncing from backup indexer ${url} (${down.join("; ")})`);
+				else if (this.indexerURL !== undefined) this.log.ok(`back on the primary indexer ${url}`);
+			}
+			this.indexerURL = url;
+			return;
 		}
-		if (JSON.stringify(held) !== JSON.stringify(info)) {
-			this.store.setMeta(META_INFO, JSON.stringify(info));
-			this.log(`${info.chain ?? "the indexer"}: ${info.kind} commits, L1 ${info.l1ChainId}, L2 ${info.l2ChainId}`);
-		}
+		throw new Error(`no indexer answered: ${down.join("; ")}`);
+	}
+
+	// true: the indexer knows the commit and it isn't valid there; false: valid there, or unknown to it
+	private async knowsNotValid(commit: Commit): Promise<boolean> {
+		const res = await this.fetchRaw(`/commits/${commit.id}`);
+		if (res.status === 404) return false;
+		if (!res.ok) throw new Error(`commit ${commit.id}: ${res.status}`);
+		return ((await res.json()) as Commit).status !== "valid";
 	}
 
 	private startOver() {
@@ -332,7 +383,7 @@ export class RegistrarGateway {
 	}
 
 	private fetchRaw(path: string): Promise<Response> {
-		return (this.config.fetch ?? fetch)(`${this.config.indexerURL}${path}`);
+		return (this.config.fetch ?? fetch)(`${this.indexerURL}${path}`);
 	}
 
 	private async fetchJSON<T>(path: string): Promise<T> {
@@ -343,6 +394,11 @@ export class RegistrarGateway {
 }
 
 const describe = (i: GatewayInfo) => `${i.chain ?? "a deployment"} (${i.kind} commits of L2 ${i.l2ChainId})`;
+
+// the same early acceptance: the same commits are valid
+function sameSettings(a: GatewayInfo, b: GatewayInfo): boolean {
+	return a.minAgeSec === b.minAgeSec && a.minAgeL1Blocks === b.minAgeL1Blocks;
+}
 
 // the same rows: the same commit kind, chains, registrar and slots
 function sameDeployment(a: GatewayInfo, b: GatewayInfo): boolean {

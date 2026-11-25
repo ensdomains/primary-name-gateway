@@ -119,7 +119,7 @@ Gateway (`bun run gateway:<chain>`, or `bun run gateway`). It uses no RPC: every
 
 | variable | default | |
 |---|---|---|
-| `INDEXER_URL` | `http://localhost:8100` | the `:<chain>` scripts point at that chain's indexer port |
+| `INDEXER_URL` | `http://localhost:8100` | comma-separated, in priority order: each sync uses the first indexer that answers `/status` (10 s), so the rest are backups for when it's down. A backup must serve the store's deployment with the same early acceptance; it may be a little behind (commits it doesn't know are kept). The `:<chain>` scripts point at that chain's indexer port |
 | `GATEWAY_PORT` | `8200` | the `:optimism` / `:linea` / `:base` / `:base-inbox` / `:arbitrum` scripts use 8200 / 8201 / 8202 / 8203 / 8204 |
 | `GATEWAY_DB` | `data/gateway-<port>.sqlite` | a cache, safe to delete: it survives restarts so a restart patches instead of loading a snapshot (Base's is about 100 pages). It records the deployment its rows are from and starts over when the indexer serves another one. Named by port, so gateways side by side never share one; `:memory:` works too (Base's rows are about half a GB) |
 | `GATEWAY_KEEP_COMMITS` | `2` | valid commits held: the newest, and fallbacks while `GATEWAY_SERVE_DELAY_SEC` runs |

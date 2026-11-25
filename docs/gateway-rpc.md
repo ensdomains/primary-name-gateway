@@ -10,20 +10,20 @@ The gateway's HTTP side ([index.ts](../packages/registrar-gateway/src/index.ts),
 {
   "chain": "arbitrum", "kind": "arbitrum", "l1ChainId": 1, "l2ChainId": 42161,
   "registrar": "0x0000000000D8e504002cC26E3Ec46D81971C1664", "layout": { "namesSlot": 0 }, "minAgeL1Blocks": 1800,
-  "indexerURL": "http://localhost:8104",
+  "indexerURLs": ["http://localhost:8104", "http://backup:8104"],
   "served": { "id": 264804150022, "l2Block": 526908163, "validAt": 1795490521 },
   "held": [{ "id": 264801160406, "l2Block": 526895226, "validAt": 1795487068 }, { "id": 264804150022, "l2Block": 526908163, "validAt": 1795490521 }],
-  "lastSync": { "at": 1795493534, "ms": 6 },
+  "lastSync": { "at": 1795493534, "ms": 6, "indexerURL": "http://localhost:8104" },
   "startedAt": 1795493534,
   "stats": { "snapshots": 0, "patches": 0, "rows": 0 },
   "keepCommits": 2, "serveDelaySec": 0
 }
 ```
 
-- `chain` to `minAgeL1Blocks`: the deployment and the early acceptance its commits assume (`minAgeSec` on OP Stack chains), from the indexer's `/status` (absent until the indexer has answered once); `bun run prove` deploys its verifier with it; `indexerURL`: where it syncs from.
+- `chain` to `minAgeL1Blocks`: the deployment and the early acceptance its commits assume (`minAgeSec` on OP Stack chains), from the indexer's `/status` (absent until the indexer has answered once); `bun run prove` deploys its verifier with it; `indexerURLs`: where it syncs from, in priority order.
 - `served`: the commit CCIP-Read proofs come from: the newest held one that has been valid for `serveDelaySec`, else the oldest held one (absent before the first commit); `held`: the commits in the store.
 - Until the gateway holds a commit (its first snapshot, or a new one after starting over), CCIP-Read answers HTTP 503 `no commit yet: the gateway is syncing`, logged on one line, and JSON-RPC answers `-32000`.
-- `lastSync`: when the last sync with the indexer ended and how long it took, with `error` if it failed: a gateway that can't reach its indexer keeps serving its held commits, and this is where that shows.
+- `lastSync`: when the last sync ended, how long it took and which indexer it used (a backup while the primary is down), with `error` if it failed: a gateway that can't reach any indexer keeps serving its held commits, and this is where that shows.
 - `stats`: snapshots, patches and rows loaded since `startedAt` (zero above: a restart that resumed from its store).
 
 ## JSON-RPC

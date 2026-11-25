@@ -96,7 +96,7 @@ describe.each([
 		indexerServer = serveIndexer(indexer, db, 0);
 		gatewayDB = new Database(":memory:");
 		gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(gatewayDB)), {
-			indexerURL: indexerServer.url.origin,
+			indexerURLs: [indexerServer.url.origin],
 			keepCommits: 2,
 			serveDelaySec: 0,
 		});

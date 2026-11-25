@@ -32,7 +32,7 @@ One object per served chain, for example named `base`, holds that chain's gatewa
 | `sync()` (poll the indexer, apply patches) | the `alarm()` handler, rescheduled every poll interval |
 | CCIP-Read requests (`proveName`), JSON-RPC at `/rpc` ([gateway-rpc.md](gateway-rpc.md)), and `/status` | the object's `fetch()`, served by `createGatewayHandler(gateway)` (no deployment to pass: `sync()` takes it from the indexer's `/status`; CCIP-Read through [`@adraffy/ezccip`](https://github.com/adraffy/ezccip.js)'s `createFetchHandler`) |
 | gateway state (the deployment, held commits, the store's head, a snapshot in progress) | the `gateway_meta` table in the same SQLite database |
-| the indexer | a normal server; the object reaches it over HTTP (`indexerURL`) |
+| the indexer | a normal server; the object reaches it over HTTP (`indexerURLs`: a primary and backups) |
 
 The design already makes the gateway a good fit:
 
@@ -73,7 +73,7 @@ export class Gateway extends DurableObject<Env> {
 			transaction: (fn) => ctx.storage.transactionSync(fn),
 		});
 		this.gateway = new RegistrarGateway(store, {
-			indexerURL: env.INDEXER_URL,
+			indexerURLs: env.INDEXER_URL.split(","), // in priority order: the rest are backups
 			keepCommits: 2,
 			serveDelaySec: 0,
 		});
