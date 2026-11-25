@@ -4,7 +4,7 @@
 //   bun scripts/op-batch-cost.ts [files...]   (default: packages/contracts/test/fixtures/op-batch/*.bin)
 
 import { readdirSync } from "node:fs";
-import { brotliDecodePrefix, decodeBatchPrefix } from "@primary-name-gateway/shared";
+import { brotliDecodePrefix, decodeBatchPrefix, fieldElementsFor } from "@primary-name-gateway/shared";
 
 const dir = `${import.meta.dir}/../packages/contracts/test/fixtures/op-batch`;
 const files = process.argv.slice(2);
@@ -16,12 +16,11 @@ for (const file of files) {
 	// enough for either batch type's prefix: singular ~110 bytes, span ~50
 	const { output, stats } = brotliDecodePrefix(frame.subarray(1), 112);
 	const batch = decodeBatchPrefix(output);
-	const fieldElements = Math.ceil(Math.ceil(stats.bits / 8) / 127) * 4; // 4 field elements carry 127 bytes
 	console.log(file.split("/").pop(), {
 		batch: batch.type,
 		compressedBytes: Math.ceil(stats.bits / 8),
 		headerBytes: Math.ceil(stats.headerBits / 8),
-		blobFieldElements: fieldElements,
+		blobFieldElements: fieldElementsFor(Math.ceil(stats.bits / 8)), // a power of two (OPBlob.verify)
 		...stats,
 	});
 }

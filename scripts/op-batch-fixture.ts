@@ -1,16 +1,13 @@
 // Fixture for the batch inbox tests, from a real batcher transaction: the first field elements of its
-// blob with a KZG proof for each (EIP-4844 point evaluation at the element's domain point), the L1
-// header and the transaction's trie proof, the batch's parent L2 header, and the registrar's account
-// proof at that L2 block.
+// blob with their batched KZG proof (the indexer's, kzg.ts), the L1 header and the transaction's trie
+// proof, the batch's parent L2 header, and the registrar's account proof at that L2 block.
 //
-//   gh api -H "Accept: application/vnd.github.raw" repos/ethereum/c-kzg-4844/contents/src/trusted_setup.txt > data/kzg/trusted_setup.txt
 //   bun scripts/op-batch-fixture.ts <base|op> <L1 block>   (blobs are kept ~18 days)
 //
-// KZG is computed here with @noble/curves (spec formulas, test fixtures only). It's checked twice:
-// the commitment must match the transaction's versioned hash, and the tests check every proof
-// with the point evaluation precompile.
+// The commitment must match the transaction's versioned hash, and the tests check the proof with the
+// point evaluation precompile.
 
-import { bls12_381 } from "@noble/curves/bls12-381";
+import { KZG } from "@primary-name-gateway/registrar-indexer";
 import {
 	beaconURL,
 	blobDataPrefix,
@@ -25,10 +22,9 @@ import {
 	rawTransaction,
 	transactionsTrieProof,
 } from "@primary-name-gateway/shared";
-import { bytesToHex, type Hex, hexToBytes, numberToHex, parseAbi, type RpcTransaction, sha256 } from "viem";
+import { bytesToHex, type Hex, hexToBytes, numberToHex, parseAbi, type RpcTransaction } from "viem";
 
-const FIELD_ELEMENTS = 64; // enough for Base's batch prefix (OP needs 40)
-const N = 4096;
+const FIELD_ELEMENTS = 64; // enough for both batch prefixes (fieldElementsFor: OP 64, Base 64)
 const CHAINS = {
 	base: {
 		systemConfig: "0x73a79Fab69143498Ed3712e519A88a918e1f4072",
@@ -64,54 +60,11 @@ if (!res.ok) throw new Error(`beacon: ${res.status}`);
 const blob = hexToBytes(((await res.json()) as { data: Hex[] }).data[0]);
 
 // -- KZG
-const Fr = bls12_381.fields.Fr;
-const r = Fr.ORDER;
-const G1 = bls12_381.G1.ProjectivePoint;
-const setup = (await Bun.file(`${import.meta.dir}/../data/kzg/trusted_setup.txt`).text()).trim().split("\n");
-if (setup[0] !== "4096") throw new Error("unexpected trusted setup");
-const lagrange = setup.slice(2, 2 + N).map((h) => G1.fromHex(h.trim()));
-const brp = (i: number) => Number.parseInt(i.toString(2).padStart(12, "0").split("").reverse().join(""), 2);
-const omega = Fr.pow(7n, (r - 1n) / BigInt(N));
-const domain = Array.from({ length: N }, (_, i) => Fr.pow(omega, BigInt(brp(i)))); // element i's point
-const evals = Array.from({ length: N }, (_, i) => BigInt(bytesToHex(blob.subarray(32 * i, 32 * i + 32))));
+const kzg = await KZG.load();
+const commitment = kzg.commitment(blob);
+if (KZG.versionedHash(commitment) !== versionedHash) throw new Error("commitment doesn't match the versioned hash");
+const blobProof = kzg.proveFieldElements(blob, commitment, FIELD_ELEMENTS);
 
-// the setup's Lagrange points: natural or bit-reversed order? the commitment decides
-const versioned = (c: Uint8Array) => `0x01${sha256(c).slice(4)}` as Hex;
-let basis: typeof lagrange | undefined;
-let commitment: Uint8Array | undefined;
-for (const order of [(i: number) => i, brp]) {
-	const points = evals.map((_, i) => lagrange[order(i)]);
-	const c = G1.msm(points, evals).toRawBytes(true);
-	if (versioned(c) === versionedHash) {
-		basis = points;
-		commitment = c;
-		break;
-	}
-}
-if (!basis || !commitment) throw new Error("commitment doesn't match the versioned hash");
-
-// proof that p(z) = y at a domain point: commit to q(X) = (p(X) - y) / (X - z) (spec:
-// compute_quotient_eval_within_domain for the point itself)
-function prove(m: number): Hex {
-	const z = domain[m];
-	const y = evals[m];
-	const inv = Fr.invertBatch(domain.map((x, i) => (i === m ? 1n : Fr.sub(x, z))));
-	const q = new Array<bigint>(N);
-	let qm = 0n;
-	const zInv = Fr.inv(z);
-	for (let i = 0; i < N; i++) {
-		if (i === m) continue;
-		const d = Fr.sub(evals[i], y);
-		q[i] = Fr.mul(d, inv[i]);
-		// (p_i - y) x_i / (z (z - x_i)) = -(p_i - y) x_i / z * 1/(x_i - z)
-		qm = Fr.sub(qm, Fr.mul(Fr.mul(Fr.mul(d, domain[i]), zInv), inv[i]));
-	}
-	q[m] = qm;
-	return bytesToHex(G1.msm(basis!, q).toRawBytes(true));
-}
-
-const proofs: Hex[] = [];
-for (let i = 0; i < FIELD_ELEMENTS; i++) proofs.push(prove(i));
 // -- the L1 header and the transaction's proof in the block's transactions trie
 const getBlock = (client: typeof l1, tag: Hex, byHash = false) =>
 	client.request({
@@ -159,9 +112,9 @@ const out = {
 	txProof,
 	blobIndex: 0,
 	versionedHash,
-	commitment: bytesToHex(commitment),
+	commitment,
 	fieldElements: bytesToHex(blob.subarray(0, 32 * FIELD_ELEMENTS)),
-	proofs,
+	blobProof,
 	l2Block: Number(BigInt(l2Raw.number)),
 	l2Hash: l2Raw.hash,
 	l2Header,

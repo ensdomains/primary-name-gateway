@@ -213,17 +213,13 @@ export class InboxCommitSource implements CommitSource {
 			({ root, proof: txProof } = transactionsTrieProof(raws, txIndex));
 			if (root !== l1Raw.transactionsRoot) throw new Error("transactions root mismatch");
 		}
-		// the blob's first field elements (as many as the batch prefix needs) with KZG proofs
+		// the blob's first field elements (as many as the batch prefix needs, a power of two) and their proof
 		const kzg = await this.config.kzg();
 		const commitment = kzg.commitment(blob);
 		if (KZG.versionedHash(commitment) !== tx.blobVersionedHashes![blobIndex])
 			throw new Error("blob commitment mismatch");
 		const n = fieldElementsFor(Math.ceil(stats.bits / 8));
-		const blobProofs: Hex[] = [];
-		for (let i = 0; i < n; i++) {
-			blobProofs.push(kzg.proveFieldElement(blob, i));
-			await Bun.sleep(0); // let the HTTP server answer between proofs
-		}
+		const blobProof = kzg.proveFieldElements(blob, commitment, n);
 		const commit: InboxCommit = {
 			id,
 			kind: "inbox",
@@ -240,7 +236,7 @@ export class InboxCommitSource implements CommitSource {
 				blobIndex,
 				commitment,
 				fieldElements: bytesToHex(blob.subarray(0, 32 * n)),
-				blobProofs,
+				blobProof,
 				l2Header: encodeBlockHeader(l2Raw),
 			}),
 			accountProof: encodeMPTProof(account.accountProof),
