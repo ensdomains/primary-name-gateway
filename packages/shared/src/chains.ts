@@ -142,6 +142,9 @@ export type InboxDeployment = DeploymentBase & {
 	SystemConfig: Address; // batcherHash()
 	BatchInbox: Address;
 	l2Blocks: BlockSchedule; // starts at the rollup genesis: span batches' timestamps are relative to it
+	// alt-DA on EigenDA: the batcher posts certificates, the batches are EigenDA blobs (EigenDAInboxVerifier,
+	// docs/eigenda-inbox.md); the directory names EigenDA's other contracts (RELAY_REGISTRY)
+	eigenDA?: { directory: Address };
 };
 
 // Arbitrum (BoLD): assertions on L1 name L2 blocks (ArbitrumVerifier, docs/arbitrum.md)
@@ -231,6 +234,20 @@ export const BASE_MAINNET_INBOX: InboxDeployment = {
 	l2Blocks: BASE_BLOCKS,
 };
 
+// Celo's batches are EigenDA blobs; its batcher posts their certificates to the inbox
+export const CELO_MAINNET_INBOX: InboxDeployment = {
+	kind: "inbox",
+	l1: MAINNET,
+	l2: CELO,
+	SystemConfig: "0x89E31965D844a309231B1f17759Ccaf1b7c09861",
+	BatchInbox: "0xff00000000000000000000000000000000042220",
+	L2ReverseRegistrar: CELO_MAINNET.L2ReverseRegistrar,
+	layout: CELO_MAINNET.layout,
+	registrarCreatedAtBlock: CELO_MAINNET.registrarCreatedAtBlock,
+	l2Blocks: CELO_BLOCKS,
+	eigenDA: { directory: "0x64AB2e9A86FA2E183CB6f01B2D4050c1c2dFAad4" },
+};
+
 // https://docs.arbitrum.io/build-decentralized-apps/reference/contract-addresses
 export const ARBITRUM_MAINNET: ArbitrumDeployment = {
 	kind: "arbitrum",
@@ -250,6 +267,7 @@ export const DEPLOYMENTS: Record<string, Deployment> = {
 	"base-inbox": BASE_MAINNET_INBOX,
 	arbitrum: ARBITRUM_MAINNET,
 	celo: CELO_MAINNET,
+	"celo-inbox": CELO_MAINNET_INBOX,
 };
 
 // ENSIP-19 coin type of an EVM chain: 0x80000000 | chainId (Ethereum mainnet keeps 60)

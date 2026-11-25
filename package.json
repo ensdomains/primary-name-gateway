@@ -16,8 +16,8 @@
 		"test:unit": "bun test test/trie.test.ts test/chunks.test.ts test/brotli.test.ts test/store.test.ts test/l2.test.ts test/server.test.ts test/indexer-db.test.ts test/progress.test.ts test/block-schedule.test.ts test/commit-proofs.test.ts test/inbox-scan.test.ts test/raw-transaction.test.ts test/log.test.ts test/rpc-url.test.ts test/linea.test.ts",
 		"test:contracts": "cd packages/contracts && forge test",
 		"test:e2e": "bun run forge && bun test test/inline-node.test.ts test/offline.test.ts test/offline-base.test.ts test/offline-minage.test.ts test/offline-linea.test.ts test/offline-arbitrum.test.ts",
-		"test:inbox": "bun run forge && bun test test/brotli-sol.test.ts test/op-batch-sol.test.ts test/op-batch-verifier.test.ts",
-		"test:kzg": "bun run forge && bun test test/kzg.test.ts",
+		"test:inbox": "bun run forge && bun test test/brotli-sol.test.ts test/op-batch-sol.test.ts test/op-batch-verifier.test.ts test/eigen-inbox.test.ts",
+		"test:kzg": "bun run forge && bun test test/kzg.test.ts test/eigenda.test.ts",
 		"test:mainnet": "bun run forge && bun test test/mainnet.test.ts",
 		"test:fork": "bun run forge && bun test test/op-batch-fork.test.ts",
 		"indexer:optimism": "INDEXER_CHAIN=optimism INDEXER_PORT=8100 bun packages/registrar-indexer/src/index.ts",
@@ -35,7 +35,9 @@
 		"indexer:arbitrum": "INDEXER_CHAIN=arbitrum INDEXER_PORT=8104 bun packages/registrar-indexer/src/index.ts",
 		"gateway:arbitrum": "GATEWAY_PORT=8204 INDEXER_URL=http://localhost:8104 bun packages/registrar-gateway/src/main.ts",
 		"indexer:celo": "INDEXER_CHAIN=celo INDEXER_PORT=8105 bun packages/registrar-indexer/src/index.ts",
-		"gateway:celo": "GATEWAY_PORT=8205 INDEXER_URL=http://localhost:8105 bun packages/registrar-gateway/src/main.ts"
+		"gateway:celo": "GATEWAY_PORT=8205 INDEXER_URL=http://localhost:8105 bun packages/registrar-gateway/src/main.ts",
+		"indexer:celo-inbox": "INDEXER_CHAIN=celo-inbox INDEXER_PORT=8106 bun packages/registrar-indexer/src/index.ts",
+		"gateway:celo-inbox": "GATEWAY_PORT=8206 INDEXER_URL=http://localhost:8106 bun packages/registrar-gateway/src/main.ts"
 	},
 	"devDependencies": {
 		"@adraffy/blocksmith": "^0.1.60",

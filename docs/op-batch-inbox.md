@@ -23,6 +23,8 @@ Channel data is `rlp(batch) ...` compressed, after a 1-byte channel version (`0x
 
 Only frame 0 (the first blob of the channel's first transaction) is needed.
 
+For a chain whose batches are EigenDA blobs (Celo), see [eigenda-inbox.md](eigenda-inbox.md): the same steps after the blob, behind `EigenDAInboxVerifier`. Both verifiers share [`OPInboxVerifierBase`](../packages/contracts/src/op/OPInboxVerifierBase.sol): the L1 header and transaction, the batcher's signature, the sequencing window and the L2 header.
+
 A span batch's first block is the one at `l2 genesis time + rel_timestamp` whose parent hash starts with `parent_check`. On a chain with blocks under a second apart (Base since [Denim](base.md#block-time), if it posted span batches), up to five blocks share that timestamp (`blocksAtTimestamp`), so the indexer tries each (`spanBatchParent`). The verifier only compares the L2 header's hash with the batch's parent, so it doesn't depend on the block time.
 
 ## Verifier steps

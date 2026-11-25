@@ -25,7 +25,7 @@ export function verifierContract(d: Deployment, minAgeSec = 0): { contract: stri
 			};
 		case "inbox":
 			return {
-				contract: "OPBatchInboxVerifier",
+				contract: d.eigenDA ? "EigenDAInboxVerifier" : "OPBatchInboxVerifier",
 				args: [
 					d.SystemConfig,
 					d.BatchInbox,

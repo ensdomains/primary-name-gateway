@@ -1,6 +1,6 @@
 // End-to-end: anvil fork of L1 mainnet + live registrar-indexer + in-process registrar-gateway.
 //
-// 1. `bun run indexer` (INDEXER_CHAIN=optimism|base|linea|arbitrum|celo|base-inbox|optimism-inbox) with at least one
+// 1. `bun run indexer` (INDEXER_CHAIN=optimism|base|linea|arbitrum|celo|base-inbox|optimism-inbox|celo-inbox) with at least one
 //    valid commit (OP: ~7 days of lookback and an archive proof RPC, Linea: the next finalization,
 //    inbox: the next channel start)
 // 2. `bun run test:mainnet`
@@ -212,10 +212,12 @@ describe.skipIf(!deployment)(`mainnet e2e (${deployment?.l2.name})`, () => {
 		const [addr] = names.keys();
 		const { proof } = gateway.proveName(addr);
 		const other = "0x000000000000000000000000000000000000beef";
-		// a valid proof for addr does not prove a name for another address
-		await expect(
-			l1.readContract({ address: resolver, abi: RESOLVER_ABI, functionName: "verifyName", args: [other, proof] }),
-		).rejects.toThrow();
+		// a valid proof for addr does not prove its name for another address: it reverts, or (in a trie
+		// this small, a single leaf) the same nodes prove the other address has no name
+		const forOther = await l1
+			.readContract({ address: resolver, abi: RESOLVER_ABI, functionName: "verifyName", args: [other, proof] })
+			.catch(() => undefined);
+		expect(forOther === undefined || forOther === "").toBeTrue();
 		// flip a byte inside the proof
 		const i = proof.length - 200;
 		const flipped = `${proof.slice(0, i)}${proof[i] === "0" ? "1" : "0"}${proof.slice(i + 1)}` as Hex;

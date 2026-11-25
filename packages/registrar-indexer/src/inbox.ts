@@ -5,7 +5,13 @@ import {
 	brotliDecodePrefix,
 	channelStart,
 	decodeBatchPrefix,
+	decodeEigenDACalldata,
+	type EigenDACert,
+	eigenDABlobKey,
+	eigenDAElementsFor,
+	eigenDAPayloadPrefix,
 	encodeBlockHeader,
+	encodeEigenDAInboxCommitProof,
 	encodeMPTProof,
 	encodeOPBatchInboxCommitProof,
 	fieldElementsFor,
@@ -27,6 +33,7 @@ import {
 	type RpcTransaction,
 	type Transaction,
 } from "viem";
+import { type EigenDAKZG, fetchEigenDABlob } from "./eigenda.js";
 import { type CommitSource, errorMessage, NotFinalizedError, type RegistrarIndexer, SyncError } from "./indexer.js";
 import { KZG } from "./kzg.js";
 import { type InboxL2Reader, retryNotFound } from "./l2.js";
@@ -35,8 +42,9 @@ export type InboxSourceConfig = {
 	deployment: InboxDeployment;
 	l1: PublicClient;
 	l2: InboxL2Reader;
-	beaconURL: string; // GET /eth/v1/beacon/blobs (blobs are kept ~18 days)
-	kzg: () => Promise<KZG>;
+	beaconURL?: string; // GET /eth/v1/beacon/blobs (blobs are kept ~18 days); not for EigenDA
+	kzg?: () => Promise<KZG>; // L1 blobs
+	eigenDAKZG?: (length: number) => Promise<EigenDAKZG>; // EigenDA blobs of `length` symbols
 	intervalSec: number; // at most one commit per this many seconds of L1 time (KZG proofs are slow)
 	scanBlocks: number; // L1 blocks to look back from the finalized head for a channel start
 	firstScanBlocks: number; // the same with no commits yet: far enough back for a parent that is final
@@ -44,16 +52,22 @@ export type InboxSourceConfig = {
 	maxAttempts: number;
 };
 
-// a blob that starts a channel; id = l1Block * 10000 + txIndex * 10 + blobIndex
+// a blob that starts a channel; id = l1Block * 10000 + txIndex * 10 + blobIndex (0 for EigenDA)
 type InboxBatch = {
 	id: number;
 	block: { number: bigint; timestamp: bigint };
 	tx: Transaction;
 	blobIndex: number;
-	blob: Uint8Array;
+	blob: Uint8Array; // an L1 blob, or an EigenDA blob (coefficients)
+	data: Uint8Array; // the batcher data it carries
+	cert?: EigenDACert;
 };
 
 const SYSTEM_CONFIG_ABI = parseAbi(["function batcherHash() view returns (bytes32)"]);
+const EIGENDA_ABI = parseAbi([
+	"function getAddress(string) view returns (address)",
+	"function relayKeyToUrl(uint32) view returns (string)",
+]);
 
 // The parent of a span batch's first block. The batch gives that block's timestamp (relative to the
 // rollup genesis) and the first 20 bytes of its parent's hash. With blocks under a second apart (Base
@@ -86,6 +100,7 @@ export async function spanBatchParent(
 export class InboxCommitSource implements CommitSource {
 	private readonly attempts = new Map<number, number>();
 	private beaconGenesis: bigint | undefined;
+	private readonly relays = new Map<number, string>();
 
 	constructor(readonly config: InboxSourceConfig) {}
 
@@ -125,6 +140,20 @@ export class InboxCommitSource implements CommitSource {
 			const block = await retryNotFound(() => l1.getBlock({ blockNumber: n, includeTransactions: true }));
 			for (const tx of [...block.transactions].reverse()) {
 				if (tx.to?.toLowerCase() !== inbox || tx.from.toLowerCase() !== batcher) continue;
+				if (deployment.eigenDA) {
+					// a certificate in calldata; anything else (an Ethereum-DA fallback) isn't verifiable here
+					const cert = decodeEigenDACalldata(tx.input);
+					if (!cert) continue;
+					const id = Number(n) * 10000 + (tx.transactionIndex ?? 0) * 10;
+					if (indexer.db.getCommit(id) || indexer.db.isSkipped(id)) {
+						yield "known";
+						return;
+					}
+					const blob = await fetchEigenDABlob(await this.relay(cert.relayKeys[0]), eigenDABlobKey(cert));
+					const data = await this.eigenDAData(cert, blob);
+					if (startsChannel(data)) yield { id, block, tx, blobIndex: 0, blob, data, cert };
+					continue;
+				}
 				const hashes = tx.blobVersionedHashes ?? [];
 				for (let blobIndex = 0; blobIndex < hashes.length; blobIndex++) {
 					const id = Number(n) * 10000 + (tx.transactionIndex ?? 0) * 10 + blobIndex;
@@ -133,7 +162,8 @@ export class InboxCommitSource implements CommitSource {
 						return;
 					}
 					const blob = await this.fetchBlob(block.timestamp, hashes[blobIndex]);
-					if (startsChannel(blob)) yield { id, block, tx, blobIndex, blob };
+					const data = blobDataPrefix(blob);
+					if (startsChannel(data)) yield { id, block, tx, blobIndex, blob, data };
 				}
 			}
 		}
@@ -165,12 +195,12 @@ export class InboxCommitSource implements CommitSource {
 		}
 	}
 
-	private async indexCommit(indexer: RegistrarIndexer, { id, block, tx, blobIndex, blob }: InboxBatch) {
+	private async indexCommit(indexer: RegistrarIndexer, { id, block, tx, blobIndex, blob, data, cert }: InboxBatch) {
 		const { l1, l2, deployment } = this.config;
 		const txIndex = tx.transactionIndex;
 		if (txIndex === null) throw new Error("pending transaction");
 		// the batch and its parent L2 block
-		const { compressed } = channelStart(blobDataPrefix(blob));
+		const { compressed } = channelStart(data);
 		const { output, stats } = brotliDecodePrefix(compressed, 112);
 		const batch = decodeBatchPrefix(output);
 		let l2Raw: RpcBlockHeader;
@@ -213,13 +243,41 @@ export class InboxCommitSource implements CommitSource {
 			({ root, proof: txProof } = transactionsTrieProof(raws, txIndex));
 			if (root !== l1Raw.transactionsRoot) throw new Error("transactions root mismatch");
 		}
-		// the blob's first field elements (as many as the batch prefix needs, a power of two) and their proof
-		const kzg = await this.config.kzg();
-		const commitment = kzg.commitment(blob);
-		if (KZG.versionedHash(commitment) !== tx.blobVersionedHashes![blobIndex])
-			throw new Error("blob commitment mismatch");
-		const n = fieldElementsFor(Math.ceil(stats.bits / 8));
-		const blobProof = kzg.proveFieldElements(blob, commitment, n);
+		const l1Header = encodeBlockHeader(l1Raw);
+		const l2Header = encodeBlockHeader(l2Raw);
+		const compressedBytes = Math.ceil(stats.bits / 8);
+		let commitProof: Hex;
+		if (cert) {
+			// the payload's first evaluations (as many as the batch prefix needs) and their proof
+			const kzg = await this.eigenDAKZG(cert.length);
+			const { evaluations, proof } = kzg.prove(blob, cert.commitment, eigenDAElementsFor(24 + compressedBytes));
+			commitProof = encodeEigenDAInboxCommitProof({
+				l1Header,
+				txIndex,
+				txProof,
+				evaluations,
+				blobProof: proof,
+				l2Header,
+			});
+		} else {
+			// the blob's first field elements (as many as the batch prefix needs, a power of two) and their proof
+			if (!this.config.kzg) throw new Error("no KZG for L1 blobs");
+			const kzg = await this.config.kzg();
+			const commitment = kzg.commitment(blob);
+			if (KZG.versionedHash(commitment) !== tx.blobVersionedHashes![blobIndex])
+				throw new Error("blob commitment mismatch");
+			const n = fieldElementsFor(compressedBytes);
+			commitProof = encodeOPBatchInboxCommitProof({
+				l1Header,
+				txIndex,
+				txProof,
+				blobIndex,
+				commitment,
+				fieldElements: bytesToHex(blob.subarray(0, 32 * n)),
+				blobProof: kzg.proveFieldElements(blob, commitment, n),
+				l2Header,
+			});
+		}
 		const commit: InboxCommit = {
 			id,
 			kind: "inbox",
@@ -229,16 +287,7 @@ export class InboxCommitSource implements CommitSource {
 			changeSeq: 0, // set by addCommit
 			status: "valid",
 			validAt: Math.floor(Date.now() / 1000),
-			commitProof: encodeOPBatchInboxCommitProof({
-				l1Header: encodeBlockHeader(l1Raw),
-				txIndex,
-				txProof,
-				blobIndex,
-				commitment,
-				fieldElements: bytesToHex(blob.subarray(0, 32 * n)),
-				blobProof,
-				l2Header: encodeBlockHeader(l2Raw),
-			}),
+			commitProof,
 			accountProof: encodeMPTProof(account.accountProof),
 			l1Block: Number(block.number),
 			tx: tx.hash,
@@ -279,8 +328,48 @@ export class InboxCommitSource implements CommitSource {
 		}
 	}
 
+	// EigenDA's setup for blobs of `length` symbols; the blob must reproduce the certificate's commitment
+	private async eigenDAKZG(length: number): Promise<EigenDAKZG> {
+		if (!this.config.eigenDAKZG) throw new Error("no KZG for EigenDA blobs");
+		return this.config.eigenDAKZG(length);
+	}
+
+	// the payload an EigenDA blob carries (its evaluations), once the blob matches its certificate
+	private async eigenDAData(cert: EigenDACert, blob: Uint8Array): Promise<Uint8Array> {
+		if (blob.length !== 32 * cert.length) throw new Error(`eigenda: ${blob.length} bytes for ${cert.length} symbols`);
+		const kzg = await this.eigenDAKZG(cert.length);
+		const c = kzg.commit(blobCoefficients(blob));
+		if (c.x !== cert.commitment.x || c.y !== cert.commitment.y)
+			throw new Error("eigenda: blob doesn't match its certificate");
+		return eigenDAPayloadPrefix(kzg.evaluations(blob));
+	}
+
+	// a relay's URL from EigenDA's RelayRegistry (in its directory)
+	private async relay(key: number): Promise<string> {
+		const cached = this.relays.get(key);
+		if (cached) return cached;
+		const { l1, deployment } = this.config;
+		if (!deployment.eigenDA) throw new Error("not an EigenDA deployment");
+		const registry = await l1.readContract({
+			address: deployment.eigenDA.directory,
+			abi: EIGENDA_ABI,
+			functionName: "getAddress",
+			args: ["RELAY_REGISTRY"],
+		});
+		const url = await l1.readContract({
+			address: registry,
+			abi: EIGENDA_ABI,
+			functionName: "relayKeyToUrl",
+			args: [key],
+		});
+		if (!url) throw new Error(`eigenda: no relay ${key}`);
+		this.relays.set(key, url);
+		return url;
+	}
+
 	private async fetchBlob(timestamp: bigint, versionedHash: Hex): Promise<Uint8Array> {
 		const { beaconURL } = this.config;
+		if (!beaconURL) throw new Error("no beacon API");
 		if (this.beaconGenesis === undefined) {
 			const res = await fetch(`${beaconURL}/eth/v1/beacon/genesis`);
 			if (!res.ok) throw new Error(`beacon genesis: ${res.status}`);
@@ -295,10 +384,13 @@ export class InboxCommitSource implements CommitSource {
 	}
 }
 
-// the blob's batcher data starts a brotli channel (derivation version 0, frame 0)
-function startsChannel(blob: Uint8Array): boolean {
+const blobCoefficients = (blob: Uint8Array) =>
+	Array.from({ length: blob.length / 32 }, (_, i) => BigInt(bytesToHex(blob.subarray(32 * i, 32 * i + 32))));
+
+// batcher data that starts a brotli channel (derivation version 0, frame 0)
+function startsChannel(data: Uint8Array): boolean {
 	try {
-		channelStart(blobDataPrefix(blob.subarray(0, 128)));
+		channelStart(data);
 		return true;
 	} catch {
 		return false;

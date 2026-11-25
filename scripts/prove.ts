@@ -20,6 +20,7 @@ import {
 	DEPLOYMENTS,
 	type Deployment,
 	decodeArbitrumCommitProof,
+	decodeEigenDAInboxCommitProof,
 	decodeOPBatchInboxCommitProof,
 	decodeOPFaultCommitProof,
 	redactURL,
@@ -56,6 +57,7 @@ const GATEWAY_PORTS: Record<string, number> = {
 	"base-inbox": 8203,
 	arbitrum: 8204,
 	celo: 8205,
+	"celo-inbox": 8206,
 };
 
 const RESOLVER_ABI = parseAbi([
@@ -158,7 +160,7 @@ async function proofBlock(d: Deployment, commitProof: Hex): Promise<{ block: num
 			return { block: Number(block.number), commit: `game ${game}` };
 		}
 		case "inbox": {
-			const p = decodeOPBatchInboxCommitProof(commitProof);
+			const p = d.eigenDA ? decodeEigenDAInboxCommitProof(commitProof) : decodeOPBatchInboxCommitProof(commitProof);
 			const number = (h: Hex) => Number(hexToBigInt((fromRlp(h) as Hex[])[8]));
 			return { block: number(p.l2Header), commit: `batch in L1 block ${n(number(p.l1Header))}` };
 		}

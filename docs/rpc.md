@@ -97,8 +97,8 @@ Indexer (`bun run indexer:<chain>`, or `bun run indexer` with `INDEXER_CHAIN`):
 
 | variable | default | |
 |---|---|---|
-| `INDEXER_CHAIN` | required | `optimism`, `base`, `linea`, `arbitrum`, `celo`, or `base-inbox` / `optimism-inbox` ([op-batch-inbox.md](op-batch-inbox.md)) |
-| `INDEXER_PORT` | `8100` | the `:optimism` / `:linea` / `:base` / `:base-inbox` / `:arbitrum` / `:celo` scripts use 8100 / 8101 / 8102 / 8103 / 8104 / 8105 |
+| `INDEXER_CHAIN` | required | `optimism`, `base`, `linea`, `arbitrum`, `celo`, or `base-inbox` / `optimism-inbox` / `celo-inbox` ([op-batch-inbox.md](op-batch-inbox.md)) |
+| `INDEXER_PORT` | `8100` | the `:optimism` / `:linea` / `:base` / `:base-inbox` / `:arbitrum` / `:celo` / `:celo-inbox` scripts use 8100 / 8101 / 8102 / 8103 / 8104 / 8105 / 8106 |
 | `INDEXER_DB` | `data/<L2>.sqlite` | One per L2: an L2's sources share it (`base` / `base-inbox` share `data/base.sqlite`, `optimism` / `optimism-inbox` `data/optimism.sqlite`: events and trie), one at a time (a second indexer on the same database refuses to start). Each source's commits stay; switching back resumes where it left off, rebuilding the newest valid commits' tries. |
 | `INDEXER_POLL_MS` | `30000` | |
 | `INDEXER_CATCHUP_BLOCKS` | `10000` | All but Linea: each tick first syncs events to this many blocks below the L2's finalized head, so a new or stopped indexer replays them at once. Commits for older blocks are rebuilt from the newest trie. |
@@ -122,7 +122,7 @@ Gateway (`bun run gateway:<chain>`, or `bun run gateway`). It uses no RPC: every
 | variable | default | |
 |---|---|---|
 | `INDEXER_URL` | `http://localhost:8100` | comma-separated, in priority order: each sync uses the first indexer that answers `/status` (10 s), so the rest are backups for when it's down. A backup must serve the store's deployment with the same early acceptance; it may be a little behind (commits it doesn't know are kept). The `:<chain>` scripts point at that chain's indexer port |
-| `GATEWAY_PORT` | `8200` | the `:optimism` / `:linea` / `:base` / `:base-inbox` / `:arbitrum` / `:celo` scripts use 8200 / 8201 / 8202 / 8203 / 8204 / 8205 |
+| `GATEWAY_PORT` | `8200` | the `:optimism` / `:linea` / `:base` / `:base-inbox` / `:arbitrum` / `:celo` / `:celo-inbox` scripts use 8200 / 8201 / 8202 / 8203 / 8204 / 8205 / 8206 |
 | `GATEWAY_DB` | `data/gateway-<port>.sqlite` | a cache, safe to delete: it survives restarts so a restart patches instead of loading a snapshot (Base's is about 100 pages). It records the deployment its rows are from and starts over when the indexer serves another one. Named by port, so gateways side by side never share one; `:memory:` works too (Base's rows are about half a GB) |
 | `GATEWAY_KEEP_COMMITS` | `2` | valid commits held: the newest, and fallbacks while `GATEWAY_SERVE_DELAY_SEC` runs |
 | `GATEWAY_SERVE_DELAY_SEC` | `0` | serve a commit only once it has been valid this long. The indexer judges validity on finalized L1 and validity only grows, so clients reading at latest are already past it; a few seconds only help clients reading at finalized |

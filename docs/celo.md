@@ -13,7 +13,7 @@ Celo has been an OP Stack chain since L2 block 31,056,500 (2025-03-26; before it
 | verifier | [`OPFaultVerifier`](../packages/contracts/src/op/OPFaultVerifier.sol)`(AnchorStateRegistry, 42220, maxL2SequenceLag, minAgeSec)` |
 | `verifyName` gas | ~0.65M |
 
-There's no batch inbox variant: Celo's batcher posts EigenDA certificates (alt-DA), not blobs.
+Celo's batcher posts EigenDA certificates (alt-DA), not blobs, so its batch inbox variant reads EigenDA blobs: `celo-inbox` ([eigenda-inbox.md](eigenda-inbox.md)).
 
 ## Game type 42: OP Succinct Lite
 

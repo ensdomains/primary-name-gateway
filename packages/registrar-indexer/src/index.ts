@@ -12,6 +12,7 @@ import {
 } from "@primary-name-gateway/shared";
 import { ArbitrumCommitSource } from "./arbitrum.js";
 import { IndexerDB } from "./db.js";
+import { EigenDAKZG } from "./eigenda.js";
 import { InboxCommitSource } from "./inbox.js";
 import { type CommitSource, type IndexerConfig, RegistrarIndexer } from "./indexer.js";
 import { KZG } from "./kzg.js";
@@ -25,6 +26,7 @@ import { serveIndexer } from "./server.js";
 export { ArbitrumCommitSource, type ArbitrumSourceConfig } from "./arbitrum.js";
 export { chunkPage, chunkPatch, type NodeSource } from "./chunks.js";
 export { IndexerDB } from "./db.js";
+export { EigenDAKZG, fetchEigenDABlob } from "./eigenda.js";
 export { InboxCommitSource, type InboxSourceConfig, spanBatchParent } from "./inbox.js";
 export { type CommitSource, type IndexerConfig, NotFinalizedError, RegistrarIndexer, SyncError } from "./indexer.js";
 export { KZG } from "./kzg.js";
@@ -84,15 +86,30 @@ function createSource(deployment: Deployment, log: Log): { l2: ChangeReader; sou
 			log,
 		);
 		let kzg: Promise<KZG> | undefined;
+		const eigenKZG = new Map<number, Promise<EigenDAKZG>>();
 		const source = new InboxCommitSource({
 			deployment,
 			l1,
 			l2,
-			beaconURL: beaconURL(deployment.l1),
-			kzg: () => {
-				kzg ??= KZG.load(env.KZG_TRUSTED_SETUP);
-				return kzg;
-			},
+			...(deployment.eigenDA
+				? {
+						// EigenDA's setup for each blob size (its first G1 points, downloaded to data/eigenda/)
+						eigenDAKZG: (length: number) => {
+							let k = eigenKZG.get(length);
+							if (!k) {
+								k = EigenDAKZG.load(length);
+								eigenKZG.set(length, k);
+							}
+							return k;
+						},
+					}
+				: {
+						beaconURL: beaconURL(deployment.l1),
+						kzg: () => {
+							kzg ??= KZG.load(env.KZG_TRUSTED_SETUP);
+							return kzg;
+						},
+					}),
 			intervalSec: Number(env.INDEXER_INBOX_INTERVAL_SEC ?? 600),
 			scanBlocks: Number(env.INDEXER_INBOX_SCAN_BLOCKS ?? 64),
 			firstScanBlocks: Number(env.INDEXER_INBOX_FIRST_SCAN_BLOCKS ?? 300), // an hour of L1 blocks
@@ -162,7 +179,7 @@ if (import.meta.main) {
 		["L2 logs", rpcURL(deployment.l2, "logs")],
 		["L2 proofs", rpcURL(deployment.l2, "proof")],
 	];
-	if (deployment.kind === "inbox") providers.push(["L1 beacon", beaconURL(deployment.l1)]);
+	if (deployment.kind === "inbox" && !deployment.eigenDA) providers.push(["L1 beacon", beaconURL(deployment.l1)]);
 	for (const [what, url] of providers) log(`  ${what.padEnd(9)} ${redactURL(url)}`);
 	const config: IndexerConfig = {
 		chain,
