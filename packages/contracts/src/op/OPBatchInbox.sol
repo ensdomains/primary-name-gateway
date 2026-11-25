@@ -21,8 +21,17 @@ library OPBatchInbox {
         returns (bytes16 channelId, OPBatchPrefix.Batch memory batch)
     {
         OPBlob.verify(versionedHash, commitment, fieldElements, proof);
+        return decodeBatch(OPBlob.data(fieldElements));
+    }
+
+    /// @notice The first batch of the channel that batcher data `data` starts (from any DA layer).
+    function decodeBatch(bytes memory data)
+        internal
+        pure
+        returns (bytes16 channelId, OPBatchPrefix.Batch memory batch)
+    {
         bytes memory compressed;
-        (channelId, compressed) = channelStart(OPBlob.data(fieldElements));
+        (channelId, compressed) = channelStart(data);
         batch = OPBatchPrefix.decode(BrotliPrefix.decode(compressed, PREFIX_BYTES));
     }
 

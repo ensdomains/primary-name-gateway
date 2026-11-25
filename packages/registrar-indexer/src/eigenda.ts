@@ -113,6 +113,15 @@ export class EigenDAKZG {
 		return p.equals(G1P.ZERO) ? { x: 0n, y: 0n } : p.toAffine();
 	}
 
+	// the blob's evaluations (the payload, encoded), 32 bytes each
+	evaluations(blob: Uint8Array): Uint8Array {
+		const n = blob.length / 32;
+		const coeffs = Array.from({ length: n }, (_, i) => hexToBigInt(bytesToHex(blob.subarray(32 * i, 32 * i + 32))));
+		const out = new Uint8Array(blob.length);
+		for (const [i, e] of fft(coeffs, rootOfUnity(n)).entries()) out.set(hexToBytes(toHex32(e)), 32 * i);
+		return out;
+	}
+
 	// The proof that p's first `k` evaluations (natural order) are `evaluations(blob)[0, k)`: q = p div Z,
 	// Z = prod_{i<k} (X - w^i) (the remainder is the interpolation of those evaluations), then p and q
 	// opened at the Fiat-Shamir point z.

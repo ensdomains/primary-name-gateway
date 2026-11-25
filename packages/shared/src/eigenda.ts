@@ -6,6 +6,7 @@
 import {
 	bytesToHex,
 	concatHex,
+	decodeAbiParameters,
 	encodeAbiParameters,
 	fromRlp,
 	type Hex,
@@ -174,4 +175,35 @@ export type EigenDABlobProof = { quotient: G1; y: bigint; proof: G1; quotientPro
 export function encodeEigenDABlobProof(p: EigenDABlobProof): Hex {
 	const g1 = (g: G1) => [numberToHex(g.x, { size: 32 }), numberToHex(g.y, { size: 32 })];
 	return concatHex([...g1(p.quotient), numberToHex(p.y, { size: 32 }), ...g1(p.proof), ...g1(p.quotientProof)]);
+}
+
+// EigenDAInboxVerifier's commit proof
+export type EigenDAInboxCommitProof = {
+	l1Header: Hex;
+	txIndex: number;
+	txProof: Hex[];
+	evaluations: Hex;
+	blobProof: Hex; // encodeEigenDABlobProof
+	l2Header: Hex;
+};
+
+const EIGENDA_INBOX_COMMIT_PROOF = [
+	{
+		type: "tuple",
+		components: [
+			{ name: "l1Header", type: "bytes" },
+			{ name: "txIndex", type: "uint256" },
+			{ name: "txProof", type: "bytes[]" },
+			{ name: "evaluations", type: "bytes" },
+			{ name: "blobProof", type: "bytes" },
+			{ name: "l2Header", type: "bytes" },
+		],
+	},
+] as const;
+export function encodeEigenDAInboxCommitProof(p: EigenDAInboxCommitProof): Hex {
+	return encodeAbiParameters(EIGENDA_INBOX_COMMIT_PROOF, [{ ...p, txIndex: BigInt(p.txIndex) }]);
+}
+export function decodeEigenDAInboxCommitProof(proof: Hex): EigenDAInboxCommitProof {
+	const p = decodeAbiParameters(EIGENDA_INBOX_COMMIT_PROOF, proof)[0];
+	return { ...p, txIndex: Number(p.txIndex), txProof: [...p.txProof] };
 }

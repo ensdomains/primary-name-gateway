@@ -2,8 +2,11 @@
 
 import { expect, test } from "bun:test";
 import {
+	decodeEigenDAInboxCommitProof,
 	decodeOPBatchInboxCommitProof,
 	decodeOPFaultCommitProof,
+	type EigenDAInboxCommitProof,
+	encodeEigenDAInboxCommitProof,
 	encodeOPBatchInboxCommitProof,
 	encodeOPFaultCommitProof,
 	type OPBatchInboxCommitProof,
@@ -38,4 +41,17 @@ test("batch inbox commit proof round-trips (mainnet fixture)", async () => {
 		l2Header: f.l2Header,
 	};
 	expect(decodeOPBatchInboxCommitProof(encodeOPBatchInboxCommitProof(p))).toEqual(p);
+});
+
+test("EigenDA inbox commit proof round-trips (Celo fixture)", async () => {
+	const f = await Bun.file(`${import.meta.dir}/../packages/contracts/test/fixtures/eigen/celo.json`).json();
+	const p: EigenDAInboxCommitProof = {
+		l1Header: f.l1Header,
+		txIndex: f.txIndex,
+		txProof: f.txProof,
+		evaluations: f.evaluations,
+		blobProof: f.blobProof,
+		l2Header: f.l2Header,
+	};
+	expect(decodeEigenDAInboxCommitProof(encodeEigenDAInboxCommitProof(p))).toEqual(p);
 });

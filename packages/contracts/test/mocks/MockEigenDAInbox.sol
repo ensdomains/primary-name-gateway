@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {EigenDAInboxVerifier} from "../../src/eigen/EigenDAInboxVerifier.sol";
-import {ISystemConfig} from "../../src/op/OPBatchInboxVerifier.sol";
+import {ISystemConfig} from "../../src/op/OPInboxVerifierBase.sol";
 
 /// @dev L1 block hashes are set by the test (fixtures are mainnet blocks).
 contract EigenDAInboxVerifierHarness is EigenDAInboxVerifier {

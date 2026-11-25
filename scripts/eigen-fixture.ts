@@ -99,6 +99,8 @@ const out = {
 	l1Hash: l1Raw.hash,
 	tx: tx.hash,
 	txIndex,
+	calldata: tx.input,
+	blobKey: eigenDABlobKey(cert),
 	l1Header: encodeBlockHeader(l1Raw),
 	txProof,
 	commitment: { x: `0x${cert.commitment.x.toString(16)}`, y: `0x${cert.commitment.y.toString(16)}` },

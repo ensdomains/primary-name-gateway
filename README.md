@@ -29,6 +29,7 @@ Proven from something other than the rollup's own commitments to L1, with a diff
 | name | kind | every | trust | chains | delay |
 |---|---|---|---|---|---|
 | [OP Batch Inbox](docs/op-batch-inbox.md) | `inbox`<br>batcher blob parent L2 block | ~1 min | sequencer | Optimism, Base | ~25 min |
+| [EigenDA Batch Inbox](docs/eigenda-inbox.md) | `inbox`<br>EigenDA blob parent L2 block | ~2 min | sequencer | Celo | ~25 min |
 
 [docs/registrar.md](docs/registrar.md) covers the registrar contract, its storage layouts, and why its storage can be rebuilt from events. ENSIP-19 coin types are `0x80000000 | chainId`.
 
@@ -62,7 +63,7 @@ The serving rules are the same on every chain: the gateway serves the newest val
 | [`shared`](packages/shared) | Chain config and deployments, registrar layouts and events, row formats and provers for each trie kind ([trie.ts](packages/shared/src/trie.ts): Merkle-Patricia, [linea.ts](packages/shared/src/linea.ts): Linea), the indexer ↔ gateway JSON types, the batch inbox references ([brotli.ts](packages/shared/src/brotli.ts), [op-batch.ts](packages/shared/src/op-batch.ts)), Arbitrum assertions ([arbitrum.ts](packages/shared/src/arbitrum.ts)), and the services' log ([log.ts](packages/shared/src/log.ts)). |
 | [`registrar-indexer`](packages/registrar-indexer) | `RegistrarIndexer` (event replay, commits, tries of retained commits, kept as versioned rows in SQLite for OP Stack chains), a `CommitSource` per chain family (dispute games, Linea finalizations, batcher blobs, Arbitrum assertions), HTTP API. |
 | [`registrar-gateway`](packages/registrar-gateway) | `NodeStore`, `RegistrarGateway` (sync + `proveName`), `createGatewayHandler`: `GET /status`, JSON-RPC at `/rpc`, and CCIP-Read ([ezccip](https://github.com/adraffy/ezccip.js)) on every other path. The library (`src/index.ts`) is runtime-agnostic; `src/main.ts` is the bun server. |
-| [`contracts`](packages/contracts) | `L2ReverseResolver`, `IL2StorageVerifier`, and one verifier per chain family (`OPFaultVerifier`, `LineaVerifier`, `ArbitrumVerifier`, `OPBatchInboxVerifier`), deployed per chain and shareable by other resolvers. |
+| [`contracts`](packages/contracts) | `L2ReverseResolver`, `IL2StorageVerifier`, and one verifier per chain family (`OPFaultVerifier`, `LineaVerifier`, `ArbitrumVerifier`, `OPBatchInboxVerifier`, `EigenDAInboxVerifier`), deployed per chain and shareable by other resolvers. |
 
 ## Gateway storage (`NodeStore`)
 
@@ -99,6 +100,8 @@ bun run indexer:arbitrum    # :8104
 bun run gateway:arbitrum    # :8204
 bun run indexer:celo        # :8105 (docs/celo.md: needs RPC_URL_42220)
 bun run gateway:celo        # :8205
+bun run indexer:celo-inbox  # :8106 (docs/eigenda-inbox.md)
+bun run gateway:celo-inbox  # :8206
 ```
 
 Indexer API: `GET /status` (the deployment's name and commit kind, `l1ChainId`, `l2ChainId`, the registrar and its layout, L2 block time, `minAgeSec` / `minAgeL1Blocks`, sync position, commit counts, the newest valid commit), `/commits?status=valid&limit=2`, `/commits/:id`, `/snapshot?commit=ID&after=KEY`, `/patch?from=A&to=B`, `/changes?after=&until=`. `/snapshot` and `/patch` serve rows in the layout their `x-row-format` header names (OP Stack: [chunks](docs/optimism.md#chunks)). Responses are JSON, gzipped when the client accepts it: a Base `/snapshot` page (50,000 nodes in about 700 chunks) is about 9 MB, or 3.9 MB gzipped.
@@ -115,7 +118,7 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
 | `test:contracts` | forge tests | Foundry |
 | `test:e2e` | the offline end-to-end tests, and `inline-node` | anvil |
 | `test:inbox` | batch inbox: Solidity against the TypeScript references, and the verifier on mainnet fixtures | anvil |
-| `test:kzg` | the indexer's KZG proofs against the precompile | anvil; downloads the KZG trusted setup once |
+| `test:kzg` | the indexer's KZG proofs against the precompiles (EIP-4844, and EigenDA's on BN254) | anvil; downloads the KZG trusted setup and EigenDA's first setup points once |
 | `test:mainnet`, `test:fork` | against L1 mainnet forks (not in CI) | RPC keys, archive state; `test:mainnet`: a running indexer |
 
 - The tests:
@@ -123,7 +126,7 @@ Env: see [docs/rpc.md#environment](docs/rpc.md#environment).
   - RPC: [l2.test.ts](test/l2.test.ts) (`eth_getLogs` range sizing, limits and rate limits), [raw-transaction.test.ts](test/raw-transaction.test.ts) (transactions re-encoded from a block), [block-schedule.test.ts](test/block-schedule.test.ts) (L2 block times, span batch parents).
   - Services: [indexer-db.test.ts](test/indexer-db.test.ts) (commit sources sharing a database, the lock), [inbox-scan.test.ts](test/inbox-scan.test.ts) (the batch inbox scan), [commit-proofs.test.ts](test/commit-proofs.test.ts) (commit proof decoders against the encoders), [server.test.ts](test/server.test.ts) (gzip), [progress.test.ts](test/progress.test.ts) (long sync progress lines), [log.test.ts](test/log.test.ts) (colors, `errorLine`), [rpc-url.test.ts](test/rpc-url.test.ts) (which URL each RPC purpose gets).
   - End to end: [offline.test.ts](test/offline.test.ts), [offline-base.test.ts](test/offline-base.test.ts), [offline-minage.test.ts](test/offline-minage.test.ts), [offline-linea.test.ts](test/offline-linea.test.ts) and [offline-arbitrum.test.ts](test/offline-arbitrum.test.ts) run mock L1 contracts and an in-memory L2 ([OP](test/fake-rollup.ts), [Linea](test/fake-linea.ts), [Arbitrum](test/fake-arbitrum.ts)) through the real indexer, gateway, verifier and resolver: name updates, invalid or skipped commits, stale commits, out-of-order games, and restarts.
-  - Batch inbox: [brotli.test.ts](test/brotli.test.ts), [brotli-sol.test.ts](test/brotli-sol.test.ts), [op-batch-sol.test.ts](test/op-batch-sol.test.ts), [op-batch-verifier.test.ts](test/op-batch-verifier.test.ts) and [kzg.test.ts](test/kzg.test.ts) ([docs/op-batch-inbox.md](docs/op-batch-inbox.md)).
+  - Batch inbox: [brotli.test.ts](test/brotli.test.ts), [brotli-sol.test.ts](test/brotli-sol.test.ts), [op-batch-sol.test.ts](test/op-batch-sol.test.ts), [op-batch-verifier.test.ts](test/op-batch-verifier.test.ts) and [kzg.test.ts](test/kzg.test.ts) ([docs/op-batch-inbox.md](docs/op-batch-inbox.md)); [eigen-inbox.test.ts](test/eigen-inbox.test.ts) and [eigenda.test.ts](test/eigenda.test.ts) ([docs/eigenda-inbox.md](docs/eigenda-inbox.md)).
   - forge: unit tests, [LineaVerifier.t.sol](packages/contracts/test/LineaVerifier.t.sol) on real `linea_getProof` output, [ArbitrumVerifier.t.sol](packages/contracts/test/ArbitrumVerifier.t.sol) on a real assertion, and [BrotliPrefix.t.sol](packages/contracts/test/BrotliPrefix.t.sol) (gas).
 - `bun run test:mainnet` needs a running indexer (any chain, at `INDEXER_URL`, default `:8100`) with a valid commit and RPC keys. It deploys the chain's verifier and the resolver on an anvil fork of L1 mainnet, resolves names through CCIP-Read, and checks every indexed name (or a sample of `MAINNET_SAMPLE`, up to half of it long names) against the registrar.
 - `bun run test:fork` runs `OPBatchInboxVerifier` on L1 mainnet forks (archive RPC).
