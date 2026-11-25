@@ -11,6 +11,7 @@ Celo has been an OP Stack chain since L2 block 31,056,500 (2025-03-26; before it
 | commit id | game index |
 | valid when | `isGameClaimValid(game)`, about 7 days after creation; or with `minAgeSec`, unchallenged and that old ([below](#early-acceptance)) |
 | verifier | [`OPFaultVerifier`](../packages/contracts/src/op/OPFaultVerifier.sol)`(AnchorStateRegistry, 42220, maxL2SequenceLag, minAgeSec)` |
+| `verifyName` gas | ~0.65M |
 
 There's no batch inbox variant: Celo's batcher posts EigenDA certificates (alt-DA), not blobs.
 
@@ -34,6 +35,8 @@ What this repo relies on is the standard `IDisputeGame` surface:
 `OPFaultVerifier` and the indexer accept a type-42 game before it's final (`minAgeSec > 0`, [optimism.md](optimism.md#early-acceptance-minagesec)) when it is proper, respected, not lost, at least `minAgeSec` old, and its `claimData().status` is 0, 2 or 3: unchallenged, or challenged and answered with a ZK proof. The indexer marks a challenged game invalid for good, even if it's proven later; the verifier accepts it again once proven.
 
 The parent isn't checked. That holds under the same assumption as on Optimism: an honest challenger challenges a wrong root claim within `minAgeSec`. op-succinct's challenger does so for every game whose output root is wrong, and also for every unchallenged game whose parent lost (`challenger.rs`, `sync_game`). So a bad game on a bad parent is challenged too. On Celo the challenger set is the 6 listed above.
+
+Checked live (2026-11-25): with `minAgeSec` = 600, game 42905 (L2 block 83,731,108, created about 20 minutes after it) was valid 45 minutes after its L2 block, and `bun run prove` resolved `raffy.eth` from the mock through it, matching `nameForAddr` at that block.
 
 ## Registrar
 
