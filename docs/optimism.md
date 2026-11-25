@@ -30,7 +30,7 @@ A game takes about 7 days to become a valid claim. `OPFaultVerifier` can optiona
 
 1. proper and respected according to the `AnchorStateRegistry` (registered, not blacklisted, not retired, not paused, of the respected type when created),
 2. not lost (`status != CHALLENGER_WINS`), and
-3. either resolved for the defender (waiting for the airgap), or at least `minAgeSec` old and **unchallenged**: `claimDataLen() == 1` for OP's fault dispute games, `counteredByIntermediateRootIndexPlusOne() == 0` for Base's `AggregateVerifier` (type 621). A game type with neither getter is accepted early only once it has resolved for the defender.
+3. either resolved for the defender (waiting for the airgap), or at least `minAgeSec` old and **unchallenged**: `claimDataLen() == 1` for OP's fault dispute games, `counteredByIntermediateRootIndexPlusOne() == 0` for Base's `AggregateVerifier` (type 621), `claimData().status` unchallenged or ZK-proven (0, 2 or 3) for OP Succinct Lite (type 42, [Celo](celo.md#early-acceptance)). A game type with none of these is accepted early only once it has resolved for the defender.
 
 **Trust:** this assumes honest challengers respond within `minAgeSec`. A fraudulent proposal that nobody challenges in time is accepted until it is challenged, loses, or is blacklisted; from then on the verifier rejects it, the indexer marks it `invalid`, and gateways rewind to their newest acceptable commit. For calibration, 2 of Optimism's last 200 games (as of 2026-11-22) had been challenged.
 

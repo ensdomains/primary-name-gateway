@@ -17,6 +17,7 @@ Proven from what the rollup itself commits to L1. **Delay** is how far behind th
 | [Optimism](docs/optimism.md)<br>(10) | `op`<br>dispute games<br>(super roots) | 1 h | fault proofs | `minAgeSec`<br>• `0`: ~7 days (finalized)<br>• `T`: T + ~40 min–1.5 h |
 | [Base](docs/base.md)<br>(8453) | `op`<br>dispute games<br>(output roots) | ~20 min | TEE proofs, challengeable with ZK | `minAgeSec`<br>• `0`: ~5 days (finalized)<br>• `T`: T + ~1 h |
 | [Arbitrum One](docs/arbitrum.md)<br>(42161) | `arbitrum`<br>BoLD assertions | 1 h | fault proofs (BoLD) | `minAgeL1Blocks`<br>• `0`: ~6.5 days (confirmed)<br>• `N`: N × 12 s + ~1.2–2.2 h (1,800: 7.7 h measured) |
+| [Celo](docs/celo.md)<br>(42220) | `op`<br>dispute games<br>(output roots) | 30 min | OP Succinct Lite: a challenge is answered with a ZK proof; listed proposers and challengers | `minAgeSec`<br>• `0`: ~7 days (finalized)<br>• `T`: T + ~30–60 min<br>(no ENS registrar yet: a mock) |
 | [Linea](docs/linea.md)<br>(59144) | `linea`<br>ZK finalizations | a few hours | validity proofs | ~2–4 h (final when posted) |
 
 The early delays add up the time between commitments (every), the age of the L2 block a commitment names when it's posted (measured 2026-11-23: Optimism ~20 min, Base ~35 min, Arbitrum ~1 h), and L1 finality (~13 min: the indexer only accepts commits seen on finalized L1). An early Arbitrum proof is a chain of assertions from the last confirmed one (about 6.4 days back), so it costs more the smaller `minAgeL1Blocks` is: 2.1M gas at 1,800 blocks, against ~600k confirmed-only.
@@ -96,6 +97,8 @@ bun run indexer:base-inbox  # :8103 (docs/op-batch-inbox.md)
 bun run gateway:base-inbox  # :8203
 bun run indexer:arbitrum    # :8104
 bun run gateway:arbitrum    # :8204
+bun run indexer:celo        # :8105 (docs/celo.md: needs RPC_URL_42220)
+bun run gateway:celo        # :8205
 ```
 
 Indexer API: `GET /status` (the deployment's name and commit kind, `l1ChainId`, `l2ChainId`, the registrar and its layout, L2 block time, `minAgeSec` / `minAgeL1Blocks`, sync position, commit counts, the newest valid commit), `/commits?status=valid&limit=2`, `/commits/:id`, `/snapshot?commit=ID&after=KEY`, `/patch?from=A&to=B`, `/changes?after=&until=`. `/snapshot` and `/patch` serve rows in the layout their `x-row-format` header names (OP Stack: [chunks](docs/optimism.md#chunks)). Responses are JSON, gzipped when the client accepts it: a Base `/snapshot` page (50,000 nodes in about 700 chunks) is about 9 MB, or 3.9 MB gzipped.

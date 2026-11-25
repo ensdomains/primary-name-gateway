@@ -19,7 +19,7 @@ export function verifierContract(d: Deployment, minAgeSec = 0): { contract: stri
 				args: [
 					d.AnchorStateRegistry,
 					d.l2.id,
-					86400, // maxL2SequenceLag: super root games: seconds (1 day); output root games: blocks (Base: 4.8 h)
+					86400, // maxL2SequenceLag: super root games: seconds (1 day); output root games: blocks (Base: 4.8 h, Celo: 1 day)
 					minAgeSec, // as the indexer's INDEXER_MIN_AGE_SEC
 				],
 			};

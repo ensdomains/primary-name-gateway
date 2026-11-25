@@ -38,6 +38,8 @@ Deployed (checked 2026-11-22 with `eth_getStorageAt` and `owner()`):
 | Scroll | 534352 | `0x80082750` | plain |
 | Base | 8453 | `0x80002105` | Ownable: slot 1 = `owner()` = `0xf9Bb…63e9` ([base.md](base.md)) |
 
+Celo (42220) has no ENS registrar yet; its deployment points at a mock with the same event and layout ([celo.md](celo.md#registrar)).
+
 In code the layout is a parameter, not an assumption: `RegistrarLayout { namesSlot, ownerSlot? }`
 (`packages/shared/src/registrar.ts`, per deployment in `chains.ts`), `L2ReverseResolver`'s `namesSlot` constructor argument, and the indexer's `/status`
 (`layout`), which a gateway keeps with its rows (`GatewayInfo.layout`). The opposite order (owner at slot 0, names at slot 1) is just another layout:

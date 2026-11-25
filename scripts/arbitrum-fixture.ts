@@ -5,6 +5,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import {
 	ARBITRUM,
+	ARBITRUM_MAINNET,
 	assertionStateHash,
 	BOLD_ROLLUP_ABI,
 	createClient,
@@ -18,7 +19,7 @@ import {
 import { bytesToHex, createPublicClient, getAbiItem, type Hex, http, numberToHex } from "viem";
 
 const ROLLUP = "0x4DCeB440657f21083db8aDd07665f8ddBe1DCfc0";
-const REGISTRAR = "0x0000000000D8e504002cC26E3Ec46D81971C1664";
+const REGISTRAR = ARBITRUM_MAINNET.L2ReverseRegistrar;
 // unbatched: Infura sometimes answers a batched eth_getLogs with nothing
 const l1 = createPublicClient({ transport: http(rpcURL(MAINNET), { retryCount: 5 }) });
 const l2 = createClient(ARBITRUM);

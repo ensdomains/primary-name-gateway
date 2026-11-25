@@ -37,11 +37,17 @@ export const GAME_ABI = parseAbi([
 	"function claimDataLen() view returns (uint256)",
 	// Base's AggregateVerifier: nonzero once the TEE proof is challenged with a ZK proof
 	"function counteredByIntermediateRootIndexPlusOne() view returns (uint256)",
+	// OP Succinct Lite (Celo): status is the ProposalStatus (OP_SUCCINCT_* below)
+	"function claimData() view returns (uint32 parentIndex, address counteredBy, address prover, bytes32 claim, uint8 status, uint64 deadline)",
 ]);
 
 export const GAME_STATUS_CHALLENGER_WINS = 1;
 export const GAME_STATUS_DEFENDER_WINS = 2;
 export const GAME_TYPE_AGGREGATE_VERIFIER = 621; // Base
+export const GAME_TYPE_OP_SUCCINCT = 42; // OP Succinct Lite: Celo
+// OP Succinct ProposalStatus: 0 unchallenged, 1 challenged, 2 / 3 proven without / after a challenge, 4 resolved
+export const OP_SUCCINCT_CHALLENGED = 1;
+export const OP_SUCCINCT_RESOLVED = 4;
 
 export const L2_TO_L1_MESSAGE_PASSER = "0x4200000000000000000000000000000000000016";
 

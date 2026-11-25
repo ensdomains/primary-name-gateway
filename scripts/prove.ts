@@ -55,6 +55,7 @@ const GATEWAY_PORTS: Record<string, number> = {
 	base: 8202,
 	"base-inbox": 8203,
 	arbitrum: 8204,
+	celo: 8205,
 };
 
 const RESOLVER_ABI = parseAbi([

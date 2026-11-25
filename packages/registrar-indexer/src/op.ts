@@ -8,7 +8,10 @@ import {
 	GAME_STATUS_CHALLENGER_WINS,
 	GAME_STATUS_DEFENDER_WINS,
 	GAME_TYPE_AGGREGATE_VERIFIER,
+	GAME_TYPE_OP_SUCCINCT,
 	hashOutputRootProof,
+	OP_SUCCINCT_CHALLENGED,
+	OP_SUCCINCT_RESOLVED,
 	type OPCommit,
 	type OPDeployment,
 	type OutputRootProof,
@@ -280,6 +283,15 @@ export class OPCommitSource implements CommitSource {
 					blockTag,
 				});
 				return n === 0n;
+			}
+			if (c.gameType === GAME_TYPE_OP_SUCCINCT) {
+				const [, , , , status] = await l1.readContract({
+					address: c.game,
+					abi: GAME_ABI,
+					functionName: "claimData",
+					blockTag,
+				});
+				return status !== OP_SUCCINCT_CHALLENGED && status < OP_SUCCINCT_RESOLVED;
 			}
 			return (await l1.readContract({ address: c.game, abi: GAME_ABI, functionName: "claimDataLen", blockTag })) === 1n;
 		} catch {

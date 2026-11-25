@@ -49,6 +49,16 @@ export const BASE: ChainInfo = {
 	logStep: 500000,
 };
 
+export const CELO: ChainInfo = {
+	id: 42220,
+	name: "celo",
+	drpcSlug: "celo",
+	alchemySlug: "celo-mainnet", // archive proofs, but eth_getLogs fails over any range
+	infuraSlug: "celo-mainnet", // eth_getLogs up to 10000 blocks, proofs only near the head
+	publicRPC: "https://forno.celo.org", // archive proofs, eth_getLogs up to 5000 blocks
+	logStep: 5000,
+};
+
 export const LINEA: ChainInfo = {
 	id: 59144,
 	name: "linea",
@@ -70,6 +80,9 @@ export const ARBITRUM: ChainInfo = {
 	wideLogsRPC: "https://arb1.arbitrum.io/rpc",
 	logStep: 10_000_000,
 };
+
+// ENS's L2ReverseRegistrar: the same address on every chain it's deployed on (docs/registrar.md)
+export const ENS_L2_REVERSE_REGISTRAR: Address = "0x0000000000D8e504002cC26E3Ec46D81971C1664";
 
 type DeploymentBase = {
 	l1: L1ChainInfo;
@@ -104,6 +117,10 @@ const BASE_BLOCKS: BlockSchedule = [
 	{ block: 0, timestamp: 1686789347, ms: 2000 },
 	{ block: 53556127, timestamp: 1793901601, ms: 200 },
 ];
+
+// Celo: an OP Stack L2 since block 31,056,500 (before it, Celo's own L1 blocks), one block a second.
+// https://github.com/ethereum-optimism/superchain-registry/blob/main/superchain/configs/mainnet/celo.toml
+const CELO_BLOCKS: BlockSchedule = [{ block: 31056500, timestamp: 1742957258, ms: 1000 }];
 
 // an L2 whose state is committed to L1 via OP dispute games (Merkle-Patricia tries)
 export type OPDeployment = DeploymentBase & {
@@ -142,7 +159,7 @@ export const OP_MAINNET: OPDeployment = {
 	l1: MAINNET,
 	l2: OPTIMISM,
 	AnchorStateRegistry: "0x23B2C62946350F4246f9f9D027e071f0264FD113",
-	L2ReverseRegistrar: "0x0000000000D8e504002cC26E3Ec46D81971C1664",
+	L2ReverseRegistrar: ENS_L2_REVERSE_REGISTRAR,
 	layout: PLAIN_LAYOUT,
 	registrarCreatedAtBlock: 137403854,
 	l2Blocks: OP_MAINNET_BLOCKS,
@@ -157,11 +174,26 @@ export const BASE_MAINNET: OPDeployment = {
 	l1: MAINNET,
 	l2: BASE,
 	AnchorStateRegistry: "0x909f6cf47ed12f010A796527f562bFc26C7F4E72",
-	L2ReverseRegistrar: "0x0000000000D8e504002cC26E3Ec46D81971C1664",
+	L2ReverseRegistrar: ENS_L2_REVERSE_REGISTRAR,
 	layout: OWNABLE_LAYOUT, // L2ReverseRegistrarWithMigration
 	registrarCreatedAtBlock: 31808582,
 	l2Blocks: BASE_BLOCKS,
 	gameFinalitySec: 5 * 86400,
+};
+
+// Celo: OP Succinct Lite games (type 42, OPSuccinctFaultDisputeGame): an output root that a challenge
+// must answer with a ZK proof. Unchallenged, a game resolves after 3.5 days, then the 3.5-day airgap.
+// Data is on EigenDA (alt-DA), so there's no batch inbox variant. No ENS registrar yet: a mock.
+export const CELO_MAINNET: OPDeployment = {
+	kind: "op",
+	l1: MAINNET,
+	l2: CELO,
+	AnchorStateRegistry: "0x8fE58d2168b5412Cf1Bd212cE6137f8b7300222d",
+	L2ReverseRegistrar: "0x07e0B99DDFcc4F0750ab5FB46084cAd9235a918b", // mock, not ENS's
+	layout: PLAIN_LAYOUT,
+	registrarCreatedAtBlock: 83729711,
+	l2Blocks: CELO_BLOCKS,
+	gameFinalitySec: 7 * 86400, // 3.5d challenge window + 3.5d airgap
 };
 
 // https://docs.linea.build/get-started/build/contracts
@@ -170,7 +202,7 @@ export const LINEA_MAINNET: LineaDeployment = {
 	l1: MAINNET,
 	l2: LINEA,
 	LineaRollup: "0xd19d4B5d358258f05D7B411E21A1460D11B0876F",
-	L2ReverseRegistrar: "0x0000000000D8e504002cC26E3Ec46D81971C1664",
+	L2ReverseRegistrar: ENS_L2_REVERSE_REGISTRAR,
 	layout: PLAIN_LAYOUT,
 	registrarCreatedAtBlock: 20173340,
 };
@@ -205,7 +237,7 @@ export const ARBITRUM_MAINNET: ArbitrumDeployment = {
 	l1: MAINNET,
 	l2: ARBITRUM,
 	Rollup: "0x4DCeB440657f21083db8aDd07665f8ddBe1DCfc0",
-	L2ReverseRegistrar: "0x0000000000D8e504002cC26E3Ec46D81971C1664",
+	L2ReverseRegistrar: ENS_L2_REVERSE_REGISTRAR,
 	layout: PLAIN_LAYOUT, // no owner(); a name resolves at keccak(addr . 0) (test/ArbitrumVerifier.t.sol)
 	registrarCreatedAtBlock: 349263357,
 };
@@ -217,6 +249,7 @@ export const DEPLOYMENTS: Record<string, Deployment> = {
 	"optimism-inbox": OP_MAINNET_INBOX,
 	"base-inbox": BASE_MAINNET_INBOX,
 	arbitrum: ARBITRUM_MAINNET,
+	celo: CELO_MAINNET,
 };
 
 // ENSIP-19 coin type of an EVM chain: 0x80000000 | chainId (Ethereum mainnet keeps 60)

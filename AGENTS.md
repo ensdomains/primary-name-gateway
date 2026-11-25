@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Notes for coding agents working in this repo. Read [README.md](README.md) first for the architecture, [docs/registrar.md](docs/registrar.md) for the registrar contract, [docs/optimism.md](docs/optimism.md) / [docs/base.md](docs/base.md) / [docs/linea.md](docs/linea.md) / [docs/arbitrum.md](docs/arbitrum.md) for the chain-specific parts, [docs/op-batch-inbox.md](docs/op-batch-inbox.md) for the batch inbox, [docs/durable-objects.md](docs/durable-objects.md) for running the gateway in a Cloudflare Durable Object, [docs/rpc.md](docs/rpc.md) for RPC providers and environment variables, and [docs/alternatives.md](docs/alternatives.md) for other ways to prove L2 state on L1 (dated research).
+Notes for coding agents working in this repo. Read [README.md](README.md) first for the architecture, [docs/registrar.md](docs/registrar.md) for the registrar contract, [docs/optimism.md](docs/optimism.md) / [docs/base.md](docs/base.md) / [docs/linea.md](docs/linea.md) / [docs/arbitrum.md](docs/arbitrum.md) / [docs/celo.md](docs/celo.md) for the chain-specific parts, [docs/op-batch-inbox.md](docs/op-batch-inbox.md) for the batch inbox, [docs/durable-objects.md](docs/durable-objects.md) for running the gateway in a Cloudflare Durable Object, [docs/rpc.md](docs/rpc.md) for RPC providers and environment variables, and [docs/alternatives.md](docs/alternatives.md) for other ways to prove L2 state on L1 (dated research).
 
 ## Layout
 
@@ -22,7 +22,7 @@ bun run test               # every offline group: test:unit, test:contracts, tes
 bun run test:mainnet       # needs a running indexer (any chain, INDEXER_URL, default :8100) with a valid commit, and .env keys
 bun run test:fork          # OPBatchInboxVerifier on L1 mainnet forks (archive RPC, fixtures < 8191 blocks old)
 bun run prove <addr> base  # one name through a running gateway, verified on an L1 fork (scripts/prove.ts; --public: no keys)
-bun run indexer:optimism   # / gateway:optimism on :8100 / :8200; linea :8101 / :8201, base :8102 / :8202, base-inbox :8103 / :8203, arbitrum :8104 / :8204
+bun run indexer:optimism   # / gateway:optimism on :8100 / :8200; linea :8101 / :8201, base :8102 / :8202, base-inbox :8103 / :8203, arbitrum :8104 / :8204, celo :8105 / :8205
 ```
 
 Run `bun run check`, `bun run lint` and `bun run test` before finishing a change.

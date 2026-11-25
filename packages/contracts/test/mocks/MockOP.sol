@@ -4,8 +4,8 @@ pragma solidity ^0.8.24;
 // Minimal stand-ins for OP's L1 fault proof contracts, exposing only what
 // OPFaultVerifier and registrar-indexer read. Games are made valid explicitly
 // (no dispute/resolution/airgap) so a test can drive the "rollup" directly.
-// A game has both challenge markers (FaultDisputeGame's claimDataLen and the
-// AggregateVerifier's counteredBy...): readers pick one by game type.
+// A game has every challenge marker (FaultDisputeGame's claimDataLen, the AggregateVerifier's
+// counteredBy... and OP Succinct's claimData().status): readers pick one by game type.
 
 contract MockDisputeGame {
     uint32 public immutable gameType;
@@ -16,6 +16,7 @@ contract MockDisputeGame {
     uint8 public status; // 0 = IN_PROGRESS, 1 = CHALLENGER_WINS, 2 = DEFENDER_WINS
     uint256 public claimDataLen = 1;
     uint256 public counteredByIntermediateRootIndexPlusOne;
+    uint8 public proposalStatus; // OP Succinct: 0 unchallenged, 1 challenged, 2 / 3 proven without / after a challenge
 
     constructor(uint32 gameType_, bytes32 rootClaim_, bytes memory extraData_, uint256 l2SequenceNumber_) {
         gameType = gameType_;
@@ -28,6 +29,16 @@ contract MockDisputeGame {
     function challenge() external {
         claimDataLen += 1;
         counteredByIntermediateRootIndexPlusOne = 1;
+        proposalStatus = 1;
+    }
+
+    // OP Succinct: a ZK proof of the claim
+    function prove() external {
+        proposalStatus = proposalStatus == 1 ? 3 : 2;
+    }
+
+    function claimData() external view returns (uint32, address, address, bytes32, uint8, uint64) {
+        return (type(uint32).max, address(0), address(0), rootClaim, proposalStatus, 0);
     }
 
     function extraData() external view returns (bytes memory) {
