@@ -1,6 +1,7 @@
 export * from "./arbitrum.js";
 export * from "./brotli.js";
 export * from "./chains.js";
+export * from "./eigenda.js";
 export * from "./header.js";
 export * from "./linea.js";
 export * from "./log.js";
