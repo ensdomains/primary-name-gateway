@@ -17,7 +17,7 @@ Proven from what the rollup itself commits to L1. **Delay** is how far behind th
 | [Optimism](docs/optimism.md)<br>(10) | `op`<br>dispute games<br>(super roots) | 1 h | fault proofs | `minAgeSec`<br>• `0`: ~7 days (finalized)<br>• `T`: T + ~40 min–1.5 h |
 | [Base](docs/base.md)<br>(8453) | `op`<br>dispute games<br>(output roots) | ~20 min | TEE proofs, challengeable with ZK | `minAgeSec`<br>• `0`: ~5 days (finalized)<br>• `T`: T + ~1 h |
 | [Arbitrum One](docs/arbitrum.md)<br>(42161) | `arbitrum`<br>BoLD assertions | 1 h | fault proofs (BoLD) | `minAgeL1Blocks`<br>• `0`: ~6.5 days (confirmed)<br>• `N`: N × 12 s + ~1.2–2.2 h (1,800: 7.7 h measured) |
-| [Celo](docs/celo.md)<br>(42220) | `op`<br>dispute games<br>(output roots) | 30 min | OP Succinct Lite: a challenge is answered with a ZK proof | ~7 days (finalized only; no ENS registrar yet: a mock) |
+| [Celo](docs/celo.md)<br>(42220) | `op`<br>dispute games<br>(output roots) | 30 min | OP Succinct Lite: a challenge is answered with a ZK proof; listed proposers and challengers | `minAgeSec`<br>• `0`: ~7 days (finalized)<br>• `T`: T + ~30–60 min<br>(no ENS registrar yet: a mock) |
 | [Linea](docs/linea.md)<br>(59144) | `linea`<br>ZK finalizations | a few hours | validity proofs | ~2–4 h (final when posted) |
 
 The early delays add up the time between commitments (every), the age of the L2 block a commitment names when it's posted (measured 2026-11-23: Optimism ~20 min, Base ~35 min, Arbitrum ~1 h), and L1 finality (~13 min: the indexer only accepts commits seen on finalized L1). An early Arbitrum proof is a chain of assertions from the last confirmed one (about 6.4 days back), so it costs more the smaller `minAgeL1Blocks` is: 2.1M gas at 1,800 blocks, against ~600k confirmed-only.

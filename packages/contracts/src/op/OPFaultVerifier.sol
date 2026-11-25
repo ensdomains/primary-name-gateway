@@ -33,6 +33,16 @@ interface IAggregateVerifier {
     function counteredByIntermediateRootIndexPlusOne() external view returns (uint256);
 }
 
+/// @dev OP Succinct Lite's OPSuccinctFaultDisputeGame (game type 42, Celo): `status` is its ProposalStatus,
+///      0 Unchallenged, 1 Challenged, 2 UnchallengedAndValidProofProvided, 3 ChallengedAndValidProofProvided,
+///      4 Resolved.
+interface IOPSuccinctFaultDisputeGame {
+    function claimData()
+        external
+        view
+        returns (uint32 parentIndex, address counteredBy, address prover, bytes32 claim, uint8 status, uint64 deadline);
+}
+
 /// @notice OP Stack `Types.OutputRootProof`.
 struct OutputRootProof {
     bytes32 version;
@@ -70,6 +80,9 @@ contract OPFaultVerifier is IL2StorageVerifier {
     uint8 constant CHALLENGER_WINS = 1;
     uint8 constant DEFENDER_WINS = 2;
     uint32 constant AGGREGATE_VERIFIER = 621;
+    uint32 constant OP_SUCCINCT = 42;
+    uint8 constant OP_SUCCINCT_CHALLENGED = 1;
+    uint8 constant OP_SUCCINCT_RESOLVED = 4;
 
     IAnchorStateRegistry public immutable anchorStateRegistry;
     uint256 public immutable l2ChainId;
@@ -151,6 +164,16 @@ contract OPFaultVerifier is IL2StorageVerifier {
         if (g.gameType() == AGGREGATE_VERIFIER) {
             try IAggregateVerifier(address(g)).counteredByIntermediateRootIndexPlusOne() returns (uint256 n) {
                 return n == 0;
+            } catch {
+                return false;
+            }
+        }
+        if (g.gameType() == OP_SUCCINCT) {
+            // a challenge answered with a ZK proof (3) is as good as none: the proof checks the claim
+            try IOPSuccinctFaultDisputeGame(address(g)).claimData() returns (
+                uint32, address, address, bytes32, uint8 status, uint64
+            ) {
+                return status != OP_SUCCINCT_CHALLENGED && status < OP_SUCCINCT_RESOLVED;
             } catch {
                 return false;
             }

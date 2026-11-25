@@ -1,5 +1,6 @@
-// Offline test of OPFaultVerifier.minAgeSec ("unchallenged after X"), for both challenge markers:
-// OP's FaultDisputeGame (claimDataLen) and Base's AggregateVerifier (type 621, counteredBy...).
+// Offline test of OPFaultVerifier.minAgeSec ("unchallenged after X"), for each challenge marker:
+// OP's FaultDisputeGame (claimDataLen), Base's AggregateVerifier (type 621, counteredBy...) and
+// OP Succinct Lite (type 42, Celo: claimData().status).
 //
 // Two resolvers share one gateway: one with a finalized-only verifier (minAgeSec = 0) and one that
 // accepts games unchallenged for MIN_AGE. The indexer runs with the same MIN_AGE.
@@ -41,6 +42,7 @@ const RESOLVER_ABI = parseAbi([
 describe.each([
 	{ name: "fault dispute game (OP)", gameType: 0, chainId: 10 },
 	{ name: "AggregateVerifier (Base)", gameType: 621, chainId: 8453 },
+	{ name: "OP Succinct Lite (Celo)", gameType: 42, chainId: 42220 },
 ])("minAgeSec: $name", ({ gameType, chainId }) => {
 	let foundry: Foundry;
 	let l1: PublicClient;
@@ -176,6 +178,14 @@ describe.each([
 		await sync();
 		expect(db.getCommit(commit.id)?.status).toBe("invalid");
 		expect(gateway.commits).toHaveLength(0);
+		if (gameType === 42) {
+			// OP Succinct: a challenge answered with a ZK proof is accepted again by the verifier (the
+			// indexer doesn't take an invalid game back: it waits for the next one)
+			await foundry.confirm(game.prove());
+			expect(
+				await l1.readContract({ address: early, abi: RESOLVER_ABI, functionName: "verifyName", args: [ADDR, proof] }),
+			).toBe("early.eth");
+		}
 	}, 60_000);
 
 	test("the next unchallenged game takes over; finalization still works", async () => {
