@@ -59,6 +59,7 @@ Public RPCs:
 | Base | `https://mainnet.base.org` | only for `public`: it rate limits `eth_getLogs`, so it's never a fallback |
 | Linea | `https://rpc.linea.build` | serves `linea_getProof` |
 | Arbitrum One | `https://arb1.arbitrum.io/rpc` | `eth_getLogs` over up to 10,000,000 blocks: preferred for logs |
+| Celo | `https://forno.celo.org` | archive proofs, `eth_getLogs` up to 5,000 blocks ([celo.md](celo.md#rpc)) |
 
 ## Problems we've hit
 
@@ -68,6 +69,7 @@ Public RPCs:
 | `range N exceeds limit of 10000` | Infura | a fixed range limit | the reader parses "limit of N" (or "only N are allowed") and never asks for more than N blocks again |
 | `Under the Free tier plan, you can make eth_getLogs requests with up to a 10 block range` | Alchemy | free plan | Alchemy is last in line for logs; avoid it for logs unless the plan allows wider ranges |
 | `Can't route your request to suitable provider` | drpc | proof too far back (> ~100k blocks) | proofs go to Alchemy first |
+| `Chain not allowed for this key` | drpc | the key's chain allowlist (Celo, 2026-11-25) | none: enable the chain for the key, or set `RPC_URL_<chainId>` |
 | `eth_getProof is limited to a 10,000 range` | Infura | no archive state | proofs go to Alchemy first |
 | `BLOCK_MISSING_IN_CHAIN - block is missing` | any (`linea_getProof`) | Shomei only keeps the last ~10–20 finalizations (about a day), and only at finalized blocks | the indexer fetches the proof when it sees the finalization, retries, then skips it ([linea.md](linea.md)) |
 | `App is inactive. Please create a new app or contact support` | Alchemy | the key's app is disabled in the dashboard | none: use another key |
@@ -95,8 +97,8 @@ Indexer (`bun run indexer:<chain>`, or `bun run indexer` with `INDEXER_CHAIN`):
 
 | variable | default | |
 |---|---|---|
-| `INDEXER_CHAIN` | required | `optimism`, `base`, `linea`, `arbitrum`, or `base-inbox` / `optimism-inbox` ([op-batch-inbox.md](op-batch-inbox.md)) |
-| `INDEXER_PORT` | `8100` | the `:optimism` / `:linea` / `:base` / `:base-inbox` / `:arbitrum` scripts use 8100 / 8101 / 8102 / 8103 / 8104 |
+| `INDEXER_CHAIN` | required | `optimism`, `base`, `linea`, `arbitrum`, `celo`, or `base-inbox` / `optimism-inbox` ([op-batch-inbox.md](op-batch-inbox.md)) |
+| `INDEXER_PORT` | `8100` | the `:optimism` / `:linea` / `:base` / `:base-inbox` / `:arbitrum` / `:celo` scripts use 8100 / 8101 / 8102 / 8103 / 8104 / 8105 |
 | `INDEXER_DB` | `data/<L2>.sqlite` | One per L2: an L2's sources share it (`base` / `base-inbox` share `data/base.sqlite`, `optimism` / `optimism-inbox` `data/optimism.sqlite`: events and trie), one at a time (a second indexer on the same database refuses to start). Each source's commits stay; switching back resumes where it left off, rebuilding the newest valid commits' tries. |
 | `INDEXER_POLL_MS` | `30000` | |
 | `INDEXER_CATCHUP_BLOCKS` | `10000` | All but Linea: each tick first syncs events to this many blocks below the L2's finalized head, so a new or stopped indexer replays them at once. Commits for older blocks are rebuilt from the newest trie. |
@@ -120,7 +122,7 @@ Gateway (`bun run gateway:<chain>`, or `bun run gateway`). It uses no RPC: every
 | variable | default | |
 |---|---|---|
 | `INDEXER_URL` | `http://localhost:8100` | comma-separated, in priority order: each sync uses the first indexer that answers `/status` (10 s), so the rest are backups for when it's down. A backup must serve the store's deployment with the same early acceptance; it may be a little behind (commits it doesn't know are kept). The `:<chain>` scripts point at that chain's indexer port |
-| `GATEWAY_PORT` | `8200` | the `:optimism` / `:linea` / `:base` / `:base-inbox` / `:arbitrum` scripts use 8200 / 8201 / 8202 / 8203 / 8204 |
+| `GATEWAY_PORT` | `8200` | the `:optimism` / `:linea` / `:base` / `:base-inbox` / `:arbitrum` / `:celo` scripts use 8200 / 8201 / 8202 / 8203 / 8204 / 8205 |
 | `GATEWAY_DB` | `data/gateway-<port>.sqlite` | a cache, safe to delete: it survives restarts so a restart patches instead of loading a snapshot (Base's is about 100 pages). It records the deployment its rows are from and starts over when the indexer serves another one. Named by port, so gateways side by side never share one; `:memory:` works too (Base's rows are about half a GB) |
 | `GATEWAY_KEEP_COMMITS` | `2` | valid commits held: the newest, and fallbacks while `GATEWAY_SERVE_DELAY_SEC` runs |
 | `GATEWAY_SERVE_DELAY_SEC` | `0` | serve a commit only once it has been valid this long. The indexer judges validity on finalized L1 and validity only grows, so clients reading at latest are already past it; a few seconds only help clients reading at finalized |

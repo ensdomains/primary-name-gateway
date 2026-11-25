@@ -33,7 +33,9 @@
 		"indexer:base-inbox": "INDEXER_CHAIN=base-inbox INDEXER_PORT=8103 bun packages/registrar-indexer/src/index.ts",
 		"gateway:base-inbox": "GATEWAY_PORT=8203 INDEXER_URL=http://localhost:8103 bun packages/registrar-gateway/src/main.ts",
 		"indexer:arbitrum": "INDEXER_CHAIN=arbitrum INDEXER_PORT=8104 bun packages/registrar-indexer/src/index.ts",
-		"gateway:arbitrum": "GATEWAY_PORT=8204 INDEXER_URL=http://localhost:8104 bun packages/registrar-gateway/src/main.ts"
+		"gateway:arbitrum": "GATEWAY_PORT=8204 INDEXER_URL=http://localhost:8104 bun packages/registrar-gateway/src/main.ts",
+		"indexer:celo": "INDEXER_CHAIN=celo INDEXER_PORT=8105 bun packages/registrar-indexer/src/index.ts",
+		"gateway:celo": "GATEWAY_PORT=8205 INDEXER_URL=http://localhost:8105 bun packages/registrar-gateway/src/main.ts"
 	},
 	"devDependencies": {
 		"@adraffy/blocksmith": "^0.1.60",

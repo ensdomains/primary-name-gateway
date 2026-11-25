@@ -1,6 +1,6 @@
 // End-to-end: anvil fork of L1 mainnet + live registrar-indexer + in-process registrar-gateway.
 //
-// 1. `bun run indexer` (INDEXER_CHAIN=optimism|base|linea|arbitrum|base-inbox|optimism-inbox) with at least one
+// 1. `bun run indexer` (INDEXER_CHAIN=optimism|base|linea|arbitrum|celo|base-inbox|optimism-inbox) with at least one
 //    valid commit (OP: ~7 days of lookback and an archive proof RPC, Linea: the next finalization,
 //    inbox: the next channel start)
 // 2. `bun run test:mainnet`
