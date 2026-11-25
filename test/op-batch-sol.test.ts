@@ -93,7 +93,7 @@ test("synthetic", async () => {
 	expect(await same(hex("8102"))).toBeFalse(); // unknown batch type
 }, 60_000);
 
-type BlobFixture = { versionedHash: Hex; commitment: Hex; fieldElements: Hex; proofs: Hex[] };
+type BlobFixture = { versionedHash: Hex; commitment: Hex; fieldElements: Hex; blobProof: Hex };
 const blobFixture = async (chain: string): Promise<BlobFixture> =>
 	Bun.file(`${import.meta.dir}/../packages/contracts/test/fixtures/op-batch/${chain}-blob.json`).json();
 
@@ -111,26 +111,19 @@ test("blob data", async () => {
 	}
 }, 60_000);
 
-test("blob field elements verify against the versioned hash (KZG point evaluation)", async () => {
+test("blob field elements verify against the versioned hash (batched KZG opening)", async () => {
 	for (const chain of ["op", "base"]) {
 		const f = await blobFixture(chain);
-		const gas = await harness.verifyBlob(f.versionedHash, f.commitment, f.fieldElements, f.proofs);
-		console.log(`${chain}: ${f.proofs.length} field elements, ${Number(gas).toLocaleString()} gas`);
+		const verify = (h = f.versionedHash, felts = f.fieldElements, proof = f.blobProof) =>
+			harness.verifyBlob(h, f.commitment, felts, proof);
+		const gas = await verify();
+		console.log(`${chain}: ${(f.fieldElements.length - 2) / 64} field elements, ${Number(gas).toLocaleString()} gas`);
 		const flip = (h: Hex, at: number) => `${h.slice(0, at)}${h[at] === "0" ? "1" : "0"}${h.slice(at + 1)}` as Hex;
-		const proofs = f.proofs.slice();
-		proofs[5] = flip(proofs[5], 40);
-		await expect(harness.verifyBlob(f.versionedHash, f.commitment, f.fieldElements, proofs)).rejects.toThrow(
-			/InvalidBlobProof/,
-		);
-		await expect(
-			harness.verifyBlob(f.versionedHash, f.commitment, flip(f.fieldElements, 2 + 64 * 7 + 10), f.proofs),
-		).rejects.toThrow(/InvalidBlobProof/);
-		await expect(
-			harness.verifyBlob(flip(f.versionedHash, 20), f.commitment, f.fieldElements, f.proofs),
-		).rejects.toThrow(/InvalidBlobProof/);
-		await expect(harness.verifyBlob(f.versionedHash, f.commitment, f.fieldElements, f.proofs.slice(1))).rejects.toThrow(
-			/InvalidBlob/,
-		);
+		await expect(verify(undefined, undefined, flip(f.blobProof, 2 + 96 + 40))).rejects.toThrow(/InvalidBlobProof/);
+		await expect(verify(undefined, flip(f.fieldElements, 2 + 64 * 7 + 10))).rejects.toThrow(/InvalidBlobProof/);
+		await expect(verify(flip(f.versionedHash, 20))).rejects.toThrow(/InvalidBlobProof/);
+		// half the elements, with the whole set's proof
+		await expect(verify(undefined, f.fieldElements.slice(0, 2 + 64 * 32) as Hex)).rejects.toThrow(/InvalidBlobProof/);
 	}
 }, 120_000);
 
@@ -139,7 +132,7 @@ test("readBatch: blob field elements to the batch prefix", async () => {
 		const f = await blobFixture(chain);
 		const { channelId, compressed } = channelStart(blobDataPrefix(hexToBytes(f.fieldElements)));
 		const want = expected(decodeBatchPrefix(brotliDecodePrefix(compressed, 112).output));
-		const [id, b, gas] = await harness.readBatch(f.versionedHash, f.commitment, f.fieldElements, f.proofs);
+		const [id, b, gas] = await harness.readBatch(f.versionedHash, f.commitment, f.fieldElements, f.blobProof);
 		expect(id).toBe(channelId);
 		expect([...b]).toEqual(want);
 		console.log(`${chain}: readBatch ${Number(gas).toLocaleString()} gas`);

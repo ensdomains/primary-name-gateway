@@ -15,12 +15,12 @@ library OPBatchInbox {
     /// @dev decompressed bytes to read: enough for a singular batch's prefix (a span batch's is shorter)
     uint256 constant PREFIX_BYTES = 112;
 
-    function readBatch(bytes32 versionedHash, bytes memory commitment, bytes memory fieldElements, bytes[] memory proofs)
+    function readBatch(bytes32 versionedHash, bytes memory commitment, bytes memory fieldElements, bytes memory proof)
         internal
         view
         returns (bytes16 channelId, OPBatchPrefix.Batch memory batch)
     {
-        OPBlob.verify(versionedHash, commitment, fieldElements, proofs);
+        OPBlob.verify(versionedHash, commitment, fieldElements, proof);
         bytes memory compressed;
         (channelId, compressed) = channelStart(OPBlob.data(fieldElements));
         batch = OPBatchPrefix.decode(BrotliPrefix.decode(compressed, PREFIX_BYTES));

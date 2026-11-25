@@ -1,10 +1,12 @@
-// EIP-4844 KZG with @noble/curves: blob commitments, and proofs that a blob's field element is its
-// polynomial's value at the element's domain point (what OPBlob.verify checks with the point
-// evaluation precompile). About 0.25s per proof (a 4096-point MSM).
+// EIP-4844 KZG with @noble/curves: blob commitments, and the batched opening OPBlob.verify checks with
+// two point evaluation calls: the blob's first n field elements (n a power of two) sit at the n-th roots
+// of unity, so they're proven with a commitment to q = (p - I) / (X^n - 1), where I interpolates them,
+// and p and q opened at a Fiat-Shamir point. Three 4096-point MSMs, about 0.75s.
 
 import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
 import { bls12_381 } from "@noble/curves/bls12-381";
+import { blobChallenge, encodeBlobProof } from "@primary-name-gateway/shared";
 import { bytesToHex, type Hex, sha256 } from "viem";
 
 const N = 4096;
@@ -28,6 +30,7 @@ export class KZG {
 	private constructor(
 		private readonly basis: G1Point[],
 		private readonly domain: bigint[],
+		private readonly omega: bigint,
 	) {}
 
 	// the trusted setup from `path`, downloaded there first if missing (checked against its hash)
@@ -50,7 +53,7 @@ export class KZG {
 			basis.push(lagrange[bitReverse12(i)]);
 			domain.push(Fr.pow(omega, BigInt(bitReverse12(i))));
 		}
-		return new KZG(basis, domain);
+		return new KZG(basis, domain, omega);
 	}
 
 	private evaluations(blob: Uint8Array): bigint[] {
@@ -67,23 +70,69 @@ export class KZG {
 		return `0x01${sha256(commitment).slice(4)}`;
 	}
 
-	// proof that the blob's polynomial is `blob[i]` at domain[i]: a commitment to
-	// q(X) = (p(X) - y) / (X - z), with q at z itself from compute_quotient_eval_within_domain
-	proveFieldElement(blob: Uint8Array, i: number): Hex {
+	// OPBlob.verify's proof that the blob's first `n` field elements are `blob[0, 32n)`: the commitment to
+	// q, p(z), and the openings of p and q at z (encodeBlobProof). `commitment` is the blob's.
+	proveFieldElements(blob: Uint8Array, commitment: Hex, n: number): Hex {
+		if (n < 1 || n > N || n & (n - 1)) throw new Error("blob: a power of two of field elements");
 		const evals = this.evaluations(blob);
-		const z = this.domain[i];
-		const y = evals[i];
-		const inv = Fr.invertBatch(this.domain.map((x, k) => (k === i ? 1n : Fr.sub(x, z))));
-		const zInv = Fr.inv(z);
-		const q = new Array<bigint>(N);
-		let qz = 0n;
-		for (let k = 0; k < N; k++) {
-			if (k === i) continue;
-			const d = Fr.sub(evals[k], y);
-			q[k] = Fr.mul(d, inv[k]);
-			qz = Fr.sub(qz, Fr.mul(Fr.mul(Fr.mul(d, this.domain[k]), zInv), inv[k]));
-		}
-		q[i] = qz;
-		return bytesToHex(G1.msm(this.basis, q).toRawBytes(true));
+		// p's coefficients (natural order evaluations: element i is at ω ** bitReverse12(i))
+		const natural = new Array<bigint>(N);
+		for (let i = 0; i < N; i++) natural[bitReverse12(i)] = evals[i];
+		const coeffs = fft(natural, Fr.inv(this.omega)).map((c) => Fr.mul(c, Fr.inv(BigInt(N))));
+		// q = p div (X^n - 1); the remainder is I
+		const q = new Array<bigint>(N).fill(0n);
+		for (let k = N - n - 1; k >= 0; k--) q[k] = Fr.add(coeffs[k + n], q[k + n] ?? 0n);
+		const qNatural = fft(q, this.omega);
+		const qEvals = Array.from({ length: N }, (_, i) => qNatural[bitReverse12(i)]);
+		const quotient = bytesToHex(G1.msm(this.basis, qEvals).toRawBytes(true));
+		const z = blobChallenge(KZG.versionedHash(commitment), commitment, quotient, bytesToHex(blob.subarray(0, 32 * n)));
+		const y = horner(coeffs, z);
+		return encodeBlobProof({
+			quotient,
+			y,
+			proof: this.openAt(evals, z, y),
+			quotientProof: this.openAt(qEvals, z, horner(q, z)),
+		});
 	}
+
+	// KZG proof that the polynomial with `evals` (element order) is `y` at `z`, outside the domain:
+	// a commitment to (p(X) - y) / (X - z)
+	private openAt(evals: bigint[], z: bigint, y: bigint): Hex {
+		const inv = Fr.invertBatch(this.domain.map((x) => Fr.sub(x, z)));
+		const w = evals.map((e, k) => Fr.mul(Fr.sub(e, y), inv[k]));
+		return bytesToHex(G1.msm(this.basis, w).toRawBytes(true));
+	}
+}
+
+// out[j] = sum a[k] root^(jk), for a of power-of-two length (iterative radix 2)
+function fft(a: bigint[], root: bigint): bigint[] {
+	const n = a.length;
+	const bits = Math.log2(n);
+	const out = new Array<bigint>(n);
+	for (let i = 0; i < n; i++) {
+		let r = 0;
+		for (let b = 0; b < bits; b++) r |= ((i >> b) & 1) << (bits - 1 - b);
+		out[r] = a[i];
+	}
+	for (let len = 2; len <= n; len <<= 1) {
+		const w = Fr.pow(root, BigInt(n / len));
+		const half = len >> 1;
+		const ws = [1n];
+		for (let k = 1; k < half; k++) ws.push(Fr.mul(ws[k - 1], w));
+		for (let s = 0; s < n; s += len) {
+			for (let k = 0; k < half; k++) {
+				const u = out[s + k];
+				const v = Fr.mul(out[s + k + half], ws[k]);
+				out[s + k] = Fr.add(u, v);
+				out[s + k + half] = Fr.sub(u, v);
+			}
+		}
+	}
+	return out;
+}
+
+function horner(coeffs: bigint[], x: bigint): bigint {
+	let acc = 0n;
+	for (let k = coeffs.length - 1; k >= 0; k--) acc = Fr.add(Fr.mul(acc, x), coeffs[k]);
+	return acc;
 }

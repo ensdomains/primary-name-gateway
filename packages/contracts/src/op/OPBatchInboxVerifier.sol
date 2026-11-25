@@ -19,8 +19,8 @@ struct OPBatchInboxCommitProof {
     bytes[] txProof; // its proof in the block's transactions trie
     uint256 blobIndex; // the blob that starts the channel
     bytes commitment; // the blob's KZG commitment
-    bytes fieldElements; // the blob's first field elements (whole rounds of 4)
-    bytes[] blobProofs; // a point evaluation proof per field element
+    bytes fieldElements; // the blob's first field elements (a power of two, at least 4)
+    bytes blobProof; // OPBlob.verify's proof of them
     bytes l2Header; // RLP header of the L2 block the batch names as its parent
 }
 
@@ -100,7 +100,7 @@ contract OPBatchInboxVerifier is IL2StorageVerifier {
         bytes32 versionedHash = _batcherBlob(txn, p.blobIndex);
         // the first batch of the channel the blob starts
         (, OPBatchPrefix.Batch memory batch) =
-            OPBatchInbox.readBatch(versionedHash, p.commitment, p.fieldElements, p.blobProofs);
+            OPBatchInbox.readBatch(versionedHash, p.commitment, p.fieldElements, p.blobProof);
         if (l1Block > batch.l1OriginNum + maxOriginLag) revert OutsideSequencingWindow(l1Block, batch.l1OriginNum);
         // its parent L2 block
         bytes32 l2Hash = keccak256(p.l2Header);

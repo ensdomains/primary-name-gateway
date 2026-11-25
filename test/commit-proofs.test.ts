@@ -34,7 +34,7 @@ test("batch inbox commit proof round-trips (mainnet fixture)", async () => {
 		blobIndex: f.blobIndex,
 		commitment: f.commitment,
 		fieldElements: f.fieldElements,
-		blobProofs: f.proofs,
+		blobProof: f.blobProof,
 		l2Header: f.l2Header,
 	};
 	expect(decodeOPBatchInboxCommitProof(encodeOPBatchInboxCommitProof(p))).toEqual(p);

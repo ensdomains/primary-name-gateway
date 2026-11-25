@@ -21,7 +21,7 @@ type Fixture = {
 	blobIndex: number;
 	commitment: Hex;
 	fieldElements: Hex;
-	proofs: Hex[];
+	blobProof: Hex;
 	l2Header: Hex;
 	registrar: Address;
 	accountProof: Hex[];
@@ -39,7 +39,7 @@ const commitProof = (f: Fixture, change: Partial<OPBatchInboxCommitProof> = {}) 
 		blobIndex: f.blobIndex,
 		commitment: f.commitment,
 		fieldElements: f.fieldElements,
-		blobProofs: f.proofs,
+		blobProof: f.blobProof,
 		l2Header: f.l2Header,
 		...change,
 	});

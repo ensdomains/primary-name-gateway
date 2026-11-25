@@ -31,7 +31,7 @@ A span batch's first block is the one at `l2 genesis time + rel_timestamp` whose
 
 1. L1 block header against `blockhash` / EIP-2935 (8,191 blocks, about 27 hours), at most `maxL1BlockLag` blocks old (`StaleCommit`).
 2. The batcher transaction: MPT proof in the block's transaction trie, `to` = the batch inbox, sender recovered from the type-3 signature = `SystemConfig.batcherHash()`.
-3. The blob's first field elements against its versioned hash: one KZG point evaluation call per field element (about 54k gas each). Passing the whole blob and evaluating it at a Fiat-Shamir point would need only one call; that's not done.
+3. The blob's first field elements (a power of two of them) against its versioned hash: two KZG point evaluation calls, whatever their number ([batched opening](#blob-to-batch), about 0.14M gas for 64).
 4. Decompress the start of frame 0 (`BrotliPrefix`) and read the batch prefix (`OPBatchPrefix`).
 5. Inclusion block − L1 origin ≤ `maxOriginLag`, set below the sequencing window (`OutsideSequencingWindow`: a late batch is dropped even from an honest batcher).
 6. The L2 header: `keccak256(header)` matches the parent hash (or its first 20 bytes); its state root then works as in `OPFaultVerifier`.
@@ -43,7 +43,7 @@ The prefix can't be read without the meta-block header: literals are Huffman-cod
 | | Base | Optimism |
 |---|---|---|
 | compressed bytes read (header) | 1,981 (1,868) | 1,169 (1,077) |
-| blob field elements to prove | 64 | 40 |
+| blob field elements to prove (a power of two) | 64 | 64 (40 carry the bytes) |
 | prefix codes (complex) | 54 (53) | 39 (39) |
 | code-length symbols decoded | 3,628 | 1,819 |
 | context map symbols | 308 | 203 |
@@ -64,22 +64,24 @@ The static dictionary is not supported: a reference to it is refused (`BrotliUns
 | Optimism (64) | 3.1M |
 | Base (112) | 5.5M |
 
-Almost all of it is the header, mostly reading code lengths (`forge test --match-contract BrotliPrefixTest --flamegraph` profiles it). A code's symbol table is only built when the code is first used. With ~2–3M for the blob field elements, a whole proof would be around 10M gas, which fits an `eth_call`. A word-buffered bit reader in assembly is the next step if it needs to be cheaper.
+Almost all of it is the header, mostly reading code lengths (`forge test --match-contract BrotliPrefixTest --flamegraph` profiles it). A code's symbol table is only built when the code is first used. The blob's field elements add about 0.14M, so a whole proof is 4–7M gas, which fits an `eth_call`. A word-buffered bit reader in assembly is the next step if it needs to be cheaper.
 
 ## Blob to batch
 
-`OPBatchInbox.readBatch(versionedHash, commitment, fieldElements, proofs)` does steps 3 and 4:
+`OPBatchInbox.readBatch(versionedHash, commitment, fieldElements, proof)` does steps 3 and 4:
 
-1. **Prove the field elements.** Element `i` is the blob polynomial at `ω^bitReverse12(i)`, where `ω = 7^((r-1)/4096)`. One point evaluation precompile call per element checks it against the versioned hash; the precompile also checks the commitment.
+1. **Prove the field elements** ([OPBlob.verify](../packages/contracts/src/op/OPBlob.sol), proofs from `proveFieldElements` in [kzg.ts](../packages/registrar-indexer/src/kzg.ts)). Element `i` is the blob polynomial `p` at `ω^bitReverse12(i)`, where `ω = 7^((r-1)/4096)`, so the first `n` elements, for `n` a power of two, are `p` at the `n`-th roots of unity. With `I` interpolating them, the prover commits to `q = (p − I) / (Xⁿ − 1)`, which is a polynomial only if the elements are `p`'s. The proof (176 bytes) is `q`'s commitment, `p(z)`, and the openings of `p` and `q` at `z = keccak(versioned hash, commitment, q's commitment, elements) mod r`. The verifier computes `I(z)` (barycentric, one inversion), takes `q(z) = (p(z) − I(z)) / (zⁿ − 1)`, and checks both openings with the point evaluation precompile: `p`'s against the blob's versioned hash, `q`'s against one it computes from `q`'s commitment. Wrong elements pass with probability about 8192 / r. (The first version called the precompile once per element, about 54k gas each.)
 2. **Decode the blob data** (op-service: 127 bytes per 4 elements, after a version and a 3-byte length), then frame 0 (derivation version 0, frame number 0, channel version 1 = brotli).
 3. **Decompress 112 bytes** and read the batch prefix.
 
-The fixtures `packages/contracts/test/fixtures/op-batch/{op,base}-blob.json` hold the first 64 field elements of each real blob, with KZG proofs (`scripts/op-batch-fixture.ts` computes them with `@noble/curves` and the c-kzg trusted setup, and checks the commitment against the transaction's versioned hash). `test/op-batch-sol.test.ts` runs them through the real precompile, rejects tampered proofs, elements and hashes, and matches the TypeScript reference end to end.
+The fixtures `packages/contracts/test/fixtures/op-batch/{op,base}-blob.json` hold the first 64 field elements of each real blob, with their proof (`scripts/op-batch-fixture.ts` computes it with the indexer's `kzg.ts`, and checks the commitment against the transaction's versioned hash). `test/op-batch-sol.test.ts` runs them through the real precompile, rejects tampered proofs, elements and hashes, and matches the TypeScript reference end to end. `test/kzg.test.ts` proves 1 to 4096 elements of a synthetic blob.
 
 | `readBatch` (64 field elements) | gas |
 |---|---|
-| Optimism | 6.7M (3.4M KZG; 40 elements would do: ~5.4M) |
-| Base | 9.0M (3.4M KZG, 5.5M brotli) |
+| Optimism | 3.4M (0.14M KZG, 3.1M brotli) |
+| Base | 5.7M (0.14M KZG, 5.5M brotli) |
+
+The KZG part is 108k for 1 element, 143k for 64 and 2.5M for all 4096 (calldata and the barycentric sum).
 
 ## End to end
 
@@ -90,15 +92,15 @@ The fixtures `packages/contracts/test/fixtures/op-batch/{op,base}-blob.json` hol
 
 | `verifyStorageRoot` | gas |
 |---|---|
-| Optimism (64 field elements) | 7.6M |
-| Base | 10.0M |
+| Optimism | 4.3M |
+| Base | 6.7M |
 
 ## Indexer and gateway
 
 `bun run indexer:base-inbox` (`INDEXER_CHAIN=base-inbox` or `optimism-inbox`) runs [inbox.ts](../packages/registrar-indexer/src/inbox.ts):
 
 - Every tick it looks back from the finalized L1 head (`INDEXER_INBOX_SCAN_BLOCKS`, 64) for the newest blob from the batcher (`batcherHash` at latest L1) that starts a channel and whose parent L2 block is final. The newest one's parent often isn't yet (the L2's finalized head follows L1 finality, which moves in 6.4-minute epochs), so it is passed over for an earlier one, and the scan stops at a batch it already committed or skipped. A batch that fails for another reason (event sync, a broken batch) ends the tick; it is retried, then skipped after `INDEXER_MAX_ATTEMPTS`. With no commits yet it looks back further (`INDEXER_INBOX_FIRST_SCAN_BLOCKS`, 300, about an hour), so a first start commits right away. It makes at most one commit per `INDEXER_INBOX_INTERVAL_SEC` (600) of L1 time.
-- It builds the whole commit proof. The blob comes from L1's beacon API (`BEACON_URL_1`, default publicnode's). The KZG proofs come from [kzg.ts](../packages/registrar-indexer/src/kzg.ts) (`@noble/curves`, about 0.25s each; the trusted setup is downloaded to `data/kzg/` and checked against its hash). It proves only as many field elements as the batch prefix needs. The transaction's trie proof re-encodes the L1 block's transactions from one `eth_getBlockByNumber` (`rawTransaction`), falling back to `eth_getRawTransactionByHash` per transaction if the root doesn't match.
+- It builds the whole commit proof. The blob comes from L1's beacon API (`BEACON_URL_1`, default publicnode's). The KZG proof comes from [kzg.ts](../packages/registrar-indexer/src/kzg.ts) (`@noble/curves`, three 4096-point MSMs, under a second; the trusted setup is downloaded to `data/kzg/` and checked against its hash). It proves only as many field elements as the batch prefix needs, rounded up to a power of two (`fieldElementsFor`). The transaction's trie proof re-encodes the L1 block's transactions from one `eth_getBlockByNumber` (`rawTransaction`), falling back to `eth_getRawTransactionByHash` per transaction if the root doesn't match.
 - The parent L2 block must be at or below the L2's finalized head, and its storage hash must match the replayed events, as for every commit. Commits are valid when found and become invalid once their L1 block is more than `INDEXER_INBOX_MAX_L1_BLOCK_LAG` (7200) blocks old, below the verifier's limit (EIP-2935 keeps 8191), or once the batcher is rotated: the verifier compares the sender with `batcherHash()` when it's called, so the indexer reads it at latest L1 each tick and drops commits from a replaced batcher.
 - **Delay** (measured on Base, 2026-11-23): a proof is about 6 minutes behind the L2's finalized head, which trails the tip by about 18 minutes, so about 25 minutes behind the tip. Waiting for L2 finality is the indexer's choice: the verifier alone would accept a block minutes old.
 - The gateway serves inbox commits like OP ones (Merkle-Patricia rows): `bun run gateway:base-inbox`.

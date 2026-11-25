@@ -6,6 +6,7 @@
 import {
 	bytesToBigInt,
 	bytesToHex,
+	concatHex,
 	decodeAbiParameters,
 	encodeAbiParameters,
 	formatTransaction,
@@ -158,7 +159,7 @@ export type OPBatchInboxCommitProof = {
 	blobIndex: number;
 	commitment: Hex;
 	fieldElements: Hex;
-	blobProofs: Hex[];
+	blobProof: Hex; // encodeBlobProof
 	l2Header: Hex;
 };
 
@@ -172,7 +173,7 @@ const OP_BATCH_INBOX_COMMIT_PROOF = [
 			{ name: "blobIndex", type: "uint256" },
 			{ name: "commitment", type: "bytes" },
 			{ name: "fieldElements", type: "bytes" },
-			{ name: "blobProofs", type: "bytes[]" },
+			{ name: "blobProof", type: "bytes" },
 			{ name: "l2Header", type: "bytes" },
 		],
 	},
@@ -189,14 +190,29 @@ export function decodeOPBatchInboxCommitProof(proof: Hex): OPBatchInboxCommitPro
 		txIndex: Number(p.txIndex),
 		blobIndex: Number(p.blobIndex),
 		txProof: [...p.txProof],
-		blobProofs: [...p.blobProofs],
 	};
 }
 
-// Field elements (whole rounds of 4) that carry a channel's first `compressedBytes` brotli bytes:
-// 4 bytes of blob header, 24 of batcher data (version, frame header, channel version), then the stream.
+// Field elements that carry a channel's first `compressedBytes` brotli bytes: 4 bytes of blob header,
+// 24 of batcher data (version, frame header, channel version), then the stream; whole rounds of 4
+// (127 bytes), rounded up to a power of two for OPBlob.verify (the elements then fill a subgroup).
 export function fieldElementsFor(compressedBytes: number): number {
-	return 4 * Math.ceil((4 + 24 + compressedBytes) / 127);
+	const n = 4 * Math.ceil((4 + 24 + compressedBytes) / 127);
+	return 2 ** Math.ceil(Math.log2(n));
+}
+
+export const BLS_MODULUS = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001n;
+
+// OPBlob.verify's Fiat-Shamir point: hashes everything the prover chose before it
+export function blobChallenge(versionedHash: Hex, commitment: Hex, quotient: Hex, fieldElements: Hex): bigint {
+	return BigInt(keccak256(concatHex([versionedHash, commitment, quotient, fieldElements]))) % BLS_MODULUS;
+}
+
+// OPBlob.verify's proof (176 bytes): the commitment to q = (p - I) / (X^n - 1), p(z), and the
+// openings of p and q at z (48 bytes each)
+export type BlobProof = { quotient: Hex; y: bigint; proof: Hex; quotientProof: Hex };
+export function encodeBlobProof(p: BlobProof): Hex {
+	return concatHex([p.quotient, numberToHex(p.y, { size: 32 }), p.proof, p.quotientProof]);
 }
 
 // A block's transactions trie (keys rlp(index), values the raw transactions) and the proof of one.

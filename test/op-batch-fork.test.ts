@@ -34,7 +34,7 @@ type Fixture = {
 	blobIndex: number;
 	commitment: Hex;
 	fieldElements: Hex;
-	proofs: Hex[];
+	blobProof: Hex;
 	l2Header: Hex;
 	registrar: Address;
 	accountProof: Hex[];
@@ -119,7 +119,7 @@ describe.skipIf(!hasArchive).each(["op", "base"])("%s", (chain) => {
 				blobIndex: f.blobIndex,
 				commitment: f.commitment,
 				fieldElements: f.fieldElements,
-				blobProofs: f.proofs,
+				blobProof: f.blobProof,
 				l2Header: f.l2Header,
 			});
 			const root = await l1.readContract({

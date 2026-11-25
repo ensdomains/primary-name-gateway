@@ -14,23 +14,23 @@ contract OPBatchHarness {
         return OPBlob.data(fieldElements);
     }
 
-    function verifyBlob(bytes32 versionedHash, bytes memory commitment, bytes memory fieldElements, bytes[] memory proofs)
+    function verifyBlob(bytes32 versionedHash, bytes memory commitment, bytes memory fieldElements, bytes memory proof)
         external
         view
         returns (uint256 gasUsed)
     {
         uint256 g = gasleft();
-        OPBlob.verify(versionedHash, commitment, fieldElements, proofs);
+        OPBlob.verify(versionedHash, commitment, fieldElements, proof);
         return g - gasleft();
     }
 
-    function readBatch(bytes32 versionedHash, bytes memory commitment, bytes memory fieldElements, bytes[] memory proofs)
+    function readBatch(bytes32 versionedHash, bytes memory commitment, bytes memory fieldElements, bytes memory proof)
         external
         view
         returns (bytes16 channelId, OPBatchPrefix.Batch memory b, uint256 gasUsed)
     {
         uint256 g = gasleft();
-        (channelId, b) = OPBatchInbox.readBatch(versionedHash, commitment, fieldElements, proofs);
+        (channelId, b) = OPBatchInbox.readBatch(versionedHash, commitment, fieldElements, proof);
         gasUsed = g - gasleft();
     }
 }

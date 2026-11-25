@@ -38,7 +38,7 @@ Run `bun run check`, `bun run lint` and `bun run test` before finishing a change
 - Linea: apply each L2 block's changes together (`LineaStorageTrie.commit()`), in `hkey` order, like Shomei. Leaf indices depend on it.
 - Linea account proofs must be fetched when the finalization is seen: Shomei forgets old blocks within about a day.
 - `LineaTrie.find` requires canonical `hKey` limbs for exclusion: Poseidon2 reduces inputs mod p. Don't remove it (`test_exclusionAliasedKey`).
-- `BrotliPrefix.sol` is a port of `shared/src/brotli.ts`, and `op/OPBlob.sol`, `op/OPBatchPrefix.sol` and `op/OPBatchInbox.sol` port `shared/src/op-batch.ts`: change them together. `test/brotli-sol.test.ts` and `test/op-batch-sol.test.ts` compare them.
+- `BrotliPrefix.sol` is a port of `shared/src/brotli.ts`, and `op/OPBlob.sol`, `op/OPBatchPrefix.sol` and `op/OPBatchInbox.sol` port `shared/src/op-batch.ts`: change them together. `test/brotli-sol.test.ts` and `test/op-batch-sol.test.ts` compare them. `OPBlob.verify`'s Fiat-Shamir point and proof layout are `blobChallenge` / `encodeBlobProof` in `op-batch.ts`, produced by `KZG.proveFieldElements` (`test/kzg.test.ts`).
 - `NodeStore` methods are synchronous; `put` is atomic. Keep `MemoryNodeStore` and `SqlNodeStore` behaviour identical (`test/store.test.ts` compares them to a reference model).
 - `SqlNodeStore.prune` runs on every gateway sync, so it must stay incremental: after the first prune, `put` records written paths in `trie_dirty` and prune only looks at those. `test/store.test.ts` checks that nothing a full prune would drop is left behind.
 - `validAt` is wall-clock time; OP game age and lookback use L1 block time.
