@@ -1,6 +1,6 @@
 # Alternatives: ZK and other ways to prove L2 state on L1
 
-Research done **2026-11-24**, from web sources (mostly vendor announcements and secondary coverage, not re-verified on chain). The question: are there other trustless ways to prove an L2 primary name on Ethereum, ZK in particular, given that ENS only needs one value at a known address and storage slot? Re-check the [status list](#to-re-check) before relying on any of it.
+Research done **2026-11-24**, from web sources (mostly vendor announcements and secondary coverage, not re-verified on chain); the [Ethereum Economic Zone](#ethereum-economic-zone-checked-2026-11-25) on **2026-11-25**, from its spec, contracts and mainnet state. The question: are there other trustless ways to prove an L2 primary name on Ethereum, ZK in particular, given that ENS only needs one value at a known address and storage slot? Re-check the [status list](#to-re-check) before relying on any of it.
 
 ## The short answer
 
@@ -23,12 +23,30 @@ So ZK helps most when the L2 itself settles with validity proofs. Our design (a 
 | **Batch inbox** | the sequencer | ~25 min | Built ([op-batch-inbox.md](op-batch-inbox.md)). Cheap. The same path as proving the L2 ourselves, minus execution and derivation, so the sequencer is trusted instead. |
 | **Early acceptance** (`minAgeSec`, `minAgeL1Blocks`) | one honest challenger within that time | T + ~1 h | Built ([optimism.md](optimism.md#early-acceptance-minagesec), [arbitrum.md](arbitrum.md)). |
 | **TEE** (Base's first proof), state committees (Lagrange), messaging bridges (LayerZero, Hyperlane), Polymer | hardware, an operator set, or the sequencer | minutes | Not trustless in the sense this project wants. |
+| **Ethereum Economic Zone** (EEZ: Gnosis and Zisk, EF co-funded) | today one signer key; planned: real-time ZK and L1 | seconds to minutes | Each member rollup has a root on L1 (for Rollup X, its L2 block hash), so a verifier would be small. Not usable yet: no ZK proofs on mainnet, no ENS registrar on a member rollup ([below](#ethereum-economic-zone-checked-2026-11-25)). |
 | **Native rollups** (`EXECUTE` precompile, EIP-8079, then EIP-8288) | L1 itself | L1 finality | Draft EIPs with a prototype (ethrex, March 2026); no fork scheduled. The cleanest long-term answer. |
 
 ### Numbers behind the "prove it ourselves" row
 
 - OP Succinct at launch: about 0.5–1¢ per transaction (Base 0.61¢, OP Mainnet 1.34¢), with Base cheaper because its transactions use less gas. Latency of minutes to tens of minutes with a large cluster. Succinct claimed a 10× drop for Ethereum blocks afterwards; not confirmed here.
 - SP1 Hypercube (real-time proving of L1 blocks): ~10 s per block on ~160 RTX 4090s (~$300–400k of hardware). A vendor claim, not audited at the time.
+
+## Ethereum Economic Zone (checked 2026-11-25)
+
+The EEZ ([spec](https://github.com/eez-association/eez-protocol-docs), [contracts](https://github.com/eez-association/eez-core-protocol)) aims at synchronous composability between L1 and member rollups, with Zisk proving rollup blocks in real time. `EEZ.sol` on L1 keeps a registry of rollups. Each has a `root` that proven batches advance, and how a rollup reaches L1 decides whether we can use it:
+
+- **Native cross-chain reads don't fit.** An L1 contract can STATICCALL an L2 contract through a `CrossChainProxy`, but the read only resolves against results a builder proved and posted for that exact call while the rollup's root is unchanged (`StaticExecutionEntry`). A client's arbitrary `resolve` `eth_call` has none and fails (`ExecutionNotFound`), so it can't replace CCIP-Read.
+- **The root does fit.** For Rollup X, `root` is the L2 **block hash** (its design notes). A verifier would read `rollups(id).root`, take an L2 header that hashes to it, and prove the registrar's storage from that header's state root. That's a few hundred thousand gas, the cheapest of our verifiers. Roots advance every 6 L2 blocks (12 s) while a rollup is active. The root only holds the newest block, so a proof built a little earlier would need a link back, for example the older block's hash from the L2's EIP-2935 history contract under the current root.
+
+On mainnet (read on chain):
+
+- `EEZ.sol` is at `0x4B2760F84B83d6b3829E30A7573B0172B6d6402C` with 6 registered rollups. Rollup 1 is Rollup X (L2 chain 696990), last verified about 2 days earlier. Rollup 2 was the only active one (verified about 34 minutes earlier, holding 0.2 ETH; which chain it is wasn't identified). Rollups 3–6 hold placeholder roots.
+- **Trust today: one key.** Both active rollups have threshold 1 and use `ECDSAProofSystem` ("temporary proof system that uses ECDSA signature recovery instead of a ZK proof"): one signer attests each state transition. The same owner EOA, `0xcEAF908C05B277E92e89b51B281Ec76305b9A141`, controls both rollup contracts, and the spec gives a rollup's manager a `setRoot` escape hatch.
+- Rollup X's public L2 RPC (`mainnet.eez.dev/rpc/l2`) served the recorded genesis, but its newest block was about 14 days old, and rollup 1's L1 root matched none of its blocks.
+- Milestones so far: one atomic L1→L2 transfer on mainnet (October), and the Rollup X devnet at Devcon, certified by designated signers rather than ZK proofs. No testnet or mainnet dates.
+- No ENS reverse registrar exists on any EEZ rollup.
+
+Worth revisiting once a rollup ENS cares about has joined with a ZK proof system and a root its signer and owner can't move. Then the verifier above would be small and among the freshest trustless options.
 
 ## The ENS-specific angle
 
@@ -51,9 +69,10 @@ When retrying this research, start here:
 - [ ] Current ZK proving cost per transaction (OP Succinct, SP1, RISC Zero / Boundless and Kailua) and latency.
 - [ ] Do ZK coprocessors (Brevis, Herodotus, Axiom) prove L2 state on L1 natively now?
 - [ ] Native rollups: is `EXECUTE` (or its successor) scheduled for a fork?
+- [ ] EEZ: does any member rollup use a ZK proof system instead of `ECDSAProofSystem`, without an owner-controlled `setRoot`? Is ENS's registrar deployed on one? Read `rollups(id)`, `lastVerifiedBlock(id)` and the rollup contract's `ProofSystemAdded` events on `0x4B2760F84B83d6b3829E30A7573B0172B6d6402C`.
 - [ ] Anything new that proves one L2 storage slot on L1 without proving the whole chain.
 
-## Sources (read 2026-11-24)
+## Sources (read 2026-11-24, EEZ 2026-11-25)
 
 - Optimism and Succinct: [Optimism blog](https://optimism.io/blog/optimism-partners-with-succinct-as-preferred-provider-to-accelerate-zk-proving-on-the-superchain), [Succinct blog](https://blog.succinct.xyz/optimism-superchain/), [OP Succinct (GitHub)](https://github.com/succinctlabs/op-succinct), [The OP Succinct Book](https://succinctlabs.github.io/op-succinct/), [Introducing OP Succinct](https://blog.succinct.xyz/op-succinct/)
 - Base: [Azul proof system](https://docs.base.org/upgrades/azul/proofs), [proof contracts](https://docs.base.org/specifications/base-protocol/proofs/proof-contracts), [Base adds ZK proofs with SP1](https://blog.succinct.xyz/base-sp1/)
@@ -62,5 +81,6 @@ When retrying this research, start here:
 - Other chains: [Mantle review (Coin Bureau)](https://coinbureau.com/review/mantle-network-review)
 - Coprocessors: [Space and Time comparison](https://www.spaceandtime.io/blog/best-zk-coprocessors-and-verifiable-compute-layers), [Herodotus ZK coprocessor](https://www.herodotus.cloud/en/learn/zk-coprocessor)
 - Interop and committees: [Modeling security for cross-rollup interoperability (ethresear.ch)](https://ethresear.ch/t/modeling-security-for-cross-rollup-interoperability/20591), [Polymer](https://polymer-landing.pages.dev/blog/prove-anything-cross-chain/)
+- Ethereum Economic Zone (read 2026-11-25): [The Block](https://www.theblock.co/post/395578/gnosis-and-zisk-announce-ethereum-economic-zone-rollup-framework-with-ethereum-foundation-co-funding), [Decrypt](https://decrypt.co/362711/ethereum-economic-zone-solve-layer-2-fragmentation), [first atomic L1-to-L2 transaction (Crowdfund Insider)](https://www.crowdfundinsider.com/2026/10/316285-ethereum-economic-zone-records-first-atomic-l1-to-l2-transaction-on-mainnet/), [Rollup X devnet (TechFlow)](https://www.techflowpost.com/en-US/newsletter/143244), [Alea Research](https://alearesearch.substack.com/p/ethereum-economic-zone-rollup-coordination), and on GitHub [eez-protocol-docs](https://github.com/eez-association/eez-protocol-docs), [eez-core-protocol](https://github.com/eez-association/eez-core-protocol), [eez-rollupX](https://github.com/eez-association/eez-rollupX)
 - Native rollups: [EIP-8079](https://eips.ethereum.org/EIPS/eip-8079), [L2BEAT native rollups](https://l2beat.com/native-rollups), [prototype (The Block)](https://www.theblock.co/post/393160/)
 - ENS: [Namechain, ENSIP-19 and multichain interop](https://discuss.ens.domains/t/ens-research-namechain-ensip-19-multichain-interop/21392)
