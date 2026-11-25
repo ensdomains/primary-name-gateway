@@ -11,7 +11,6 @@ Celo has been an OP Stack chain since L2 block 31,056,500 (2025-03-26; before it
 | commit id | game index |
 | valid when | `isGameClaimValid(game)`, about 7 days after creation; or with `minAgeSec`, unchallenged and that old ([below](#early-acceptance)) |
 | verifier | [`OPFaultVerifier`](../packages/contracts/src/op/OPFaultVerifier.sol)`(AnchorStateRegistry, 42220, maxL2SequenceLag, minAgeSec)` |
-| scripts | `bun run indexer:celo` / `gateway:celo` (ports 8105 / 8205), `bun run prove <address> celo`; all need an L2 RPC ([below](#rpc)) |
 
 There's no batch inbox variant: Celo's batcher posts EigenDA certificates (alt-DA), not blobs.
 
@@ -53,9 +52,3 @@ Our drpc key answered "Chain not allowed for this key" for Celo (enable the chai
 | Infura (`celo-mainnet`) | only near the head | up to 10,000 blocks |
 
 forno does both, so `RPC_URL_42220=https://forno.celo.org` is enough. `logStep` is 5,000. The L2's finalized head trails its tip by about 1,000 blocks (~16 minutes).
-
-```sh
-RPC_URL_42220=https://forno.celo.org bun run indexer:celo   # :8105
-bun run gateway:celo                                        # :8205
-RPC_URL_42220=https://forno.celo.org bun run prove <address> celo
-```

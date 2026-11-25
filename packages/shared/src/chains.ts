@@ -81,6 +81,9 @@ export const ARBITRUM: ChainInfo = {
 	logStep: 10_000_000,
 };
 
+// ENS's L2ReverseRegistrar: the same address on every chain it's deployed on (docs/registrar.md)
+export const ENS_L2_REVERSE_REGISTRAR: Address = "0x0000000000D8e504002cC26E3Ec46D81971C1664";
+
 type DeploymentBase = {
 	l1: L1ChainInfo;
 	l2: ChainInfo;
@@ -156,7 +159,7 @@ export const OP_MAINNET: OPDeployment = {
 	l1: MAINNET,
 	l2: OPTIMISM,
 	AnchorStateRegistry: "0x23B2C62946350F4246f9f9D027e071f0264FD113",
-	L2ReverseRegistrar: "0x0000000000D8e504002cC26E3Ec46D81971C1664",
+	L2ReverseRegistrar: ENS_L2_REVERSE_REGISTRAR,
 	layout: PLAIN_LAYOUT,
 	registrarCreatedAtBlock: 137403854,
 	l2Blocks: OP_MAINNET_BLOCKS,
@@ -171,7 +174,7 @@ export const BASE_MAINNET: OPDeployment = {
 	l1: MAINNET,
 	l2: BASE,
 	AnchorStateRegistry: "0x909f6cf47ed12f010A796527f562bFc26C7F4E72",
-	L2ReverseRegistrar: "0x0000000000D8e504002cC26E3Ec46D81971C1664",
+	L2ReverseRegistrar: ENS_L2_REVERSE_REGISTRAR,
 	layout: OWNABLE_LAYOUT, // L2ReverseRegistrarWithMigration
 	registrarCreatedAtBlock: 31808582,
 	l2Blocks: BASE_BLOCKS,
@@ -199,7 +202,7 @@ export const LINEA_MAINNET: LineaDeployment = {
 	l1: MAINNET,
 	l2: LINEA,
 	LineaRollup: "0xd19d4B5d358258f05D7B411E21A1460D11B0876F",
-	L2ReverseRegistrar: "0x0000000000D8e504002cC26E3Ec46D81971C1664",
+	L2ReverseRegistrar: ENS_L2_REVERSE_REGISTRAR,
 	layout: PLAIN_LAYOUT,
 	registrarCreatedAtBlock: 20173340,
 };
@@ -234,7 +237,7 @@ export const ARBITRUM_MAINNET: ArbitrumDeployment = {
 	l1: MAINNET,
 	l2: ARBITRUM,
 	Rollup: "0x4DCeB440657f21083db8aDd07665f8ddBe1DCfc0",
-	L2ReverseRegistrar: "0x0000000000D8e504002cC26E3Ec46D81971C1664",
+	L2ReverseRegistrar: ENS_L2_REVERSE_REGISTRAR,
 	layout: PLAIN_LAYOUT, // no owner(); a name resolves at keccak(addr . 0) (test/ArbitrumVerifier.t.sol)
 	registrarCreatedAtBlock: 349263357,
 };
