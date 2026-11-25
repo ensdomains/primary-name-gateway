@@ -64,7 +64,7 @@ The static dictionary is not supported: a reference to it is refused (`BrotliUns
 | Optimism (64) | 3.1M |
 | Base (112) | 5.5M |
 
-Almost all of it is the header, mostly reading code lengths (`forge test --match-contract BrotliPrefixTest --flamegraph` profiles it). A code's symbol table is only built when the code is first used. The blob's field elements add about 0.14M, so a whole proof is 4–7M gas, which fits an `eth_call`. A word-buffered bit reader in assembly is the next step if it needs to be cheaper.
+Almost all of it is the header, mostly reading code lengths (`forge test --match-contract BrotliPrefixTest --flamegraph` profiles it). A code's symbol table is only built when the code is first used. The blob's field elements add about 0.14M, so a whole proof is 4–7M gas, which fits an `eth_call`. A prototype that cut about 30% is described in [Gas: tried and not](#gas-tried-and-not).
 
 ## Blob to batch
 
@@ -107,6 +107,37 @@ The KZG part is 108k for 1 element, 143k for 64 and 2.5M for all 4096 (calldata 
 - [inbox-scan.test.ts](../test/inbox-scan.test.ts) covers the scan: non-final parents passed over, a failure ending the tick, a batcher rotation.
 
 Checked on mainnet (2026-11-23): with its database seeded from the Base indexer's change log (`base` and `base-inbox` share `data/base.sqlite`), the inbox indexer made its first commit about 20 seconds after starting (L1 block 26,476,802 → L2 block 61,170,215), and `INDEXER_URL=http://localhost:8103 bun run test:mainnet` resolved Base names through CCIP-Read and `OPBatchInboxVerifier` on an L1 fork: 959 of 3,713,621 names verified (250 long).
+
+## Gas: tried and not
+
+`verifyStorageRoot` on the fixtures, so a later attempt starts from what's known.
+
+| | Optimism | Base |
+|---|---|---|
+| first version: a point evaluation call per field element | 7.6M | 10.0M |
+| batched KZG opening: two calls for any number of elements ([above](#blob-to-batch)) | 4.3M | 6.7M |
+
+That is the current code. Most of what's left is brotli's meta-block header. On Base (5.5M), the code lengths take ~3.6M and the context maps 0.7M (`forge test --match-contract BrotliPrefixTest --flamegraph`); overhead around the bit reads costs more than the reads themselves.
+
+**Prototyped, not merged (2026-11-24).** An assembly version of the hot paths in `BrotliPrefix.sol` brought `verifyStorageRoot` to 3.3M (Optimism) and 4.8M (Base), about 30% less. It matched the TypeScript reference on the fuzz tests and passed `test:fork`. It wasn't merged: the gas already fits an `eth_call`, and the saving cost ~150 more lines of assembly with hand-encoded reverts, loop state packed into one word (to avoid stack-too-deep), and writes past a buffer's end into free memory. What each step saved in `BrotliPrefix.decode`:
+
+| step | Optimism | Base |
+|---|---|---|
+| code-length code: read with a 4-bit table, and its 32-entry decode table built in assembly | −0.38M | −0.55M |
+| code-length loop in assembly, the bit position on the stack | −0.27M | −0.44M |
+| no symbol tables: look each symbol up in the code lengths, 32 at a time (most codes decode a few symbols or none; Base sorted a 704-symbol command code to decode one) | ±0 | −0.36M |
+| code-length loop: over-subscription and truncation checked once after the loop (same errors) | −0.09M | −0.18M |
+| repeated code lengths written a word at a time | −0.12M | −0.13M |
+| canonical symbol decoding in assembly | +0.02M | +0.04M (the optimizer does as well; dropped) |
+
+After those, Base's ~3.9M was about 2.1M in the code-length loop (3,628 symbols at ~500 gas, close to what the EVM charges for its operations), 0.5M decoding symbols and 0.3M for context maps.
+
+**Not tried:**
+
+- Two code-length symbols per table lookup (a 1,024-entry table per code; repeat codes still one at a time).
+- Decode tables for small codes that decode many symbols, such as the context map's (308 symbols on Base).
+- Finding the k-th match in a word by halving instead of walking its bytes.
+- `CLZ` (EIP-7939) for bit scans, where the target chain has it.
 
 ## Open
 
