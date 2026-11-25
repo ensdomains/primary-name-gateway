@@ -113,7 +113,7 @@ describe("offline e2e (base: output root games, Ownable layout)", () => {
 
 		gatewayDB = new Database(":memory:");
 		gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(gatewayDB)), {
-			indexerURL: indexerServer.url.origin,
+			indexerURLs: [indexerServer.url.origin],
 			keepCommits: 2,
 			serveDelaySec: 0,
 		});

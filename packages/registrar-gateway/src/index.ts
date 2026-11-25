@@ -35,7 +35,7 @@ export function gatewayStatus(gateway: RegistrarGateway, startedAt?: number) {
 	const commits = gateway.commits;
 	return {
 		...gateway.info,
-		indexerURL: gateway.config.indexerURL,
+		indexerURLs: gateway.config.indexerURLs, // priority order; lastSync says which one it used
 		served: commits.length ? brief(gateway.pick()) : undefined,
 		held: commits.map(brief),
 		lastSync: gateway.lastSync,

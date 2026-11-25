@@ -140,7 +140,7 @@ describe("offline e2e", () => {
 		indexerServer = serveIndexer(indexer, db, 0);
 
 		gatewayDB = new Database(":memory:");
-		gatewayConfig = { indexerURL: indexerServer.url.origin, keepCommits: 2, serveDelaySec: 0 };
+		gatewayConfig = { indexerURLs: [indexerServer.url.origin], keepCommits: 2, serveDelaySec: 0 };
 		gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(gatewayDB)), gatewayConfig);
 		ccip = await serveEZCCIP(createEZCCIP(gateway), { log: false });
 
@@ -347,7 +347,7 @@ describe("offline e2e", () => {
 			l2ChainId: CHAIN_ID,
 			registrar: REGISTRAR,
 			layout: { namesSlot: 0 },
-			indexerURL: gatewayConfig.indexerURL,
+			indexerURLs: gatewayConfig.indexerURLs,
 			keepCommits: 2,
 		});
 		expect(status.served?.id).toBe(commit.id);
@@ -386,6 +386,65 @@ describe("offline e2e", () => {
 		expect(other.stats.snapshots).toBe(2);
 		expect(other.info?.l2ChainId).toBe(CHAIN_ID);
 		expect(other.proveName(A.short).proof).toBe(gateway.proveName(A.short).proof);
+	}, 30_000);
+
+	test("backup indexers: used while the primary is down, a backup behind drops nothing, then back", async () => {
+		const real = gatewayConfig.indexerURLs[0];
+		let primaryUp = true;
+		let hideAbove = Number.MAX_SAFE_INTEGER; // the backup doesn't know commits after this one
+		let otherSettings = false;
+		const via = async (input: string | URL | Request, init?: RequestInit) => {
+			const url = new URL(String(input));
+			const to = `${real}${url.pathname}${url.search}`;
+			if (url.origin === "http://primary.test") {
+				if (!primaryUp) throw new TypeError("Unable to connect");
+				return fetch(to, init);
+			}
+			if (url.origin !== "http://backup.test") return fetch(input, init);
+			if (url.pathname === "/status") {
+				const status = (await (await fetch(to)).json()) as Record<string, unknown>;
+				return Response.json(otherSettings ? { ...status, minAgeSec: 3600 } : status);
+			}
+			if (url.pathname === "/commits") {
+				const list = (await (await fetch(to)).json()) as { id: number }[];
+				return Response.json(list.filter((c) => c.id <= hideAbove));
+			}
+			const id = url.pathname.match(/^\/commits\/(\d+)$/)?.[1];
+			if (id && Number(id) > hideAbove) return new Response("not found", { status: 404 });
+			return fetch(to, init);
+		};
+		const logs: string[] = [];
+		const g = new RegistrarGateway(new MemoryNodeStore(), {
+			...gatewayConfig,
+			indexerURLs: ["http://primary.test", "http://backup.test"],
+			fetch: via as typeof fetch,
+			log: (...a: unknown[]) => logs.push(a.join(" ")),
+		});
+		await g.sync();
+		expect(g.indexerURL).toBe("http://primary.test");
+		const held = g.commits.map((c) => c.id);
+		const proof = g.proveName(A.short).proof;
+
+		// the primary is down and the backup is a commit behind: nothing is dropped or rewound
+		primaryUp = false;
+		hideAbove = held[held.length - 1] - 1;
+		await g.sync();
+		expect(g.indexerURL).toBe("http://backup.test");
+		expect(g.lastSync?.indexerURL).toBe("http://backup.test");
+		expect(logs.some((l) => l.startsWith("syncing from backup indexer http://backup.test"))).toBeTrue();
+		expect(g.commits.map((c) => c.id)).toEqual(held);
+		expect(g.proveName(A.short).proof).toBe(proof);
+
+		// a backup that accepts commits early differently is refused
+		otherSettings = true;
+		await expect(g.sync()).rejects.toThrow(/no indexer answered: .*accepts commits early differently/);
+
+		primaryUp = true;
+		otherSettings = false;
+		await g.sync();
+		expect(g.indexerURL).toBe("http://primary.test");
+		expect(logs).toContain("back on the primary indexer http://primary.test");
+		expect(g.commits.map((c) => c.id)).toEqual(held);
 	}, 30_000);
 
 	test("a restarted gateway resumes from its store with patches only", async () => {

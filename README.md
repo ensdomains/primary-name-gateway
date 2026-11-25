@@ -87,7 +87,7 @@ cd packages/contracts && forge build
 
 ```sh
 bun run indexer:optimism    # :8100 (bun run indexer: set INDEXER_CHAIN yourself)
-bun run gateway:optimism    # :8200, serves what INDEXER_URL=http://localhost:8100 indexes
+bun run gateway:optimism    # :8200, serves what INDEXER_URL=http://localhost:8100 indexes (a comma list: backups)
 bun run indexer:linea       # :8101
 bun run gateway:linea       # :8201
 bun run indexer:base        # :8102

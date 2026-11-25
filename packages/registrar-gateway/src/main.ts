@@ -10,7 +10,11 @@ import { bunSqliteAdapter } from "./sqlite.js";
 
 const env = process.env;
 const log = createLog();
-const indexerURL = env.INDEXER_URL ?? "http://localhost:8100";
+// comma-separated, in priority order: the rest are backups
+const indexerURLs = (env.INDEXER_URL ?? "http://localhost:8100")
+	.split(",")
+	.map((u) => u.trim())
+	.filter(Boolean);
 const port = Number(env.GATEWAY_PORT ?? 8200);
 const pollMs = Number(env.GATEWAY_POLL_MS ?? 30_000);
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -21,7 +25,7 @@ mkdirSync(dirname(dbPath), { recursive: true });
 const db = new Database(dbPath, { create: true, strict: true });
 db.run("PRAGMA journal_mode = WAL");
 const gateway = new RegistrarGateway(new SqlNodeStore(bunSqliteAdapter(db)), {
-	indexerURL,
+	indexerURLs,
 	keepCommits: Number(env.GATEWAY_KEEP_COMMITS ?? 2),
 	serveDelaySec: Number(env.GATEWAY_SERVE_DELAY_SEC ?? 0),
 	log,
@@ -50,7 +54,9 @@ log("listening:");
 log(`  CCIP-Read  ${server.url}`);
 log(`  JSON-RPC   ${server.url}rpc`);
 log(`  status     ${server.url}status`);
-log(`syncing from the indexer at ${indexerURL}, every ${pollMs / 1000}s`);
+log(
+	`syncing from the indexer at ${indexerURLs[0]}${indexerURLs.length > 1 ? ` (backups: ${indexerURLs.slice(1).join(", ")})` : ""}, every ${pollMs / 1000}s`,
+);
 
 let ready = false;
 const poll = async () => {
