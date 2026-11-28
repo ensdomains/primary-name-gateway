@@ -20,7 +20,7 @@ Proven from what the rollup itself commits to L1. **Delay** is how far behind th
 | [Celo](docs/celo.md)<br>(42220) | `op`<br>dispute games<br>(output roots) | 30 min | OP Succinct Lite: a challenge is answered with a ZK proof; listed proposers and challengers | `minAgeSec`<br>• `0`: ~7 days (finalized)<br>• `T`: T + ~30–60 min<br>(no ENS registrar yet: a mock) |
 | [Linea](docs/linea.md)<br>(59144) | `linea`<br>ZK finalizations | a few hours | validity proofs | ~2–4 h (final when posted) |
 
-The early delays add up the time between commitments (every), the age of the L2 block a commitment names when it's posted (measured 2026-11-23: Optimism ~20 min, Base ~35 min, Arbitrum ~1 h), and L1 finality (~13 min: the indexer only accepts commits seen on finalized L1). An early Arbitrum proof is a chain of assertions from the last confirmed one (about 6.4 days back), so it costs more the smaller `minAgeL1Blocks` is: 2.1M gas at 1,800 blocks, against ~600k confirmed-only.
+The early delays add up the time between commitments (every), the age of the L2 block a commitment names when it's posted (measured 2026-11-23: Optimism ~20 min, Base ~35 min, Arbitrum ~1 h), and L1 finality (~13 min: the indexer only accepts commits seen on finalized L1). Researched but not built: [Aztec](docs/aztec.md) (32-byte addresses don't fit ENSIP-19's EVM coin types). An early Arbitrum proof is a chain of assertions from the last confirmed one (about 6.4 days back), so it costs more the smaller `minAgeL1Blocks` is: 2.1M gas at 1,800 blocks, against ~600k confirmed-only.
 
 ### Other
 
